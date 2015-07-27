@@ -264,12 +264,19 @@ namespace ToyGE
 	void Transform(
 		const ResourceView & src,
 		const ResourceView & dst,
-		ColorWriteMask colorMask,
+		const Vector4<ColorWriteMask> & colorWriteMask,
 		const int4 & dstRect)
 	{
 		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Transform.xml");
 
-		if (colorMask & COLOR_WRITE_R)
+		for (int32_t i = 0; i < 4; ++i)
+		{
+			auto & writeMask = colorWriteMask[i];
+			String writeChannel = std::to_string(static_cast<uint32_t>(std::log2(static_cast<uint32_t>(writeMask))));
+			fx->AddExtraMacro("COLOR_CHANNEL_" + std::to_string(i), writeChannel);
+		}
+
+		/*if (colorMask & COLOR_WRITE_R)
 			fx->AddExtraMacro("COLOR_WRITE_R", "");
 		else
 			fx->RemoveExtraMacro("COLOR_WRITE_R");
@@ -287,7 +294,7 @@ namespace ToyGE
 		if (colorMask & COLOR_WRITE_A)
 			fx->AddExtraMacro("COLOR_WRITE_A", "");
 		else
-			fx->RemoveExtraMacro("COLOR_WRITE_A");
+			fx->RemoveExtraMacro("COLOR_WRITE_A");*/
 
 		fx->UpdateData();
 

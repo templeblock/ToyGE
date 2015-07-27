@@ -1,6 +1,49 @@
 #include "SampleCommon.h"
+#include "ToyGE\Kernel\Config.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
+#include "ToyGE\RenderEngine\Texture.h"
 
 using namespace ToyGE;
+
+SharedParamRender::SharedParamRender()
+	: _renderParamColorWrite(COLOR_WRITE_ALL)
+{
+
+}
+
+void SharedParamRender::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+{
+	if (_renderParam.size() > 0)
+	{
+		auto param = sharedEnviroment->ParamByName(_renderParam)->As<SharedParam<Ptr<Texture>>>()->GetValue();
+
+		if (_renderParamAsNormal)
+		{
+			auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Transform.xml");
+
+			fx->VariableByName("srcTex")->AsShaderResource()->SetValue(param->CreateTextureView());
+
+			Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView() }, 0);
+
+			RenderQuad(fx->TechniqueByName("TransformAsNormal"));
+		}
+		else
+		{
+			if (_renderParam == CommonRenderShareName::RawDepth())
+				ToyGE::Transform(
+				param->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
+				sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
+				_renderParamColorWrite);
+			else
+				ToyGE::Transform(
+				param->CreateTextureView(),
+				sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
+				_renderParamColorWrite);
+		}
+	}
+}
+
 
 void SampleCommon::Start(const ToyGE::Ptr<App> & app)
 {
@@ -24,6 +67,8 @@ SampleCommon::SampleCommon()
 
 void SampleCommon::Startup()
 {
+	Global::GetRenderEngine()->GetWindow()->SetTitle(_sampleName);
+
 	//Create Scene
 	auto scene = std::make_shared<Scene>();
 	Global::SetScene(scene);
@@ -47,7 +92,7 @@ void SampleCommon::Startup()
 	});
 
 	//Create Camera
-	auto camera = std::make_shared<PhysicalCamera>(0.1f, 1e+3f);
+	auto camera = std::make_shared<PhysicalCamera>(0.1f, 1e+2f);
 	camera->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
 	_renderView->SetCamera(camera);
 
@@ -66,6 +111,16 @@ void SampleCommon::Startup()
 	auto skyboxRender = std::make_shared<SkyBox>();
 	skyboxRender->SetTexture(skyboxTex);
 	Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->SetBackgroundRender(skyboxRender);
+
+	//UI
+	_twBar = TwNewBar("DeferredRendering");
+
+	int size[2] = { 200, 400 };
+	TwSetParam(_twBar, nullptr, "size", TW_PARAM_INT32, 2, size);
+
+	int pos[2] = { Global::GetRenderEngine()->GetWindow()->Width() - size[0], 10 };
+	TwSetParam(_twBar, nullptr, "position", TW_PARAM_INT32, 2, pos);
+
 
 	//Init Inputs
 	auto numMouses = Global::GetInputEngine()->NumInputDevices(INPUT_DEVICE_MOUSE);

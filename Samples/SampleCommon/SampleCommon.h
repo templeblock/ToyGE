@@ -3,6 +3,29 @@
 #define SAMPLECOMMON_H
 
 #include "ToyGE\ToyGE.h"
+#include "ToyGE\RenderEngine\Effects\TweakBarRenderer.h"
+
+class SharedParamRender : public ToyGE::RenderAction
+{
+public:
+	SharedParamRender();
+
+	void Render(const ToyGE::Ptr<ToyGE::RenderSharedEnviroment> & sharedEnviroment) override;
+
+	CLASS_GET(RenderParam, ToyGE::String, _renderParam);
+	CLASS_SET(RenderParam, ToyGE::String, _renderParam);
+
+	CLASS_GET(RenderParamColorWrite, ToyGE::Vector4<ToyGE::ColorWriteMask>, _renderParamColorWrite);
+	CLASS_SET(RenderParamColorWrite, ToyGE::Vector4<ToyGE::ColorWriteMask>, _renderParamColorWrite);
+
+	CLASS_GET(RenderParamAsNormal, bool, _renderParamAsNormal);
+	CLASS_SET(RenderParamAsNormal, bool, _renderParamAsNormal);
+
+private:
+	ToyGE::String _renderParam;
+	ToyGE::Vector4<ToyGE::ColorWriteMask> _renderParamColorWrite;
+	bool _renderParamAsNormal;
+};
 
 class SampleCommon : public ToyGE::App, public std::enable_shared_from_this<SampleCommon>
 {
@@ -20,6 +43,8 @@ public:
 	virtual void Destroy() override{};
 
 protected:
+	ToyGE::WString _sampleName;
+	TwBar * _twBar;
 	float _cameraMoveSpeed;
 	float _cameraRotateSpeed;
 	bool _bMouseDown;

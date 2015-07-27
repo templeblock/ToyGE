@@ -29,6 +29,7 @@
 #include "ToyGE\RenderEngine\LightComponent.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\ReflectionMap.h"
+#include "ToyGE\RenderEngine\RenderEffect.h"
 
 #include "ToyGE\RenderEngine\Effects\SkyBox.h"
 #include "ToyGE\RenderEngine\Effects\SSAO.h"

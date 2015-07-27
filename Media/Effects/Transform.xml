@@ -3,33 +3,36 @@
 <effect>
   <include name='PostProcess.xml'/>
   <include name='CommonState.xml'/>
+  <include name='Util.xml'/>
   
   <variable type='Texture2D' name='srcTex' />
   
   <shader>
     <![CDATA[
-    
+
+#ifndef COLOR_CHANNEL_0
+#define COLOR_CHANNEL_0 0
+#endif
+#ifndef COLOR_CHANNEL_1
+#define COLOR_CHANNEL_1 1
+#endif
+#ifndef COLOR_CHANNEL_2
+#define COLOR_CHANNEL_2 2
+#endif
+#ifndef COLOR_CHANNEL_3
+#define COLOR_CHANNEL_3 3
+#endif
+
 float4 TransformPS(PostProcessVSOut vsOut) : SV_TARGET
 {
     float4 colorSample = srcTex.SampleLevel(samplerLinearClamp, float2(vsOut.tex), 0);
     
     float4 outColor = 0.0f;
     
-#ifdef COLOR_WRITE_R
-    outColor.r = colorSample.r;
-#endif
-
-#ifdef COLOR_WRITE_G
-    outColor.g = colorSample.g;
-#endif
-
-#ifdef COLOR_WRITE_B
-    outColor.b = colorSample.b;
-#endif
-
-#ifdef COLOR_WRITE_A
-    outColor.a = colorSample.a;
-#endif
+    outColor.r = colorSample[COLOR_CHANNEL_0];
+    outColor.g = colorSample[COLOR_CHANNEL_1];
+    outColor.b = colorSample[COLOR_CHANNEL_2];
+    outColor.a = colorSample[COLOR_CHANNEL_3];
     
     return outColor;
 }
@@ -41,6 +44,28 @@ float4 TransformPS(PostProcessVSOut vsOut) : SV_TARGET
       <state value='disableDepth'/>
       <vs entry='PostProcessVS'/>
       <ps entry='TransformPS'/>
+    </pass>
+  </technique>
+
+
+  <shader>
+    <![CDATA[
+    
+float3 TransformAsNormalPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float3 normal = DecodeNormal(srcTex.SampleLevel(samplerLinearClamp, float2(vsOut.tex), 0).rgb);
+    
+    return normal;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='TransformAsNormal'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='TransformAsNormalPS'/>
     </pass>
   </technique>
   

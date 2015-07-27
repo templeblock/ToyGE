@@ -33,7 +33,8 @@ namespace ToyGE
 	TOYGE_CORE_API void Transform(
 		const ResourceView & src,
 		const ResourceView & dst,
-		ColorWriteMask colorMask = COLOR_WRITE_ALL,
+		//uint32_t colorMask = COLOR_WRITE_ALL,
+		const Vector4<ColorWriteMask> & colorWriteMask = Vector4<ColorWriteMask>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
 		const int4 & dstRect = -1);
 	
 	TOYGE_CORE_API Ptr<Texture> SAT(const Ptr<Texture> & tex);

@@ -80,8 +80,11 @@ namespace ToyGE
 
 		_renderSharedEnv->SetView(shared_from_this());
 		_renderSharedEnv->Clear();
-		for (auto & i : _renderConfig->configMap)
-			_renderSharedEnv->SetParam(i.first, std::make_shared<SharedParam<String>>(i.second));
+		if (_renderConfig)
+		{
+			for (auto & i : _renderConfig->configMap)
+				_renderSharedEnv->SetParam(i.first, std::make_shared<SharedParam<String>>(i.second));
+		}
 
 		UpdateParamsBuffer();
 

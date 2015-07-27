@@ -120,7 +120,11 @@ namespace ToyGE
 			dstRect.z = static_cast<int32_t>(renderView->GetViewport().width);
 			dstRect.w = static_cast<int32_t>(renderView->GetViewport().height);
 
-			Transform(renderView->GetRenderResult()->CreateTextureView(), targetTex->CreateTextureView(), COLOR_WRITE_ALL, dstRect);
+			Transform(
+				renderView->GetRenderResult()->CreateTextureView(),
+				targetTex->CreateTextureView(),
+				Vector4<ColorWriteMask>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
+				dstRect);
 		}
 
 		Global::GetRenderEngine()->PresentToBackBuffer(targetTex->CreateTextureView());
