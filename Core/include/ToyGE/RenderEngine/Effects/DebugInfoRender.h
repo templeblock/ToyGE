@@ -20,7 +20,6 @@ namespace ToyGE
 		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
 
 	private:
-		float _elapsedTimeAccum;
 		Ptr<FontRenderer> _adapterInfoRenderer;
 		Ptr<FontRenderer> _fpsRenderer;
 		Ptr<FontRenderer> _dpRenderer;

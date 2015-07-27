@@ -18,9 +18,21 @@ namespace ToyGE
 
 		//Update Info
 		auto globalInfo = Global::GetInfo();
-		
+
+		//Calculate FPS
+		static float _elapsedTimeAccum = 0.0f;
+		static int32_t _frameAccum = 0;
+
+		++_frameAccum;
+		_elapsedTimeAccum += elapsedTime;
+		if (_elapsedTimeAccum >= 1.0f)
+		{
+			globalInfo->SetFPS(static_cast<float>(_frameAccum) / _elapsedTimeAccum);
+			_elapsedTimeAccum = _elapsedTimeAccum - std::floor(_elapsedTimeAccum);
+			_frameAccum = 0;
+		}
+
 		globalInfo->SetElapsedTime(elapsedTime);
-		globalInfo->SetFPS(1.0f / elapsedTime);
 		globalInfo->SetFrameCount(globalInfo->GetFrameCount() + 1);
 
 		//Update App
@@ -32,18 +44,4 @@ namespace ToyGE
 		//Frame Event
 		_frameEvent();
 	}
-
-	//bool Looper::CalculateFrame(float timeElapsed)
-	//{
-	//	++_frameCount;
-	//	_timeAccum += timeDelta;
-	//	if (_timeAccum >= 1000.0f)
-	//	{
-	//		_fps = (static_cast<float>(_frameCount) * 1000.0f / _timeAccum);
-	//		_frameCount = 0;
-	//		_timeAccum = 0.0f;
-	//		return true;
-	//	}
-	//	return false;
-	//}
 }

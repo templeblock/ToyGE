@@ -30,13 +30,7 @@ namespace ToyGE
 
 	private:
 		Timer _timer;
-		/*bool _bInit = false;
-		int32_t _frameCount = 0;
-		float _timeAccum = 0.0f;
-		float _fps;*/
 		boost::signals2::signal<FrameEventType> _frameEvent;
-
-		//bool CalculateFrame(float timeDelta);
 	};
 }
 

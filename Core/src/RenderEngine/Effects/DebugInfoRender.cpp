@@ -16,7 +16,6 @@
 namespace ToyGE
 {
 	DebugInfoRender::DebugInfoRender()
-		: _elapsedTimeAccum(0.0f)
 	{
 		float4 color = float4(1.0f, 1.0f, 0.0f, 1.0f);
 
@@ -55,16 +54,11 @@ namespace ToyGE
 		y += drawTextSize.y + gap;
 
 		//FPS
-		_elapsedTimeAccum += Global::GetInfo()->GetElapsedTime();
-		if (_elapsedTimeAccum >= 1.0f)
-		{
-			_elapsedTimeAccum = _elapsedTimeAccum - std::floor(_elapsedTimeAccum);
-			float fps = Global::GetInfo()->GetFPS();
-			wss 
-				<< fps << L" FPS" 
-				<< L"  FrameTime: " << 1000.0f / fps << L" ms";
-			_fpsRenderer->SetText(wss.str());
-		}
+		float fps = Global::GetInfo()->GetFPS();
+		wss
+			<< fps << L" FPS"
+			<< L"  FrameTime: " << 1000.0f / fps << L" ms";
+		_fpsRenderer->SetText(wss.str());
 		_fpsRenderer->Render(sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(), float2(0.0f, y), drawTextSize);
 		y += drawTextSize.y + gap;
 
