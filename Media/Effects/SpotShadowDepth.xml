@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="ESMDefines.xml"/>
+  <include name="Util.xml"/>
+  <include name="CommonState.xml"/>
+
+  <variable type='cbuffer' name='cb_vs_perObj'>
+    <variable type='float4x4' name='world'/>
+  </variable>
+  
+  <variable type='cbuffer' name='cb_spotVS_perObj'>
+    <variable type='float4x4' name='spotView'/>
+    <variable type='float4x4' name='spotViewProj'/>
+    <variable type='float4' name='spotNearFar'/>
+  </variable>
+
+  <variable type='Texture2D' name='opacityTex' />
+
+  <shader>
+    <![CDATA[
+struct SpotSMVSIn
+{
+	float3 pos : POSITION;
+#ifdef OPACITY_TEX
+  float3 tex : TEXCOORD;
+#endif
+};
+
+struct SpotSMVSOut
+{
+	float4 posH : SV_POSITION;
+  float3 posV : POSITION_V;
+#ifdef OPACITY_TEX
+  float3 tex : TEXCOORD;
+#endif
+};
+
+SpotSMVSOut SpotSMVS(SpotSMVSIn vsIn)
+{
+	SpotSMVSOut vsOut;
+  
+  float4 posW = mul(float4(vsIn.pos.xyz, 1.0f), world);
+	vsOut.posH = mul(posW, spotViewProj);
+  vsOut.posV = mul(posW, spotView).xyz;
+  
+#ifdef OPACITY_TEX
+  vsOut.tex = vsIn.tex;
+#endif
+
+	return vsOut;
+}
+
+float SpotShadowDepthPS(SpotSMVSOut vsOut) : SV_TARGET
+{
+#ifdef OPACITY_TEX
+  float opacity = opacityTex.Sample(samplerLinear, vsOut.tex.xy).x;
+  clip(opacity - 0.1f);
+#endif
+  float z = (vsOut.posV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+  return z;
+}
+
+float2 SpotSMPS_VSM(SpotSMVSOut vsOut) : SV_TARGET
+{
+  float z = (vsOut.posV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+  return float2(z, z * z);
+}
+
+float4 SpotSMPS_EVSM(SpotSMVSOut vsOut) : SV_TARGET
+{
+  float z = (vsOut.posV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+  return z;
+}
+
+float SpotSMPS_ESM(SpotSMVSOut vsOut) : SV_TARGET
+{
+  float z = (vsOut.posV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+  return z * ESM_C * (spotNearFar.y - spotNearFar.x);
+}
+
+float4 SpotSMPS_SAVSM(SpotSMVSOut vsOut) : SV_TARGET
+{
+  float z = (vsOut.posV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+  float2 moments = float2(z, z * z) - 0.5f;
+  return DistributePrecision(moments, 1 << 8);
+}
+    ]]>
+  </shader>
+
+  <technique name='SpotShadowDepth'>
+    <pass>
+      <vs entry='SpotSMVS'/>
+      <ps entry='SpotShadowDepthPS'/>
+    </pass>
+  </technique>
+
+  <!--<technique name='SpotShadowDepth_OPACITYTEX'>
+    <pass>
+      <macro name='OPACITY_TEX'/>
+      <vs entry='SpotSMVS'/>
+      <ps entry='SpotShadowDepthPS'/>
+    </pass>
+  </technique>-->
+
+</effect>

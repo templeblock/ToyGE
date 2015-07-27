@@ -1,0 +1,3 @@
+SET(TOOLS_DIR ${TOYGE_ROOT_DIR}/Tools)
+
+ADD_SUBDIRECTORY(ModelConverter)

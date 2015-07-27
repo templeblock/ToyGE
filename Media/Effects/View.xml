@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+
+  <variable type="cbuffer" name="cb_View">
+    <property name="shared"/>
+    
+    <variable type="float4x4" name="view"/>
+    <variable type="float4x4" name="proj"/>
+    <variable type="float4x4" name="viewProj"/>
+    <variable type="float4x4" name="invView"/>
+    <variable type="float4x4" name="preView"/>
+    <variable type="float3" name="cameraPos"/>
+    <variable type="float" name="_pad_0"/>
+    <variable type="float2" name="cameraNearFar"/>
+    <variable type="float2" name="_pad_1"/>
+    <variable type="float4" name="viewSize"/>
+  </variable>
+  
+</effect>

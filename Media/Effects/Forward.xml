@@ -1,0 +1,126 @@
+<?xml version='1.0'?>
+
+<effect>
+  <include name='Lighting.xml'/>
+  
+  <variable type='cbuffer' name='vs_PerFrame'>
+    <variable type='float4x4' name='viewProj'/>
+  </variable>
+
+  <variable type='cbuffer' name='vs_PerObj'>
+    <variable type='float4x4' name='world'/>
+  </variable>
+  
+  <variable type='Texture2D' name='diff' />
+  <variable type='SamplerState' name='sam'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='WRAP'/>
+    <state name='addressV' value='WRAP'/>
+  </variable>
+
+  <variable type='cbuffer' name='ps_PerFrame'>
+    <variable type='float4' name='viewPos'/>
+    <variable type='float4' name='lightPos'/>
+    <variable type='float4' name='lightDir'/>
+    <variable type='float4' name='lightRadiance'/>
+    <variable type='float4' name='decreaseFac'/>
+    <variable type='float4' name='color'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+struct VS_IN
+{
+	float3 pos : POSITION;
+	float3 tex : TEXCOORD;
+	float3 normal : NORMAL;
+	float3 tangent : TANGENT;
+};
+
+struct VS_OUT
+{
+	float4 posH : SV_POSITION;
+	float3 posW : POSITION;
+	float3 tex : TEXCOORD;
+	float3 normal : NORMAL;
+	float3 tangent : TANGENT;
+};
+
+VS_OUT SimpleVS(VS_IN vsIn)
+{
+	VS_OUT vsOut;
+
+	vsOut.posW = mul(float4(vsIn.pos.xyz, 1.0f), world).xyz;
+	vsOut.normal = mul(float4(vsIn.normal.xyz, 0.0f), world).xyz;
+	vsOut.tangent = mul(float4(vsIn.tangent.xyz, 0.0f), world).xyz;
+	float4x4 worldViewProj = mul( world, viewProj );
+	vsOut.posH = mul(float4(vsIn.pos.xyz, 1.0f), worldViewProj);
+	vsOut.tex = vsIn.tex;
+
+	return vsOut;
+}
+
+
+float4 PointShadingPS(VS_OUT vsOut) : SV_TARGET
+{
+
+	float3 normal;
+	float2 tex;
+
+	normal = normalize(vsOut.normal);
+	tex = vsOut.tex.xy;
+
+  #ifdef LIGHT_POINT
+	float4 light_in = lightRadiance * CalcPointLight(vsOut.posW, normal, lightPos.xyz);
+  #endif
+  #ifdef LIGHT_SPOT
+	float4 light_in = lightRadiance * CalcSpotLight(vsOut.posW, normal, lightPos.xyz, lightDir.xyz, decreaseFac.x);
+  #endif
+  #ifdef LIGHT_DIRECTIONAL
+	float4 light_in = lightRadiance * CalcDirectionalLight(normal, lightDir.xyz);
+  #endif
+
+	float3 light = normalize(lightPos.xyz - vsOut.posW);
+	float3 view = normalize(viewPos.xyz - vsOut.posW);
+	float3 half_vec = normalize(view + light);
+
+	float4 c_diff = diff.Sample(sam, tex);
+	float4 embient = float4(0.2f, 0.2f, 0.2f, 0.0f);
+	float4 c_spec = float4(0.7f, 0.7f, 0.7f, 0.0f);
+	float shininess = 10.0f;
+	float cosHL = max(0.0f, dot(half_vec, light));
+	float cosHN = max(0.0f, dot(half_vec, normal));
+	float4 freshnel = c_spec + (1.0f - c_spec) * pow(cosHL, 5.0f);
+	float divPi = 1.0f / 3.14;
+	float4 color = c_diff * embient + (c_diff * divPi + (shininess + 2.0f) * divPi / 8.0f * pow(cosHN, shininess) * freshnel) * light_in;
+
+	return color;
+}
+    ]]>
+  </shader>
+
+  <technique name='PointShading'>
+    <pass>
+      <macro name='LIGHT_POINT'/>
+      <vs entry='SimpleVS'/>
+      <ps entry='PointShadingPS'/>
+    </pass>
+  </technique>
+
+  <technique name='SpotShading'>
+    <pass>
+      <macro name='LIGHT_SPOT'/>
+      <vs entry='SimpleVS'/>
+      <ps entry='PointShadingPS'/>
+    </pass>
+  </technique>
+
+  <technique name='DirectionalShading'>
+    <pass>
+      <macro name='LIGHT_DIRECTIONAL'/>
+      <vs entry='SimpleVS'/>
+      <ps entry='PointShadingPS'/>
+    </pass>
+  </technique>
+
+</effect>

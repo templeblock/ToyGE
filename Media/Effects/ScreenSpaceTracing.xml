@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <shader>
+    <![CDATA[
+    
+float3 ViewToTracingSpace(float3 posV, float4x4 proj, float2 camNearFar, float2 texSize)
+{
+  float4 posH = mul(float4(posV, 1.0f), proj);
+  posH /= posH.w;
+  float2 xy = posH.xy * float2(0.5f, -0.5f) + 0.5f;
+  float z = (posV.z - camNearFar.x) / (camNearFar.y - camNearFar.x);
+  return float3(xy * texSize, z);
+}
+
+float3 TracingToViewSpace(float3 posT, float4x4 proj, float2 camNearFar, float2 texSize)
+{
+  float zV = posT.z * (camNearFar.y - camNearFar.x) + camNearFar.x;
+  float zH = proj[2][2] + proj[3][2] / zV;
+  float2 xyV = (posT.xy / texSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f)) * zH / float2(proj[0][0], proj[1][1]);
+  return float3(xyV, zV);
+}
+
+bool ScreenSpaceTracing(
+  float3 posV,
+  float3 dirV,
+  float4x4 proj,
+  float2 camNearFar,
+  Texture2D depthTex,
+  float2 texSize,
+  int maxSteps,
+  float stepScale,
+  float stepOffset,
+  out float2 hitTexCoord,
+  out float3 hitPosV,
+  out float2 texCoordStep)
+{
+  float3 v0 = posV;
+  float3 v1 = posV + dirV * 100.0;
+  
+  float4 h0 = mul(float4(v0, 1.0), proj);
+  float4 h1 = mul(float4(v1, 1.0), proj);
+  
+  float k0 = 1.0 / h0.w;
+  float k1 = 1.0 / h1.w;
+  
+  float2 t0 = h0.xy * k0 * float2(0.5, -0.5) + 0.5;
+  float2 t1 = h1.xy * k1 * float2(0.5, -0.5) + 0.5;
+  
+  t0 *= texSize;
+  t1 *= texSize;
+  
+  float2 dT = t1 - t0;
+  
+  bool permute = false;
+  if( abs(dT.y) > abs(dT.x) )
+  {
+    permute = true;
+    t0 = t0.yx;
+    t1 = t1.yx;
+    dT = dT.yx;
+  }
+  
+  if( abs(dT.x) < 0.0001)
+  {
+    dT.x += 0.0001 * sign(dT.x);
+    maxSteps = 0;
+    //return true;
+  }
+  
+  float normalizeScale = 1.0 / abs(dT.x);
+  
+  float2 stepT = dT * normalizeScale * stepScale;
+  float  stepZ = (k1 - k0) * normalizeScale * stepScale;
+  
+  float signX = sign(dT.x);
+  float signY = sign(dT.y);
+  
+  float boundX = permute ? (texSize.y * (signX + 1) * 0.5) : (texSize.x * (signX + 1) * 0.5);
+  float boundY = permute ? (texSize.x * (signY + 1) * 0.5) : (texSize.y * (signY + 1) * 0.5);
+  
+  float2 t = t0 + stepT * (1.0 + stepOffset);
+  float  zr = k0 + stepZ * (1.0 + stepOffset);
+  int stepIndex = 0;
+  bool bHit = false;
+  float zrPre = zr;
+  
+  [loop] for(
+    ;
+    (t.x * signX <= boundX) && (t.y * signY <= boundY) && (stepIndex < maxSteps);
+    t += stepT, zr += stepZ, stepIndex += 1
+    )
+  {
+    float zSampled = depthTex.Load( uint3(permute ? t.yx : t.xy, 0) ).x;
+    float zrSampled = 1.0/ ( zSampled * (camNearFar.y - camNearFar.x) + camNearFar.x );
+    
+    float zrMax = zrPre;
+    float zrMin = zr;
+    if(zrMax < zrMin)
+    {
+      float t = zrMax;
+      zrMax = zrMin;
+      zrMin = t;
+    }
+    
+    
+    if( zrSampled >= zrMin && zrSampled <= zrMax )
+    {
+      float d = (zrSampled - zrPre) / stepZ;
+      t -= (1.0 - d) * stepT;
+      zr = zrSampled;
+        
+      bHit = true;
+      break;
+    }
+    else if(zrSampled > zrMax)
+    {
+      bHit = false;
+      break;
+    }
+    
+    zrPre = zr;
+  }
+  
+  if(permute)
+  {
+    t.xy = t.yx;
+    stepT.xy = stepT.yx;
+  }
+  
+  hitTexCoord = t / texSize;
+  
+  float zV = 1.0 / zr;
+  float zH = proj[2][2] + proj[3][2] / zV;
+  float2 xyV = (t.xy / texSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f)) * zH / float2(proj[0][0], proj[1][1]);
+  hitPosV = float3(xyV, zV);
+  
+  texCoordStep = stepT;
+  
+  return bHit;
+}
+    
+    ]]>
+  </shader>
+</effect>

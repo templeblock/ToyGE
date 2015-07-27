@@ -1,0 +1,175 @@
+<?xml version='1.0'?>
+
+<effect>
+  <include name="BlurConfig.xml"/>
+
+  <variable type='Texture2D' name='inTex'/>
+  <variable type='RWTexture2D' format='float4' name='outTex'/>
+  <variable type='RWTexture2DArray' format='float4' name='outTexArray'/>
+
+  <variable type='cbuffer' name='cb_blur'>
+    <variable type='int4' name='blurRadius'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+groupshared float4 cache[BLURCS_GROUP_SZIE + MAX_BLUR_RADIUS * 2];
+
+[numthreads(BLURCS_GROUP_SZIE, 1, 1)]
+void HorzBlurCS(
+  uint3 groupThreadID : SV_GroupThreadID,
+  uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+  //init cache
+  if((int)groupThreadID.x < blurRadius.x)
+  {
+    int x = max(0, (int)dispatchThreadID.x - blurRadius.x);
+    cache[groupThreadID.x] = inTex[int2(x, dispatchThreadID.y)];
+  }
+  if((int)groupThreadID.x >= BLURCS_GROUP_SZIE - blurRadius.x)
+  {
+    int x = min(inTex.Length.x - 1, (int)dispatchThreadID.x + blurRadius.x);
+    cache[(int)groupThreadID.x + 2 * blurRadius.x] = inTex[int2(x, dispatchThreadID.y)];
+  }
+  int2 xy = min(inTex.Length - 1, dispatchThreadID.xy);
+  cache[(int)groupThreadID.x + blurRadius.x] = inTex[xy];
+  
+  GroupMemoryBarrierWithGroupSync();
+  
+  float weights[MAX_BLUR_RADIUS * 2 + 1] = (float[MAX_BLUR_RADIUS * 2 + 1])gaussTable;
+  
+  //calculate color
+  float4 accumColor = 0.0f;
+  [loop]
+  for(int i = -blurRadius.x; i <= blurRadius.x; ++i)
+  {
+    int cacheIndex = groupThreadID.x + blurRadius.x + i;
+#ifdef GAUSS_FILTER
+    accumColor += cache[cacheIndex] * weights[i + blurRadius.x].x;
+#else
+    accumColor += cache[cacheIndex];
+#endif
+  }
+  
+#ifndef GAUSS_FILTER
+  float blurSize = blurRadius.x * 2 + 1;
+  accumColor /= blurSize ;
+#endif
+  
+#ifdef TEX_ARRAY
+  outTexArray[int3(xy, 0)] = accumColor;
+#else
+  outTex[xy] = accumColor;
+#endif
+}
+
+[numthreads(1, BLURCS_GROUP_SZIE, 1)]
+void VertBlurCS(
+  uint3 groupThreadID : SV_GroupThreadID,
+  uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+  //init cache
+  if((int)groupThreadID.y < blurRadius.x)
+  {
+    int y = max(0, (int)dispatchThreadID.y - blurRadius.x);
+    cache[groupThreadID.y] = inTex[int2(dispatchThreadID.x, y)];
+  }
+  if((int)groupThreadID.y >= BLURCS_GROUP_SZIE - blurRadius.x)
+  {
+    int y = min(inTex.Length.y - 1, dispatchThreadID.y + blurRadius.x);
+    cache[(int)groupThreadID.y + 2 * blurRadius.x] = inTex[int2(dispatchThreadID.x, y)];
+  }
+  int2 xy = min(inTex.Length - 1, dispatchThreadID.xy);
+  cache[(int)groupThreadID.y + blurRadius.x] = inTex[xy];
+  
+  GroupMemoryBarrierWithGroupSync();
+  
+  float weights[MAX_BLUR_RADIUS * 2 + 1] = (float[MAX_BLUR_RADIUS * 2 + 1])gaussTable;
+  
+  //calculate color
+  float4 accumColor = 0.0f;
+  [loop]
+  for(int i = -blurRadius.x; i <= blurRadius.x; ++i)
+  {
+    int cacheIndex = groupThreadID.y + blurRadius.x + i;
+#ifdef GAUSS_FILTER
+    accumColor += cache[cacheIndex] * weights[i + blurRadius.x].x;
+#else
+    accumColor += cache[cacheIndex];
+#endif
+  }
+  
+#ifndef GAUSS_FILTER
+  float blurSize = blurRadius.x * 2 + 1;
+  accumColor /= blurSize;
+#endif
+  
+#ifdef TEX_ARRAY
+  outTexArray[int3(xy, 0)] = accumColor;
+#else
+  outTex[xy] = accumColor;
+#endif
+}
+
+    ]]>
+  </shader>
+
+  <technique name='HorzBlurCS_Gauss'>
+    <pass>
+      <macro name='GAUSS_FILTER'/>
+      <cs entry='HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='VertBlurCS_Gauss'>
+    <pass>
+      <macro name='GAUSS_FILTER'/>
+      <cs entry='VertBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='HorzBlurCS_Gauss_Array'>
+    <pass>
+      <macro name='GAUSS_FILTER'/>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='VertBlurCS_Gauss_Array'>
+    <pass>
+      <macro name='GAUSS_FILTER'/>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='VertBlurCS'/>
+    </pass>
+  </technique>
+
+
+  <technique name='HorzBlurCS'>
+    <pass>
+      <cs entry='HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='VertBlurCS'>
+    <pass>
+      <cs entry='VertBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='HorzBlurCS_Array'>
+    <pass>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='VertBlurCS_Array'>
+    <pass>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='VertBlurCS'/>
+    </pass>
+  </technique>
+  
+</effect>

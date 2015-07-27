@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+
+  <variable type="Texture2D" name="specularTex"/>
+
+  <shader>
+    <![CDATA[
+    
+float ShininessToRoughnessPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return pow(2.0f / abs(specularTex.SampleLevel(samplerPoint, vsOut.tex, 0).x * 255.0f + 2.0f), 0.25f);
+}
+    
+    ]]>
+  </shader>
+
+  <technique>
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="ShininessToRoughnessPS"/>
+    </pass>
+  </technique>
+  
+</effect>

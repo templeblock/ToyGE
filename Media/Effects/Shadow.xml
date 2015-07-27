@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Util.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="VSM.xml"/>
+  <include name="ESM.xml"/>
+  <include name="PCSS.xml"/>
+  <include name="CSMConfig.xml"/>
+
+  <variable type='cbuffer' name='cb_shadow'>
+    <!--shadowConfig [bHasShadow, shadowTechnique, , ]-->
+    <variable type='int4' name='shadowConfig'/>
+  </variable>
+
+  <variable type='TextureCubeArray' name='shadowTexCubeArray'/>
+  <variable type='Texture2DArray' name='shadowTexArray'/>
+  
+  <variable type='cbuffer' name='cb_shadow_point'>
+    <variable type='float4' name='pointMaxDist'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_shadow_spot'>
+    <variable type='float4x4' name='spotView'/>
+    <variable type='float4x4' name='spotProj'/>
+    <variable type='float4' name='spotNearFar'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_shadow_pssm'>
+    <variable type='float4x4' name='pssmView'/>
+    <variable type='float4x4' arraySize='4' name='pssmViewCrop'/>
+    <variable type='float4' arraySize='5' name='pssmSplitConfig'/>
+    <variable type='float4' arraySize='4' name='pssmSplitMinMax'/>
+    <variable type='float4' arraySize='4' name='pssmLightMaxDist'/>
+    <variable type='uint4' name='pssmNumSplits'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+
+#define SHADOW_TYPE_VSM         0
+#define SHADOW_TYPE_EVSM2       1
+#define SHADOW_TYPE_EVSM4       2
+#define SHADOW_TYPE_ESM         3
+#define SHADOW_TYPE_SAVSM       4
+#define SHADOW_TYPE_PCSS_SAVSM  5
+
+
+int PSSMFindSplitIndex(float z)
+{
+  int index = -1;
+  [unroll] for(int splitIndex = 0; splitIndex < MAX_NUM_SPLITS; ++splitIndex)
+  {
+    if(z >= pssmSplitConfig[splitIndex].x && z <= pssmSplitConfig[splitIndex + 1].x)
+    {
+      index = splitIndex;
+      break;
+    }
+  }
+
+  return index;
+}
+
+uint PSSMFindSplitIndex(float3 posW)
+{
+  float3 posL = mul(float4(posW, 1.0f), pssmView).xyz;
+  uint index = pssmNumSplits.x - 1;
+  [unroll] for(uint splitIndex = 0; splitIndex < MAX_NUM_SPLITS; ++splitIndex)
+  {
+    float4 splitMinMax = pssmSplitMinMax[splitIndex];
+    if(   posL.x >= splitMinMax.x + 0.1f && posL.x <= splitMinMax.z - 0.1f
+       && posL.y >= splitMinMax.y + 0.1f && posL.y <= splitMinMax.w - 0.1f)
+    {
+      index = splitIndex;
+      break;
+    }
+  }
+
+  return index;
+}
+
+float ComputeShadow_PointLight(float3 posW, float3 lightPos)
+{
+    float shadow = 1.0f;
+    float3 dir = posW.xyz - lightPos.xyz;
+    float len = length(dir); 
+    float3 absDir = abs(dir);
+  
+    float reciever = max(max(absDir.x, absDir.y), absDir.z) / pointMaxDist.x;
+    dir /= len;
+    
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+
+    shadow = CalcShadow_VSM(shadowTexCubeArray, 0, dir, reciever);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+
+    shadow = CalcShadow_EVSM2(shadowTexCubeArray, 0, dir, reciever);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+
+    shadow = CalcShadow_EVSM4(shadowTexCubeArray, 0, dir, reciever);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_ESM
+    
+    shadow = CalcShadow_ESM(shadowTexCubeArray, 0, dir, reciever, pointMaxDist.x);
+
+#elif SHADOW_TYPE == SHADOW_TYPE_SAVSM
+    
+    shadow = CalcShadow_SAVSM_FP(shadowTexCubeArray, 0, dir, reciever, savsmFilterSize.x);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_PCSS_SAVSM
+
+    float dBlocker = SearchBlocker_SAVSM_FP(shadowTexCubeArray, 0, dir, reciever, (0.1f / pointMaxDist.x));
+    float penumbraSize = GetPenumbraSize(reciever, dBlocker, 5.0f);
+    shadow = CalcShadow_SAVSM_FP(shadowTexCubeArray, 0, dir, reciever, penumbraSize * 2.0f + 2.0f);
+      
+#endif
+
+    return shadow;
+}
+
+float ComputeShadow_SpotLight(float3 posW, float3 lightPos)
+{
+    float shadow = 1.0f;
+  
+    float4 posLV = mul(float4(posW, 1.0f), spotView);
+    float reciever = (posLV.z - spotNearFar.x) / (spotNearFar.y - spotNearFar.x);
+    
+    float4 posLH = mul(posLV, spotProj);
+    posLH /= posLH.w;
+    float2 shadowUV = float2(posLH.x * 0.5f + 0.5f, posLH.y * -0.5f + 0.5f);
+    
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+    
+    shadow = CalcShadow_VSM(shadowTexArray, 0, shadowUV, reciever);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+    
+    shadow = CalcShadow_EVSM2(shadowTexArray, 0, shadowUV, reciever);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+    
+    shadow = CalcShadow_EVSM4(shadowTexArray, 0, shadowUV, reciever);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_ESM
+    
+    shadow = CalcShadow_ESM(shadowTexArray, 0, shadowUV, reciever, spotNearFar.y - spotNearFar.x);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_SAVSM
+    
+    shadow = CalcShadow_SAVSM_FP(shadowTexArray, 0, shadowUV, reciever, savsmFilterSize.x);
+ 
+#elif SHADOW_TYPE == SHADOW_TYPE_PCSS_SAVSM
+    
+    float dBlocker = SearchBlocker_SAVSM_FP(shadowTexArray, 0, shadowUV, reciever, (0.1f / (spotNearFar.y - spotNearFar.x)));
+    float penumbraSize = GetPenumbraSize(reciever, dBlocker, 5.0f);
+    shadow = CalcShadow_SAVSM_FP(shadowTexArray, 0, shadowUV, reciever, penumbraSize * 1.5f + 3.0f);
+      
+#endif
+
+    return shadow;
+}
+
+float ComputeShadow_DirectionalLight(float3 posW, float viewDepth)
+{
+    float shadow = 1.0f;
+    int splitIndex = PSSMFindSplitIndex(viewDepth);
+  
+    //uint splitIndex = PSSMFindSplitIndex(posW);
+  
+    if(splitIndex != -1)
+    {
+  
+        float4x4 viewCrop = pssmViewCrop[splitIndex];
+        float4 posLH = mul(float4(posW, 1.0f), viewCrop);
+        posLH /= posLH.w;
+        float2 shadowUV = float2(posLH.x * 0.5f + 0.5f, posLH.y * -0.5f + 0.5f);
+        float reciever = posLH.z;   
+    
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+    
+        shadow = CalcShadow_VSM(shadowTexArray, splitIndex, shadowUV, reciever);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+    
+        shadow = CalcShadow_EVSM2(shadowTexArray, splitIndex, shadowUV, reciever);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+    
+        shadow = CalcShadow_EVSM4(shadowTexArray, splitIndex, shadowUV, reciever);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_ESM
+    
+        shadow = CalcShadow_ESM(shadowTexArray, splitIndex, shadowUV, reciever, pssmLightMaxDist[splitIndex].x);
+
+#elif SHADOW_TYPE == SHADOW_TYPE_SAVSM
+    
+        shadow = CalcShadow_SAVSM_FP(shadowTexArray, splitIndex, shadowUV, reciever, savsmFilterSize.x);
+      
+#elif SHADOW_TYPE == SHADOW_TYPE_PCSS_SAVSM
+    
+        float dBlocker = SearchBlocker_SAVSM_FP(shadowTexArray, splitIndex, shadowUV, reciever, (0.1f / spotMaxDist.x));
+        float penumbraSize = GetPenumbraSize(reciever, dBlocker, 5.0f);
+        shadow = CalcShadow_SAVSM_FP(shadowTexArray, splitIndex, shadowUV, reciever, penumbraSize * 2.0f + 2.0f);
+
+#endif
+  
+    }
+  
+    return shadow;
+}
+
+
+    ]]>
+  </shader>
+</effect>

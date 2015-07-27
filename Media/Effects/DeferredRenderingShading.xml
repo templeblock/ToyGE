@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  
+  <!--Shading-->
+
+  <variable type='Texture2D' name='gbuffer0'/>
+  <variable type='Texture2D' name='lightingTex0'/>
+  <variable type='Texture2D' name='lightingTex1'/>
+  <variable type='Texture2D' name='aoTex'/>
+  <variable type='cbuffer' name='cb_shadingPS_perFrame'>
+    <variable type='int4' name='screenSize'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+
+float4 ShadingPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float4 light0 = lightingTex0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float4 light1 = lightingTex1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+  float3 baseColor = gbuf0.xyz;
+  float metallic = gbuf0.w;
+  float3 diffColor = baseColor - baseColor * metallic;
+
+  float3 embient = 0.05f;
+  
+  float ao = 1.0f;
+#ifdef SHADING_AO
+  ao = aoTex.SampleLevel(samLinear, vsOut.tex, 0).x;
+#endif
+  
+  float3 color = diffColor * light0.xyz + baseColor * embient * ao + light1.xyz;
+  //float3 color = light0.xyz;
+  
+  return float4(color, 1.0f);
+}
+    ]]>
+  </shader>
+
+  <variable type='DepthStencilState' name='lessEqualDepth'>
+    <state name='depthFunc' value='LESS_EQUAL'/>
+  </variable>
+
+  <variable type='DepthStencilState' name='dssStencilMask'>
+    <state name='depthEnable' value='false'/>
+    <state name='stencilEnable' value='true'/>
+    <state name='frontFace'>
+      <state name='stencilFunc' value='EQUAL'/>
+    </state>
+    <state name='stencilRef' value='1'/>
+  </variable>
+
+  <technique name='Shading'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='ShadingPS'/>
+    </pass>
+  </technique>
+  
+</effect>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <macro name="FXAA_PC"               value="1"/>
+  <macro name="FXAA_HLSL_5"           value="1"/>
+  <macro name="FXAA_QUALITY__PRESET"  value="12"/>
+  
+  <include name="PostProcess.xml"/>
+  <include name="FXAA3_11.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="Util.xml"/>
+
+  <variable type="Texture2D" name="fxaaInTex"/>
+
+  <variable type="cbuffer" name="cb_FXAAConfig_frame">
+    <variable type="float2" name="fxaaQualityRcpFrame"/>
+    <variable type="float4" name="fxaaConsoleRcpFrameOpt"/>
+    <variable type="float4" name="fxaaConsoleRcpFrameOpt2"/>
+    <variable type="float4" name="fxaaConsole360RcpFrameOpt2"/>
+  </variable>
+  
+  <variable type="cbuffer" name="cb_FXAAConfig">
+    <variable type="float" name="fxaaQualitySubpix"/>
+    <variable type="float" name="fxaaQualityEdgeThreshold"/>
+    <variable type="float" name="fxaaQualityEdgeThresholdMin"/>
+    <variable type="float" name="fxaaConsoleEdgeSharpness"/>
+    <variable type="float" name="fxaaConsoleEdgeThreshold"/>
+    <variable type="float" name="fxaaConsoleEdgeThresholdMin"/>
+  </variable>
+
+  
+  <shader>
+    <![CDATA[
+    
+float4 FxaaSetupPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float3 color = fxaaInTex.SampleLevel(samplerPoint, vsOut.tex.xy, 0).xyz;
+    float luma = GetIlluminance(color);
+    return float4(color, luma);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="FXAASetup">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="FxaaSetupPS"/>
+    </pass>
+  </technique>
+  
+  
+  <shader>
+    <![CDATA[
+
+float4 FxaaPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float2 uv = vsOut.tex.xy;
+    float4 corners = float4(uv - 0.5 * fxaaQualityRcpFrame, uv + 0.5 * fxaaQualityRcpFrame);
+    //float4 corners = float4(uv - 0.5, uv + 0.5);
+    
+    FxaaTex fxaaTex;
+    fxaaTex.tex = fxaaInTex;
+    fxaaTex.smpl = samplerLinear;
+    
+    float3 fxaaColor = FxaaPixelShader(
+        uv,
+        corners,
+        fxaaTex,
+        fxaaTex,
+        fxaaTex,
+        fxaaQualityRcpFrame,
+        fxaaConsoleRcpFrameOpt,
+        fxaaConsoleRcpFrameOpt2,
+        fxaaConsole360RcpFrameOpt2,
+        fxaaQualitySubpix,
+        fxaaQualityEdgeThreshold,
+        fxaaQualityEdgeThresholdMin,
+        fxaaConsoleEdgeSharpness,
+        fxaaConsoleEdgeThreshold,
+        fxaaConsoleEdgeThresholdMin,
+        float4(1.0, -1.0, 0.25, -0.25)
+    ).xyz;
+    
+    return float4(fxaaColor, 1.0f);
+}
+
+    ]]>    
+  </shader>
+
+  <technique name="FXAA">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="FxaaPS"/>
+    </pass>
+  </technique>
+  
+</effect>

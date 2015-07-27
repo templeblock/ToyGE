@@ -1,0 +1,158 @@
+<?xml version='1.0'?>
+
+<effect>
+  <include name='Defines.xml'/>
+  <include name='Shadow.xml'/>
+
+  <variable type='cbuffer' name='cb_Light'>
+    <variable type='float3' name='lightRadiance'/>
+    <variable type='float3' name='lightPos'/>
+    <variable type='float3' name='lightDir'/>
+    <variable type='float' name='spotLightDecreaseFac'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+#define LIGHT_TYPE_POINT        0
+#define LIGHT_TYPE_SPOT         1
+#define LIGHT_TYPE_DIRECTIONAL  2
+
+float CalcDirectionalLight(float3 normal, float3 lightDir)
+{
+	return max(0.0f, dot(normal, -lightDir));
+}
+
+float CalcPointLight(float3 pos, float3 lightPos)
+{
+  float len = length(lightPos - pos);
+  return 1.0f / max(0.0001f, len * len);
+}
+
+float CalcPointLight(float3 pos, float3 normal, float3 lightPos)
+{
+	float3 light = lightPos - pos;
+	float len = length(light);
+	light /= max(0.0001f, len);
+	return max(0.0f, 1.0f / max(0.0001f, len * len) * dot(light, normal));
+}
+
+float CalcSpotLight(float3 pos, float3 lightPos, float3 lightDir, float decreaseFac)
+{
+  float3 dir = pos - lightPos;
+  float len = length(dir);
+  dir /= max(0.0001f, len);
+	float cosVL = max(0.0f, dot(dir, lightDir));
+  float inFac = pow(cosVL, decreaseFac);
+	return inFac;
+}
+
+float CalcSpotLight(float3 pos, float3 normal, float3 lightPos, float3 lightDir, float decreaseFac)
+{
+	float3 dir = pos - lightPos;
+  float len = length(dir);
+  dir /= max(0.0001f, len);
+	float cosVL = max(0.0f, dot(dir, lightDir));
+  //float inFac = pow(cosVL, decreaseFac) / (len * len);
+  float inFac = pow(cosVL, decreaseFac);
+  inFac *= max(0.0f, dot(normal, -dir));
+
+	return inFac;
+}
+
+float3 GetLightDir(float3 posW)
+{
+#ifdef LIGHT_DIRECTIONAL
+    return lightDir;
+#else
+    return normalize(posW - lightPos);
+#endif
+}
+
+float3 ComputeInLightRadiance(float3 posW, float3 normalW)
+{
+    float3 radiance = 0.0f;
+    
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    radiance = lightRadiance * CalcPointLight(posW, normalW, lightPos);
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    radiance = lightRadiance * CalcSpotLight(posW, normalW, lightPos, lightDir, spotLightDecreaseFac);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    radiance = lightRadiance * CalcDirectionalLight(nornaml, lightDir);
+#endif
+
+    return radiance;
+}
+
+
+float ComputeShadow(float3 posW, float viewDepth)
+{
+    float shadow = 1.0f;
+
+#ifdef LIGHT_SHADOW
+    
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    shadow = ComputeShadow_PointLight(posW, lightPos);
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    shadow = ComputeShadow_SpotLight(posW, lightPos);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    shadow = ComputeShadow_DirectionalLight(posW, viewDepth);
+#endif
+    
+#endif
+
+    return shadow;
+}
+
+
+//BRDF
+float NDF_BlinnPhong(float3 n, float3 h, float roughness)
+{
+  roughness = lerp(0.1, 0.9, roughness);
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float n_dot_h = max(1e-6, dot(n, h));
+  return 1.0 / (max(1e-6, a2) * PI) * pow(n_dot_h, 2.0f / max(1e-6, a2) - 2.0f);
+
+/*
+  float n_dot_h = max(1e-6, dot(n, h));
+  return (shininess + 2) / (2.0 * PI) * pow(n_dot_h, shininess);
+*/
+}
+
+float NDF_GGX(float3 n, float3 h, float roughness)
+{
+  roughness = lerp(0.1, 0.9, roughness);
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float n_dot_h = max(1e-6, dot(n, h));
+  float t = n_dot_h * n_dot_h * (a2 - 1.0f) + 1.0f;
+  return a2 / (PI * t * t);
+}
+
+float3 Fresnel_Schlick(float3 v, float3 h, float3 f0)
+{
+  float v_dot_h = max(1e-6, dot(v, h));
+  return f0 + (1.0f - f0) * pow(1 - v_dot_h, 5);
+}
+
+float G_Implicit(float3 n, float3 l, float3 v)
+{
+  return max(1e-6, dot(n, l)) * max(1e-6, dot(n, v));
+}
+
+float G_Smith(float3 n, float3 l, float3 v, float roughness)
+{
+  roughness = lerp(0.1, 0.9, roughness);
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float NoV = max(0.0f, dot(n, v));
+  float NoL = max(0.0f, dot(n, l));
+  float G_V = NoV + sqrt( (NoV - NoV * a2) * NoV + a2 );
+  float G_L = NoL + sqrt( (NoL - NoL * a2) * NoL + a2 );
+  return rcp( G_V * G_L ) * 4 * NoL * NoV;
+}
+  
+    ]]>
+  </shader>
+</effect>

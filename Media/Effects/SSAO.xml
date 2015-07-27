@@ -1,0 +1,527 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Defines.xml"/>
+  <include name="View.xml"/>
+  <include name="BilateralFilter.xml"/>
+  <include name="Util.xml"/>
+
+  <variable type="cbuffer" name="cb_texInfo">
+    <variable type="float4" name="texSize"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_camera">
+    <variable type="float" name="invViewRatio"/>
+  </variable>
+
+  <variable type="Texture2D" name="depthTex"/>
+  <variable type="Texture2D" name="normalTex"/>
+
+  <shader>
+    <![CDATA[
+
+float GetDepthDiffWeight(float d0, float d1)
+{
+  float zScale = (cameraNearFar.y - cameraNearFar.x) * 0.001f;
+  return 1.0 / (1e-4 + abs(d0 - d1) * zScale);
+}
+
+void DownSampleNormalDepthPS(
+    PostProcessVSOut vsOut,
+    out float3 outNormal : SV_TARGET0,
+    out float outDepth : SV_TARGET1)
+{
+  float2 uvTable[4] = 
+  {
+    vsOut.tex.xy + float2(-0.5, -0.5) * texSize.zw,
+    vsOut.tex.xy + float2( 0.5, -0.5) * texSize.zw,
+    vsOut.tex.xy + float2(-0.5,  0.5) * texSize.zw,
+    vsOut.tex.xy + float2( 0.5,  0.5) * texSize.zw
+  };
+  
+  float samplesDepth[4];
+  [unroll] for(int i0 = 0; i0 < 4; ++i0)
+  {
+    samplesDepth[i0] = depthTex.SampleLevel(samplerPointClamp, uvTable[i0], 0).x;
+  }
+  float depthSort[4];
+  [unroll] for(int i2 = 0; i2 < 3; ++i2)
+  {
+    float minDepth = samplesDepth[i2];
+    [unroll] for(int j = i2 + 1; j < 4; ++j)
+    {
+      if(samplesDepth[j] < minDepth)
+      {
+        samplesDepth[i2] = samplesDepth[j];
+        samplesDepth[j] = minDepth;
+        minDepth = samplesDepth[i2];
+      }
+    }
+    depthSort[i2] = minDepth;
+  }
+  outDepth = max( max(samplesDepth[0], samplesDepth[1]), max(samplesDepth[2], samplesDepth[3]) );
+  //outDepth = 0.5 * (depthSort[1] + depthSort[2]);
+  
+  float3 normalSum = 0.0f;
+  float weightSum = 0.0f;
+    
+  [unroll] for(int i1 = 0; i1 < 4; ++i1)
+  {
+    float3 sampleNormal = normalTex.SampleLevel(samplerPointClamp, uvTable[i1], 0).xyz;
+    sampleNormal = DecodeNormal(sampleNormal);//normalize(sampleNormal * 2 - 1);
+    float depthDiffW = GetDepthDiffWeight(samplesDepth[i1], outDepth);
+    
+    normalSum += sampleNormal * depthDiffW;
+    weightSum += depthDiffW;
+  }
+  
+  outNormal = normalize(normalSum / weightSum);//(normalize(normalSum / weightSum) + 1) * 0.5;
+  outNormal = EncodeNormal(outNormal);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="DownSampleNormalDepth">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="DownSampleNormalDepthPS"/>
+    </pass>
+  </technique>
+
+
+  <variable type="Texture2D" name="aoTex"/>
+  <variable type="Texture2D" name="preMipNormalTex"/>
+  <variable type="Texture2D" name="preMipDepthTex"/>
+  
+  <variable type="cbuffer" name="cb_renderAO">
+    <variable type="float" name="aoRadius"/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+#ifdef FULL_RES
+    #define AO_NUM_SAMPLES 5
+#else
+    #define AO_NUM_SAMPLES 6
+#endif
+
+#if AO_NUM_SAMPLES > 0
+float2 GetSampleOffset(int index)
+{
+#if AO_NUM_SAMPLES == 6
+  static const float2 sampleOffsets[AO_NUM_SAMPLES] = 
+  {
+    float2(0.000, 0.200), 
+		float2(0.325, 0.101), 
+		float2(0.272, -0.396), 
+		float2(-0.385, -0.488), 
+		float2(-0.711, 0.274), 
+		float2(0.060, 0.900) 
+  };
+#elif AO_NUM_SAMPLES == 5
+  static const float2 sampleOffsets[AO_NUM_SAMPLES] = 
+  {
+    float2(0.156434, 0.987688),
+		float2(0.987688, 0.156434),
+		float2(0.453990, -0.891007),
+		float2(-0.707107, -0.707107),
+		float2(-0.891006, 0.453991), 
+  };
+#elif AO_NUM_SAMPLES == 3
+  static const float2 sampleOffsets[AO_NUM_SAMPLES] = 
+  {
+    float2(-0.6069737f, -0.4174439f),
+    float2(-0.03477755f, 0.2524165f),
+    float2(0.632049f, -0.5007856f)
+  };
+#endif
+
+  return sampleOffsets[index];
+}
+#endif
+
+float2 RotateSample(float2 v, float angle)
+{
+  float cosAngle = cos(angle);
+  float sinAngle = sin(angle);
+  float2x2 rotateMat = {cosAngle, sinAngle, -sinAngle, cosAngle};
+  return mul(v, rotateMat);
+}
+
+void ComputeSampleAO(float3 samplePosV, float3 centerPosV, float3 centerNormalV, float2 sampleUV, out float ao, out float weight)
+{
+/*
+  float3 vec = samplePosV - centerPosV;
+  float vecLen = length(vec);
+  
+  //float bias = 0.8f;
+  
+  ao = 1.0 - saturate( dot(vec, centerNormalV) / max(1e-3, length(vec)) );
+  
+  float r = vecLen/aoRadius;
+  //weight = saturate( 1 + (samplePosV.z - centerPosV.z) / aoRadius );// * saturate(1 - vecLen/aoRadius);
+  weight = saturate(1 - r * r);
+  
+  weight *= any( abs(sampleUV - 0.5) < 0.5 );
+  
+  ao = ao * ao;
+  ao *= weight;
+*/
+  
+  float3 vec = samplePosV - centerPosV;
+  float r = length(vec);
+  
+  ao = saturate( dot(vec, centerNormalV) / max(1e-6, r * r) );
+  
+  r /= aoRadius;
+  ao *= saturate(1 - r * r);
+  
+  //ao *= ao;
+  
+  weight = 1.0f;
+}
+
+float ComputeUpSampledAO(float2 centerPosS, float centerZ, float3 centerNormalW)
+{
+  float4 bilinearWeights;
+  float2 samplesPos[4];
+  GetBilateralUpSamplingCoords(centerPosS, samplesPos, bilinearWeights);
+  
+  float aoSum = 0.0f;
+  float weightSum = 0.0f;
+  
+  [unroll] for(int i = 0; i < 4; ++i)
+  {
+    float2 sampleUV = samplesPos[i] * texSize.zw * 2.0;
+    
+    float sampleAO = aoTex.SampleLevel(samplerPointClamp, sampleUV, 0).x;
+    
+    float sampleZ = preMipDepthTex.SampleLevel(samplerPointClamp, sampleUV, 0).x;
+    float depthDiffW = GetDepthDiffWeight(sampleZ, centerZ);
+    
+    float3 sampleNormal = preMipNormalTex.SampleLevel(samplerPointClamp, sampleUV, 0).xyz;
+    sampleNormal = DecodeNormal(sampleNormal);//normalize(sampleNormal * 2 - 1);
+    float normalDiffW = saturate(dot(sampleNormal, centerNormalW));
+    
+    float weight = bilinearWeights[i] * depthDiffW;// * normalDiffW;
+    
+    aoSum += sampleAO * weight;
+    weightSum += weight;
+  }
+  
+  return aoSum / (1e-5 + weightSum);
+}
+  
+float RenderAOPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float centerZ = depthTex.Load(int3(vsOut.pos.xy, 0)).x;
+  if(centerZ >= 0.99f)
+    return 1.0f;
+  
+  float3 centerPosV = LinearDepthToViewPos(centerZ, cameraNearFar, vsOut.pos.xy, texSize.xy, proj);
+  
+  float3 centerNormalW = normalTex.Load(int3(vsOut.pos.xy, 0)).xyz;
+  centerNormalW = DecodeNormal(centerNormalW);//normalize(centerNormalW * 2.0 - 1.0);
+  
+  float aoSum = 1.0;
+#if AO_NUM_SAMPLES > 0
+  float3 centerNormalV = mul(float4(centerNormalW, 0.0), view).xyz;
+  
+  float bias = 0.05f;
+  centerPosV += centerNormalV * bias;
+  
+  float centerDepth = centerZ * (cameraNearFar.y - cameraNearFar.x) + cameraNearFar.x;
+  float2 aoRadiusH;
+  aoRadiusH = aoRadius / centerDepth;
+  aoRadiusH.y *= invViewRatio;
+  float2 aoRadiusUV = aoRadiusH * 0.5;
+  
+  //if(aoRadiusUV.x * texSize.x < 1.0)
+   // return 1.0f;
+  
+  float rotateAngle = 2 * PI * InterleavedGradientNoise(vsOut.pos.xy, 1.0);
+  
+  aoSum = 0.0;
+  float weightSum = 0.0;
+  [unroll] for(int i = 0; i < AO_NUM_SAMPLES; ++i)
+  {
+    float2 sampleOffsetUV = aoRadiusUV * RotateSample(GetSampleOffset(i), rotateAngle);
+    //[branch] if( length(sampleOffsetUV * texSize.xy) < 1)
+    //  continue;
+    
+    float2 sampleUV0 = vsOut.tex.xy + sampleOffsetUV;
+    float2 sampleUV1 = vsOut.tex.xy - sampleOffsetUV;
+    
+    float sampleZ0 = depthTex.SampleLevel(samplerPointClamp, sampleUV0, 0).x;
+    float sampleZ1 = depthTex.SampleLevel(samplerPointClamp, sampleUV1, 0).x;
+    
+    float3 samplePosV0 = LinearDepthToViewPos(sampleZ0, cameraNearFar, sampleUV0 * float2(2.0, -2.0) + float2(-1.0, 1.0), proj);
+    float3 samplePosV1 = LinearDepthToViewPos(sampleZ1, cameraNearFar, sampleUV1 * float2(2.0, -2.0) + float2(-1.0, 1.0), proj);
+    
+    float ao;
+    float weight;
+    
+    ComputeSampleAO(samplePosV0, centerPosV, centerNormalV, sampleUV0, ao, weight);
+    aoSum += ao;
+    //weightSum += weight;
+    
+    ComputeSampleAO(samplePosV1, centerPosV, centerNormalV, sampleUV1, ao, weight);
+    aoSum += ao;
+    //weightSum += weight;
+  }
+  
+  /*
+  if(weightSum < 1e-4)
+    aoSum = 1.0;
+  else
+    aoSum = saturate( aoSum / weightSum );
+  */
+  
+  aoSum /= AO_NUM_SAMPLES;
+  
+  aoSum = saturate(1.0 - aoSum);
+#endif
+  
+  float aoResult = aoSum;
+#ifdef UPSAMPLING
+  float upSampledAO = ComputeUpSampledAO(vsOut.pos.xy, centerZ, centerNormalW);
+  float aoMipBlend = 0.5;
+  aoResult = lerp(aoSum, upSampledAO, aoMipBlend);
+  //aoResult = min(aoSum, upSampledAO);
+#endif
+
+#ifdef FULL_RES
+  float power = 10.0f;
+  float intensity = 0.5f;
+  float fadeDistance = 10.0f;
+  
+  aoResult = 1.0 - (1.0 - pow(abs(aoResult), power)) * intensity;
+  aoResult = lerp(1.0, aoResult, saturate(4.0 - (centerPosV.z / fadeDistance) * 4));
+#endif
+  
+  return aoResult;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="RenderAO">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="RenderAOPS"/>
+    </pass>
+  </technique>
+
+  <!--<technique name="RenderAOUpSampling">
+    <pass>
+      <macro name="UPSAMPLING"/>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="RenderAOPS"/>
+    </pass>
+  </technique>
+
+  <technique name="RenderAOFullRes">
+    <pass>
+      <macro name="FULL_RES"/>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="RenderAOPS"/>
+    </pass>
+  </technique>
+
+  <technique name="RenderAOFullResUpSampling">
+    <pass>
+      <macro name="FULL_RES"/>
+      <macro name="UPSAMPLING"/>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="RenderAOPS"/>
+    </pass>
+  </technique>-->
+
+
+  <macro name="BLUR_RADIUS" value="8"/>
+
+  <variable type="Texture2D" name="blurInTex"/>
+
+  <variable type="cbuffer" name="cb_blur">
+    <variable type="float4" arraySize="($BLUR_RADIUS + 1 + 3) / 4" name="gaussWeightsTable"/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+//#define BLUR_RADIUS 3
+    
+float CrossBilateralBlur(PostProcessVSOut vsOut, float2 dir)
+{
+  float2 centerUV = vsOut.tex.xy;
+  
+  float epison = 1e-4;
+  
+  float gaussWeights[BLUR_RADIUS + 1] = (float[BLUR_RADIUS + 1])gaussWeightsTable;
+  
+  //float weightSum = gaussWeights[0] * 1.0 / epison;
+  float weightSum = 1.0 / epison;
+  float resultSum = blurInTex.SampleLevel(samplerPointClamp, centerUV, 0).x * weightSum;
+  
+  float centerZ = depthTex.SampleLevel(samplerPointClamp, centerUV, 0).x;
+  
+  float2 uvStep = texSize.zw * dir;
+  float2 uvOffset = uvStep;
+    
+  int r = 1;
+  
+  [unroll] for(; r <= BLUR_RADIUS/2; ++r)
+  {
+  
+    {
+       float2 uv = centerUV + uvOffset;
+    
+       float sampleZ = depthTex.SampleLevel(samplerPointClamp, uv, 0).x;
+       float zDiffW = GetDepthDiffWeight(sampleZ, centerZ);
+    
+       float w = zDiffW;
+    
+       float sampleColor = blurInTex.SampleLevel(samplerPointClamp, uv, 0).x;
+    
+       resultSum += sampleColor * w;
+       weightSum += w;
+      }
+  
+     {
+        float2 uv = centerUV - uvOffset;
+    
+        float sampleZ = depthTex.SampleLevel(samplerPointClamp, uv, 0).x;
+        float zDiffW = GetDepthDiffWeight(sampleZ, centerZ);
+    
+        float w = zDiffW;
+    
+        float sampleColor = blurInTex.SampleLevel(samplerPointClamp, uv, 0).x;
+    
+        resultSum += sampleColor * w;
+        weightSum += w;
+     }
+    
+       uvOffset += uvStep;
+  }
+  
+  ++r;
+  uvOffset += 0.5 * uvStep;
+  uvStep *= 2.0;
+  
+  [unroll] for(; r <= BLUR_RADIUS; ++r)
+  {
+  
+    {
+       float2 uv = centerUV + uvOffset;
+    
+       float sampleZ = depthTex.SampleLevel(samplerPointClamp, uv, 0).x;
+       float zDiffW = GetDepthDiffWeight(sampleZ, centerZ);
+    
+       float w = zDiffW;
+    
+       float sampleColor = blurInTex.SampleLevel(samplerPointClamp, uv, 0).x;
+    
+       resultSum += sampleColor * w;
+       weightSum += w;
+      }
+  
+     {
+        float2 uv = centerUV - uvOffset;
+    
+        float sampleZ = depthTex.SampleLevel(samplerPointClamp, uv, 0).x;
+        float zDiffW = GetDepthDiffWeight(sampleZ, centerZ);
+    
+        float w = zDiffW;
+    
+        float sampleColor = blurInTex.SampleLevel(samplerPointClamp, uv, 0).x;
+    
+        resultSum += sampleColor * w;
+        weightSum += w;
+     }
+    
+       uvOffset += uvStep;
+  }
+  
+  resultSum /= weightSum;
+  
+  return resultSum;
+}
+
+float CrossBilateralBlurXPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return CrossBilateralBlur(vsOut, float2(1.0, 0.0));
+}
+    
+float CrossBilateralBlurYPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return CrossBilateralBlur(vsOut, float2(0.0, 1.0));
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="CrossBilateralBlurX">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="CrossBilateralBlurXPS"/>
+    </pass>
+  </technique>
+
+  <technique name="CrossBilateralBlurY">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="CrossBilateralBlurYPS"/>
+    </pass>
+  </technique>
+
+
+  
+
+  <shader>
+    <![CDATA[
+    
+float4 CombineAOPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float4 outColor = 0.0f;
+  
+  //float power = 8.0f;
+  //float intensity = 1.0f;
+  
+  float ao = aoTex.Load(int3(vsOut.pos.xy, 0)).x;
+  //ao = 1.0 - (1.0 - pow(ao, 5)) * intensity;
+  
+  outColor.a = ao;
+  
+  return outColor;
+}
+    
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='srcZero_dstSrcAlpha_Add'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="ZERO"/>
+      <state name="dstBlend" value="SRC_ALPHA"/>
+    </state>
+  </variable>
+
+  <technique name="CombineAO">
+    <pass>
+      <state value="disableDepth"/>
+      <state value="srcZero_dstSrcAlpha_Add"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="CombineAOPS"/>
+    </pass>
+  </technique>
+  
+</effect>

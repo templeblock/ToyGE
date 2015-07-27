@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="BlurConfig.xml"/>
+
+  <variable type='Texture2D' format='float' name='inTex'/>
+  <variable type='RWTexture2D' format='float' name='outTex'/>
+  <variable type='RWTexture2DArray' format='float' name='outTexArray'/>
+
+  <variable type='cbuffer' name='cb_blur'>
+    <variable type='int4' name='blurRadius'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+groupshared float cache[BLURCS_GROUP_SZIE + MAX_BLUR_RADIUS * 2];
+
+[numthreads(BLURCS_GROUP_SZIE, 1, 1)]
+void ESM_HorzBlurCS(
+  uint3 groupThreadID : SV_GroupThreadID,
+  uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+  //init cache
+  if((int)groupThreadID.x < blurRadius.x)
+  {
+    int x = max(0, (int)dispatchThreadID.x - blurRadius.x);
+    cache[groupThreadID.x] = inTex[int2(x, dispatchThreadID.y)];
+  }
+  if((int)groupThreadID.x >= BLURCS_GROUP_SZIE - blurRadius.x)
+  {
+    int x = min(inTex.Length.x - 1, (int)dispatchThreadID.x + blurRadius.x);
+    cache[(int)groupThreadID.x + 2 * blurRadius.x] = inTex[int2(x, dispatchThreadID.y)];
+  }
+  int2 xy = min(inTex.Length - 1, dispatchThreadID.xy);
+  cache[(int)groupThreadID.x + blurRadius.x] = inTex[xy];
+  
+  GroupMemoryBarrierWithGroupSync();
+  
+  //calculate
+  float result = 0.0f;
+  float d0 = cache[groupThreadID.x];
+  float w0 = gaussTable[0].x;
+  
+  [loop]
+  for(int i = -blurRadius.x + 1; i <= blurRadius.x; ++i)
+  {
+    int cacheIndex = groupThreadID.x + blurRadius.x + i;
+    float di = cache[cacheIndex];
+    result += gaussTable[blurRadius.x + i].x * exp(di - d0);
+  }
+  
+  result = log(w0 + result);
+  result += d0;
+  
+#ifdef TEX_ARRAY
+  outTexArray[int3(xy, 0)] = result;
+#else
+  outTex[xy] = result;
+#endif
+}
+
+[numthreads(1, BLURCS_GROUP_SZIE, 1)]
+void ESM_VertBlurCS(
+  uint3 groupThreadID : SV_GroupThreadID,
+  uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+  //init cache
+  if(groupThreadID.y < (uint)blurRadius.x)
+  {
+    int y = max(0, (int)dispatchThreadID.y - blurRadius.x);
+    cache[groupThreadID.y] = inTex[int2(dispatchThreadID.x, y)];
+  }
+  if((int)groupThreadID.y >= BLURCS_GROUP_SZIE - blurRadius.x)
+  {
+    int y = min(inTex.Length.y - 1, (int)dispatchThreadID.y + blurRadius.x);
+    cache[(int)groupThreadID.y + 2 * blurRadius.x] = inTex[int2(dispatchThreadID.x, y)];
+  }
+  int2 xy = min(inTex.Length - 1, dispatchThreadID.xy);
+  cache[(int)groupThreadID.y + blurRadius.x] = inTex[xy];
+  
+  GroupMemoryBarrierWithGroupSync();
+  
+ //calculate
+  float result = 0.0f;
+  float d0 = cache[groupThreadID.y];
+  float w0 = gaussTable[0].x;
+  
+  [loop]
+  for(int i = -blurRadius.x + 1; i <= blurRadius.x; ++i)
+  {
+    int cacheIndex = groupThreadID.y + blurRadius.x + i;
+    float di = cache[cacheIndex];
+    result += gaussTable[blurRadius.x + i].x * exp(di - d0);
+  }
+  
+  result = log(w0 + result);
+  result += d0;
+  
+#ifdef TEX_ARRAY
+  outTexArray[int3(xy, 0)] = result;
+#else
+  outTex[xy] = result;
+#endif
+}
+
+    ]]>
+  </shader>
+
+  <technique name='ESM_HorzBlurCS'>
+    <pass>
+      <cs entry='ESM_HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='ESM_VertBlurCS'>
+    <pass>
+      <cs entry='ESM_VertBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='ESM_HorzBlurCS_Array'>
+    <pass>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='ESM_HorzBlurCS'/>
+    </pass>
+  </technique>
+
+  <technique name='ESM_VertBlurCS_Array'>
+    <pass>
+      <macro name='TEX_ARRAY'/>
+      <cs entry='ESM_VertBlurCS'/>
+    </pass>
+  </technique>
+  
+</effect>

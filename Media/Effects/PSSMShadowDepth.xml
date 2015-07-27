@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="ESMDefines.xml"/>
+  <include name="Util.xml"/>
+  <include name="CSMConfig.xml"/>
+  <include name="VSMUtil.xml"/>
+  <include name="CommonState.xml"/>
+  
+  <variable type='cbuffer' name='cb_vs_perObj'>
+    <variable type='float4x4' name='world'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_pssm_vs_perFrame'>
+    <!--<variable type='float4x4' name='lightView'/>-->
+    <variable type='float4x4' name='lightView'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_pssm_gs_perFrame'>
+    <variable type='uint4' name='numSplits'/>
+    <variable type='float4x4' name='lightCrop'/>
+    <variable type='float4' name='lightMaxDist'/>
+  </variable>
+  
+  <variable type='Texture2D' name='opacityTex' />
+
+  <shader>
+    <![CDATA[
+struct PSSMVSIn
+{
+	float3 pos : POSITION;
+#ifdef OPACITY_TEX
+  float3 tex : TEXCOORD;
+#endif
+};
+
+struct PSSMVSOut
+{
+	float4 posH : SV_POSITION;
+#ifdef OPACITY_TEX
+  float3 tex : TEXCOORD;
+#endif
+};
+
+PSSMVSOut PSSM_VS(PSSMVSIn vsIn)
+{
+	PSSMVSOut vsOut;
+
+	float4x4 worldView = mul( world, lightView );
+	//vsOut.posLi = mul(float4(vsIn.pos.xyz, 1.0f), worldView);
+  vsOut.posH = mul(float4(vsIn.pos.xyz, 1.0f), worldView);
+  vsOut.posH = mul(vsOut.posH, lightCrop);
+  
+#ifdef OPACITY_TEX
+  vsOut.tex = vsIn.tex;
+#endif
+
+	return vsOut;
+}
+
+struct PSSMGSOut
+{
+  float4 posH : SV_POSITION;
+  uint rtIndex : SV_RenderTargetArrayIndex;
+};
+
+/*
+[maxvertexcount(MAX_NUM_SPLITS * 3)]
+void PSSM_GS(
+  triangle PSSMVSOut vsOut[3],
+  inout TriangleStream<PSSMGSOut> output)
+{
+  PSSMGSOut gsOut;
+  for(uint splitIndex = 0; splitIndex < numSplits.x; ++splitIndex)
+  {
+    float4x4 crop = lightCrop[splitIndex];
+    for(uint i = 0; i < 3; ++i)
+    {
+      gsOut.posH = mul(vsOut[i].posLi, crop);
+      gsOut.rtIndex = splitIndex;
+      output.Append(gsOut);
+    }
+    output.RestartStrip();
+  }
+}
+*/
+
+float PSSM_PS(PSSMVSOut vsOut) : SV_TARGET
+{
+#ifdef OPACITY_TEX
+  float opacity = opacityTex.Sample(samplerLinear, vsOut.tex.xy).x;
+  clip(opacity - 0.1f);
+#endif
+  float z = vsOut.posH.z;
+	return z;
+}
+
+float2 PSSM_PS_VSM(PSSMVSOut gsOut) : SV_TARGET
+{
+  float z = gsOut.posH.z;
+	return float2(z, z * z);
+}
+
+float PSSM_PS_EVSM(PSSMVSOut gsOut) : SV_TARGET
+{
+   float z = gsOut.posH.z;
+   return z;
+}
+
+float2 PSSM_PS_EVSM2(PSSMVSOut gsOut) : SV_TARGET
+{
+  float z = gsOut.posH.z;
+  float zWarp = WarpDepth2(z);
+	return float2(zWarp, zWarp * zWarp);
+}
+
+float4 PSSM_PS_EVSM4(PSSMVSOut gsOut) : SV_TARGET
+{
+  float z = gsOut.posH.z;
+  float2 zWarp = WarpDepth4(z);
+	return float4(zWarp.x, zWarp.x * zWarp.x, zWarp.y, zWarp.y * zWarp.y);
+}
+
+float PSSM_PS_ESM(PSSMVSOut gsOut) : SV_TARGET
+{
+  float z = gsOut.posH.z;
+	return z * ESM_C * lightMaxDist.x;
+}
+
+float4 PSSM_PS_SAVSM(PSSMVSOut gsOut) : SV_TARGET
+{
+  float z = gsOut.posH.z;
+  float2 moments = float2(z, z * z) - 0.5f;
+	return DistributePrecision(moments, 1 << 8);
+}
+
+    ]]>
+  </shader>
+
+  <technique name='PSSM'>
+    <pass>
+      <vs entry='PSSM_VS'/>
+      <ps entry='PSSM_PS'/>
+    </pass>
+  </technique>
+
+  <!--<technique name='PSSM_OPACITYTEX'>
+    <pass>
+      <macro name='OPACITY_TEX'/>
+      <vs entry='PSSM_VS'/>
+      <ps entry='PSSM_PS'/>
+    </pass>
+  </technique>-->
+
+</effect>

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  
+  <variable type="Texture2D" name="sceneTex"/>
+  <variable type="Texture2D" name="depthTex"/>
+  <variable type="Texture2D" name="prePassTex"/>
+
+  <variable type="cbuffer" name="cb_volumetricLight">
+    <variable type="float4" name="screenLightPos"/>
+  </variable>
+
+  <variable type='SamplerState' name='samPoint'>
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+  
+  <variable type='SamplerState' name='samLinear'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+  
+#define NUM_SAMPLES 50
+  
+float4 VolumetricLightPS_PrePass(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float depth = depthTex.SampleLevel(samPoint, vsOut.tex, 0).x;
+  float3 color = sceneTex.SampleLevel(samPoint, vsOut.tex, 0).xyz;
+  if(depth <= 0.98f)
+    color = 0.0f;
+  return float4(color, 1.0f);
+}
+  
+float4 VolumetricLightPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float density = 0.8f;
+  
+  float2 texCoord = vsOut.tex;
+  float2 deltaTexCoord = texCoord - screenLightPos.xy;
+  deltaTexCoord *= 1.0f / NUM_SAMPLES * density;
+  float4 color = prePassTex.SampleLevel(samLinear, texCoord, 0);
+  float illuminationDecay = 0.6f;
+  
+  float weight = 1.0f;
+  float decay = 0.95f;
+  
+  for(int i = 0; i < NUM_SAMPLES; ++i)
+  {
+    texCoord -= deltaTexCoord;
+    float4 sampleColor = prePassTex.SampleLevel(samLinear, texCoord, 0);
+    sampleColor *= illuminationDecay * weight;
+    color += sampleColor;
+    
+    illuminationDecay *= decay;
+  }
+  
+  float exposure = 2.0f;
+  return float4(color.xyz * exposure, 0.5f);
+}
+    
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='alphaBlend'>
+    <state name='blendRTDesc' index='0'>
+      <state name='blendEnable' value='true'/>
+      <state name='srcBlend' value='SRC_ALPHA'/>
+      <state name='dstBlend' value='ONE'/>
+      <state name='blendOP' value='ADD'/>
+    </state>
+  </variable>
+
+  <technique name='VolumetricLight_PrePass'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='VolumetricLightPS_PrePass'/>
+    </pass>
+  </technique>
+
+  <technique name='VolumetricLight'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='alphaBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='VolumetricLightPS'/>
+    </pass>
+  </technique>
+  
+</effect>

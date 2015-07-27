@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+
+  <macro name="BLOCK_SIZE" value="8"/>
+  
+  <variable type='Texture2D' name='inTex'/>
+
+  <variable type='cbuffer' name='cb_reduce'>
+    <variable type='int2' name='reduceSize'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+
+float2 ReduceMinMaxPS_Initial(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 minMax = float2(1.0f, 0.0f);
+  
+  int2 indexStart = int2(vsOut.pos.xy) * BLOCK_SIZE;
+  for(int x = 0; x < BLOCK_SIZE; ++x)
+  {
+    for(int y = 0; y < BLOCK_SIZE; ++y)
+    {
+      int2 index_xy = min(indexStart + int2(x, y), reduceSize - 1);
+      float d = inTex.Load(int3(index_xy, 0)).x;
+      if(d < 0.99f)
+      {
+        minMax.x = min(minMax.x, d);
+        minMax.y = max(minMax.y, d);
+      }
+    }
+  }
+  
+  return minMax;
+}
+
+float2 ReduceMinMaxPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 minMax = float2(1.0f, 0.0f);
+  
+  int2 indexStart = int2(vsOut.pos.xy) * BLOCK_SIZE;
+  for(int x = 0; x < BLOCK_SIZE; ++x)
+  {
+    for(int y = 0; y < BLOCK_SIZE; ++y)
+    {
+      int2 index_xy = min(indexStart + int2(x, y), reduceSize - 1);
+      float2 minMax_xy = inTex.Load(int3(index_xy, 0)).xy;
+      if(minMax_xy.x < 0.99f)
+      {
+      minMax.x = min(minMax.x, minMax_xy.x);
+      minMax.y = max(minMax.y, minMax_xy.y);
+      }
+    }
+  }
+  
+  return minMax;
+}
+
+
+    
+    ]]>
+  </shader>
+
+  <technique name='ReduceMinMax_Initial'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='ReduceMinMaxPS_Initial'/>
+    </pass>
+  </technique>
+
+  <technique name='ReduceMinMax'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='ReduceMinMaxPS'/>
+    </pass>
+  </technique>
+</effect>

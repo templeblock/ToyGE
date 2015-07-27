@@ -41,3 +41,15 @@ $RECYCLE.BIN/
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# ToyGE
+bin
+lib
+Build/vc
+Externals
+Media/Effects/pcfx
+Media/Textures
+Media/Fonts
+Media/Models
+ToyGE_Test
+ToyGE.log

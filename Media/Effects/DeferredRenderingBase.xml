@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="View.xml"/>
+  <include name='Material.xml'/>
+  <include name='POM.xml'/>
+
+  <!--GBuffer-->
+
+  <variable type='cbuffer' name='cb_gbufferVS_perObj'>
+    <variable type='float4x4' name='world'/>
+    <variable type='float4x4' name='preWorld'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_gbufferPS_perObj'>
+    <variable type='int4' name='reflectionMapID'/>
+  </variable>
+
+  <variable type='Texture2D' name='normalFittingTex' />
+
+  <shader>
+    <![CDATA[
+    
+struct GBufferVSIn
+{
+	  float3 pos : POSITION;
+    
+#ifdef MAT_UV_COORD
+  	float3 tex : TEXCOORD;
+#endif
+
+	  float3 normal : NORMAL;
+  
+#ifdef MAT_NORMAL_TEX
+	  float3 tangent : TANGENT;
+#endif
+};
+
+struct GBufferVSOut
+{
+    float3 posW : POSITION_W;
+	  float4 posH : SV_POSITION;
+  
+#ifdef MAT_UV_COORD
+	  float3 tex : TEXCOORD;
+#endif
+
+	  float3 normal : NORMAL;
+  
+#ifdef MAT_NORMAL_TEX
+	  float3 tangent : TANGENT;
+#endif
+
+#ifdef GEN_VELOCITY
+    float3 posV : POSITION_V0;
+    float3 prePosV : POSITION_V1;
+#endif
+};
+
+
+GBufferVSOut GBufferVS(GBufferVSIn vsIn)
+{
+	  GBufferVSOut vsOut;
+
+    vsOut.posW = mul(float4(vsIn.pos.xyz, 1.0f), world).xyz;
+  
+#ifdef GEN_VELOCITY
+    vsOut.posV = mul(float4(vsOut.posW, 1.0f), view).xyz;
+    vsOut.prePosV = mul(mul(float4(vsIn.pos.xyz, 1.0f), preWorld), preView).xyz;
+    vsOut.posH = mul(float4(vsOut.posV, 1.0f), proj);
+#else
+	  float4x4 viewProj = mul( view, proj );
+	  vsOut.posH = mul(float4(vsOut.posW, 1.0f), viewProj);
+#endif
+  
+#ifdef MAT_UV_COORD
+	  vsOut.tex = vsIn.tex;
+#endif
+
+	  vsOut.normal = mul(float4(vsIn.normal.xyz, 0.0f), world).xyz;
+#ifdef MAT_NORMAL_TEX
+	  vsOut.tangent = mul(float4(vsIn.tangent.xyz, 0.0f), world).xyz;
+#endif
+
+	  return vsOut;
+}
+
+struct GBufferPSOut
+{
+    float4  gbuffer0        : SV_TARGET0;
+    float4  gbuffer1        : SV_TARGET1;
+    float   linearDepth     : SV_TARGET2;
+    int     reflectionMapID : SV_TARGET3;
+    
+#ifdef GEN_VELOCITY
+    float2  velocity        : SV_TARGET4;
+#endif
+};
+
+void CompressNormal(inout half3 normal)
+{
+  float3 absNormal = abs(normal);
+  float maxAbs = max(max(absNormal.x, absNormal.y), absNormal.z);
+  float2 texCoord = absNormal.z < maxAbs ? (absNormal.y < maxAbs ? absNormal.yz : absNormal.xz) : absNormal.xy;
+  texCoord = texCoord.x < texCoord.y ? texCoord.yx : texCoord.xy;
+  texCoord.y /= texCoord.x;
+  
+  normal /= maxAbs;
+  float scale = normalFittingTex.SampleLevel(samplerPoint, texCoord, 0).a;
+  normal *= scale;
+  normal = normal * 0.5h + 0.5h;
+}
+
+GBufferPSOut GBufferPS(GBufferVSOut vsOut)
+{
+    GBufferPSOut psOut;
+  
+#ifdef MAT_POM
+    float3 view = normalize(viewPos - vsOut.posW);
+    float scale = pomScale;
+    float3 posT, vecW;
+    ParallaxOcclusionMapping(vsOut.normal, vsOut.tangent, view, vsOut.tex.xy, heightTex, scale, posT, vecW);
+    vsOut.tex.xy = posT.xy;
+    vsOut.posW += vecW;
+#endif
+  
+#ifdef MAT_OPACITYMASK_TEX
+    float opacityMask = GetOpacityMask(vsOut.tex.xy);
+    clip(opacityMask - 0.1f);
+#endif
+    
+    Material mat = GetMeterial
+    (
+    #ifdef MAT_UV_COORD
+        vsOut.tex,
+    #endif
+        vsOut.normal
+    #ifdef MAT_NORMAL_TEX
+        , vsOut.tangent
+    #endif
+    );
+
+    //Gbuffer
+    psOut.gbuffer0.xyz = mat.baseColor;
+    psOut.gbuffer0.w = mat.metallic;
+  
+    //CompressNormal(mat.normal);
+    //psOut.gbuffer1.xyz = mat.normal;
+    psOut.gbuffer1.xyz = EncodeNormal(mat.normal);
+    //psOut.gbuffer1.xyz = EncodeNormal(mat.normal, view);
+    psOut.gbuffer1.w = mat.roughness;
+  
+    //LinearDepth
+    float3 posV = mul(float4(vsOut.posW, 1.0f), view).xyz;
+    psOut.linearDepth = (posV.z - cameraNearFar.x) / (cameraNearFar.y - cameraNearFar.x);
+  
+    //ReflectionMapID
+    psOut.reflectionMapID = reflectionMapID.x;
+  
+    //GenVelocityMap
+#ifdef GEN_VELOCITY
+    float4 prePosH = mul(float4(vsOut.prePosV, 1.0f), proj);
+    float2 velStart = prePosH.xy / prePosH.w * float2(0.5f, -0.5f) + 0.5f;
+    float4 posH = mul(float4(vsOut.posV, 1.0f), proj);
+    float2 velEnd = posH.xy / posH.w * float2(0.5f, -0.5f) + 0.5f;
+    psOut.velocity = (velEnd - velStart);
+#endif
+
+	  return psOut;
+}
+    ]]>
+  </shader>
+
+  <variable type="DepthStencilState" name="gbufferDSS">
+    <state name="stencilEnable" value="true"/>
+    <state name="frontFace">
+      <state name="stencilPassOp" value="REPLACE"/>
+    </state>
+    <state name="stencilRef" value="1"/>
+  </variable>
+
+  <technique name='GBuffer'>
+    <pass>
+      <state value='gbufferDSS'/>
+      <vs entry='GBufferVS'/>
+      <ps entry='GBufferPS'/>
+    </pass>
+  </technique>
+  
+</effect>

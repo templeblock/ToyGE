@@ -1,0 +1,532 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="BlurConfig.xml"/>
+  <include name="Lighting.xml"/>
+
+  <variable type='Texture2D' format='float' name='rawDepthTex'/>
+  <variable type='Texture2D' format='float2' name='hiZTex'/>
+
+  <variable type='cbuffer' name='cb_mipLoop'>
+    <variable type='float4' name='preMipTexSize'/>
+    <variable type='uint4' name='preMipLevel'/>
+  </variable>
+
+  <variable type='SamplerState' name='samPoint'>
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+  <variable type='SamplerState' name='samLinear'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    
+float2 HiZPassPS_Initial(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return rawDepthTex.SampleLevel(samPoint, vsOut.tex, 0);
+}
+
+float2 HiZPassPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 texelSize = 1.0f / preMipTexSize.xy;
+  float2 posLU = (vsOut.pos.xy - 0.5f) * 2.0f + 0.5f;
+  float2 uvLU = posLU * texelSize;
+  
+  float2 z0 = hiZTex.SampleLevel(samPoint, uvLU, preMipLevel.x, int2(0, 0));
+  float2 z1 = hiZTex.SampleLevel(samPoint, uvLU, preMipLevel.x, int2(1, 0));
+  float2 z2 = hiZTex.SampleLevel(samPoint, uvLU, preMipLevel.x, int2(0, 1));
+  float2 z3 = hiZTex.SampleLevel(samPoint, uvLU, preMipLevel.x, int2(1, 1));
+  
+  float minZ = min(min(min(z0.x, z1.x), z2.x), z3.x);
+  float maxZ = max(max(max(z0.y, z1.y), z2.y), z3.y);
+  
+  return float2(minZ, maxZ);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='HiZ_Initial'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='HiZPassPS_Initial'/>
+    </pass>
+  </technique>
+  <technique name='HiZ'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='HiZPassPS'/>
+    </pass>
+  </technique>
+
+
+  <variable type='Texture2D' format='float' name='visibilityTex'/>
+  
+  <variable type='cbuffer' name='cb_perFrame'>
+    <variable type='float' name='projA'/>
+    <variable type='float' name='projB'/>
+    <variable type='float2' name='cameraNearFar'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    
+float LinearizeZ(float z)
+{
+  float vz = projB / (z - projA);
+  return (vz - cameraNearFar.x) / (cameraNearFar.y - cameraNearFar.x);
+}
+  
+float PreIntegrationPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 preMipTexelSize = 1.0f / preMipTexSize.xy;
+  float2 preMipPos = (vsOut.pos.xy - 0.5f) * 2.0f + 0.5f;
+  float2 preMipUV = preMipPos * preMipTexelSize;
+  //uint preMipLevel = preMipLevel.x;
+  
+  float4 subMinZ;
+  subMinZ.x = LinearizeZ( hiZTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(0, 0)).x );
+  subMinZ.y = LinearizeZ( hiZTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(1, 0)).x );
+  subMinZ.z = LinearizeZ( hiZTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(0, 1)).x );
+  subMinZ.w = LinearizeZ( hiZTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(1, 1)).x );
+  
+  float2 curMinMaxZ = hiZTex.SampleLevel(samPoint, preMipUV, preMipLevel.x + 1);
+  float curMinZ = LinearizeZ(curMinMaxZ.x);
+  float curMaxZ = LinearizeZ(curMinMaxZ.y);
+  float invVolumeSize = 1.0f / (curMaxZ - curMinZ);
+  
+  float4 subVisibility;
+  subVisibility.x = visibilityTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(0, 0));
+  subVisibility.y = visibilityTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(1, 0));
+  subVisibility.z = visibilityTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(0, 1));
+  subVisibility.w = visibilityTex.SampleLevel(samPoint, preMipUV, preMipLevel.x, int2(1, 1));
+  
+  float4 visibility = (curMaxZ - subMinZ) * invVolumeSize * subVisibility;
+  
+  return dot(0.25f, visibility);
+}
+  
+    ]]>
+  </shader>
+
+  <technique name='PreIntegration'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='PreIntegrationPS'/>
+    </pass>
+  </technique>
+
+  
+  <variable type='Texture2D' name='convolutionTex'/>
+  
+  <variable type='cbuffer' name='cb_covolution'>
+    <variable type='float4' name='curMipTexSize'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+  
+#define BLUR_RADIUS 3
+  
+float4 GaussConvolutionXPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 preMipTexelSize = 1.0f / preMipTexSize.xy;
+  float2 preMipPos = (vsOut.pos.xy - 0.5f) * 2.0f + 0.5f;
+  float2 preMipUV = preMipPos * preMipTexelSize;
+  //uint preMipLevel = preMipLevel.x;
+  
+  float weights[MAX_BLUR_RADIUS + 1] = (float[MAX_BLUR_RADIUS + 1])gaussTable;
+  float4 sum = 0.0f;
+  
+  [unroll] for(int i = -BLUR_RADIUS; i <= BLUR_RADIUS; ++i)
+  {
+    float2 ti = preMipUV + i * float2(1.0f, 0.0f) * preMipTexelSize;
+    float4 vi = convolutionTex.SampleLevel(samPoint, ti, preMipLevel.x);
+    float wi = weights[abs(i)];
+    sum += vi * wi;
+  }
+  
+  return sum;
+}
+
+float4 GaussConvolutionYPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 texelSize = 1.0f / curMipTexSize.xy;
+  float2 uv = vsOut.pos.xy * texelSize;
+  uint curMipLevel = preMipLevel.x + 1;
+  
+  float weights[MAX_BLUR_RADIUS + 1] = (float[MAX_BLUR_RADIUS + 1])gaussTable;
+  float4 sum = 0.0f;
+  
+  [unroll] for(int i = -BLUR_RADIUS; i <= BLUR_RADIUS; ++i)
+  {
+    float2 ti = uv + i * float2(0.0f, 1.0f) * texelSize;
+    float4 vi = convolutionTex.SampleLevel(samPoint, ti, curMipLevel);
+    float wi = weights[abs(i)];
+    sum += vi * wi;
+  }
+  
+  return sum;
+}
+  
+    ]]>
+  </shader>
+
+  <technique name='GaussConvolutionX'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='GaussConvolutionXPS'/>
+    </pass>
+  </technique>
+  <technique name='GaussConvolutionY'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='GaussConvolutionYPS'/>
+    </pass>
+  </technique>
+
+
+  <variable type='Texture2D' name='gbuffer0'/>
+  <variable type='Texture2D' name='gbuffer1'/>
+  <variable type='cbuffer' name='cb_tracing'>
+    <variable type='float4x4' name='invProj'/>
+    <variable type='float4x4' name='proj'/>
+    <variable type='float4x4' name='view'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+  
+#define START_LEVEL 0
+#define STOP_LEVEL 0
+#define MAX_ITERATION 64
+
+float GetMinZRay(float3 pos, float3 tracingDir, float texelOffset, uint level)
+{
+  float3 posOffset = pos + tracingDir * texelOffset;
+  float minZ = hiZTex.SampleLevel(samPoint, posOffset.xy, level).x;
+  float l = (minZ - pos.z) / (tracingDir.z);
+  
+  return l;
+}
+
+float GetCellBoundRay(float3 pos, float3 tracingDir, float texelOffset, uint level)
+{
+  float3 dimension;
+  hiZTex.GetDimensions(level, dimension.x, dimension.y, dimension.z);
+  float2 cellSize = 1.0f / dimension.xy;
+  float3 posOffset = pos + tracingDir * texelOffset;
+  float2 cell = floor(posOffset.xy / cellSize);
+  
+  float epison = 0.0001f;
+  float lx = 0.0f;
+  float ly = 0.0f;
+  if(tracingDir.x > 0.0f)
+    lx = ((cell.x + 1.0f) * cellSize.x - pos.x) / (tracingDir.x);
+  else
+    lx = (cell.x * cellSize.x - pos.x) / (tracingDir.x);
+  
+  if(tracingDir.y > 0.0f)
+    ly = ((cell.y + 1.0f) * cellSize.y - pos.y) / (tracingDir.y);
+  else
+    ly = (cell.y * cellSize.y - pos.y) / (tracingDir.y);
+  
+  float l = 0.0f;
+  l = min(lx, ly);
+
+/*
+  if(!isnan(lx))
+  {
+    if(!isnan(ly))
+      l = min(lx, ly);
+    else
+      l = lx;
+  }
+  else
+  {
+    if(!isnan(ly))
+      l = ly;
+  }
+*/
+  
+  return max(0.0f, l);
+}
+
+float GetTexelOffset(float3 tracingDir)
+{
+  float2 texelSize = 1.0f / hiZTex.Length.xy;
+  float lx = texelSize.x * 0.5f / (abs(tracingDir.x));
+  float ly = texelSize.y * 0.5f / (abs(tracingDir.y));
+  float l = 0.0f;
+  l = min(lx, ly);
+  /*
+  if(!isnan(lx))
+  {
+    if(!isnan(ly))
+      l = min(lx, ly);
+    else
+      l = lx;
+  }
+  else
+  {
+    if(!isnan(ly))
+      l = ly;
+  }
+  */
+  
+  return max(0.0f, l);
+}
+  
+void HiZTracing(float3 posS, float3 tracingDir,
+                out bool bTraceHit, out float3 tracingPos, out float fade)
+{
+  int level = START_LEVEL;
+  uint iteration = 0;
+  float3 dimension;
+  hiZTex.GetDimensions(0, dimension.x, dimension.y, dimension.z);
+  int numMips = (int)dimension.z;
+  
+  float3 samplePos = posS;
+  float texelOffset = GetTexelOffset(tracingDir);
+  bTraceHit = true;
+  if(texelOffset == 0.0f)
+  {
+    bTraceHit = false;
+  }
+  else
+  {
+    float boundRay = GetCellBoundRay(samplePos, tracingDir, 0.0f, 0);
+    samplePos += boundRay * tracingDir;
+    
+    [loop] while(level >= STOP_LEVEL)
+    {
+      if(samplePos.x < 0.0f || samplePos.x > 1.0f
+      || samplePos.y < 0.0f || samplePos.y > 1.0f
+      || samplePos.z <= 0.0f || samplePos.z >= 0.999f)
+      {
+        bTraceHit = false;
+        break;
+      }
+    
+      float minZRay = GetMinZRay(samplePos, tracingDir, texelOffset, level);
+      if(tracingDir.z > 0.0f)
+      {
+        minZRay = max(0.0f, minZRay);
+        float cellBoundRay = GetCellBoundRay(samplePos, tracingDir, texelOffset, level);
+        float rayL = min(minZRay, cellBoundRay);
+        if(rayL == minZRay)
+        {
+          --level;
+        }
+        else
+        {
+          samplePos += rayL * tracingDir;
+          level = min(level + 1, numMips - 1);
+        }
+      }
+      else
+      {
+        if(minZRay < 0.0f)
+        {
+          float cellBoundRay = GetCellBoundRay(samplePos, tracingDir, texelOffset, level);
+          samplePos += cellBoundRay * tracingDir;
+          level = min(level + 1, numMips - 1);
+        }
+        else
+        {
+          --level;
+        }
+      }
+      
+      ++iteration;
+      if(iteration >= MAX_ITERATION)
+      {
+        bTraceHit = false;
+        break;
+      }
+      
+      
+      
+    }//end while
+  }
+  
+  float3 curPos = samplePos - texelOffset * tracingDir;
+  float curZ = LinearizeZ( hiZTex.SampleLevel(samPoint, curPos.xy, 0).x );
+  float3 nextPos = samplePos + texelOffset * tracingDir;
+  float nextZ = LinearizeZ( hiZTex.SampleLevel(samPoint, nextPos.xy, 0).x );
+  fade = 1.0f - smoothstep(0.005f, 0.01f, abs(curZ - nextZ));
+  //fade = 1.0f - saturate( (abs(curZ - nextZ) - 0.001f) / 0.01f );
+  //if(abs(curZ - nextZ) >= 0.001f)
+  //  bTraceHit = false;
+  
+  tracingPos = samplePos;
+}
+
+
+
+float4 ConeTracing(float3 orgPos, float3 tracingPos, float roughness)
+{
+  //float shininess = 1024.0f * gbuffer2.SampleLevel(samPoint, orgPos.xy, 0).w;
+  //shininess = 255.0f;
+  //float theta = acos(pow(0.244f, 1.0f / (shininess + 1.0f)));
+  
+  float roughnessAdj = lerp(0.1f, 0.9f, roughness);
+  float a = roughnessAdj * roughnessAdj;
+  float shininess = 2.0 / (a * a) - 2.0;
+    
+  float epison = 0.1f;
+  float cosTheta = pow(epison * 8.0f * 3.1415f / (shininess + 2.0f), 1.0f / (shininess + epison));
+  float tanTheta = pow(1.0f / (cosTheta * cosTheta) - 1.0f, 0.5f);
+  float len = length(tracingPos - orgPos);
+  float3 tracingDir = (tracingPos - orgPos) / len;
+  float3 dimension;
+  hiZTex.GetDimensions(0, dimension.x, dimension.y, dimension.z);
+  float2 texSize = dimension.xy;
+  
+  float accum = 0.0f;
+  float3 resultColor = 0.0f;
+  float step = len / 40.0f;
+  float tri = len * len * tanTheta;
+  float samAcuum = 0.0f;
+  [loop] for(int i = 0; i < 5; ++i)
+  {
+    float halfOpp = tanTheta * len;
+    //float r = halfOpp * len / (pow(len * len + halfOpp * halfOpp, 0.5f) + halfOpp);
+    float r = halfOpp;
+    float d = r * min(texSize.x, texSize.y);
+    d = max(1.0f, d);
+    float mipLevel = clamp(log2(d) - 4.5f, 0.0f, dimension.z);
+    
+    //mipLevel = 0;
+    float3 samplePos = orgPos + (len) * tracingDir;
+    float sphereMaxZ = samplePos.z + r;
+    float minZ = hiZTex.SampleLevel(samPoint, samplePos.xy, (int)mipLevel).x;
+    float intersection = saturate( (sphereMaxZ - minZ) / r * 0.5f );
+    float visibility = visibilityTex.SampleLevel(samLinear, samplePos.xy, mipLevel);
+    float3 color = convolutionTex.SampleLevel(samLinear, samplePos.xy, mipLevel).xyz;
+    float blend = visibility * (1.0f - accum);
+    resultColor += color * blend;
+    accum += visibility;
+    
+    len -= step;
+    //len -= 2.0f * r;
+    
+    if(accum >= 1.0f)
+      break;
+  }
+  
+  return float4(resultColor, saturate(accum));
+}
+
+#define BORDER_FADE_START 0.4f
+#define BORDER_FADE_END 0.8f
+  
+float4 TracingPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 texelSize = 1.0f / hiZTex.Length.xy;
+  
+  float2 posS_xy = vsOut.pos.xy * texelSize;
+  float posS_z = hiZTex.SampleLevel(samPoint, posS_xy, 0).x;
+  float3 posS = float3(posS_xy, posS_z);
+  
+  float4 gbuf0 = gbuffer0.SampleLevel(samPoint, posS.xy, 0);
+  float4 gbuf1 = gbuffer1.SampleLevel(samPoint, posS_xy, 0);
+  
+  float roughness = gbuf1.w;
+  
+  float3 normalW = normalize( gbuf1.xyz * 2.0f - 1.0f );
+  float3 normalV = mul(float4(normalW, 0.0f), view).xyz;
+  float3 posH = float3(posS_xy * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f), posS_z);
+  float4 posV = mul(float4(posH, 1.0f), invProj);
+  posV /= posV.w;
+  float3 reflectV = reflect(posV.xyz, normalV);
+  float3 rPosV = posV.xyz + normalize(reflectV);
+  float4 rPosH = mul(float4(rPosV, 1.0f), proj);
+  rPosH /= rPosH.w;
+  float3 rPosS = float3(rPosH.xy * float2(0.5f, -0.5f) + 0.5f, rPosH.z);
+  
+  float3 tracingDir = normalize(rPosS - posS);
+  bool bTraceHit = false;
+  float3 tracingPos;
+  float fadeDepth;
+  HiZTracing(posS, tracingDir,
+             bTraceHit, tracingPos, fadeDepth);
+  float4 tracingColor = 0.0f;
+  if(bTraceHit)
+    tracingColor = ConeTracing(posS, tracingPos, roughness);
+    
+  float3 viewDir = normalize(-posV.xyz);
+  float3 reflectDir = normalize(reflectV);
+  float fadeMirror = 1.0f - dot(viewDir, reflectDir);
+  
+  float boundary = distance(tracingPos.xy, float2(0.5f, 0.5f)) * 2.0f;
+  float fadeBorder = 1.0f - saturate( (boundary - BORDER_FADE_START) / (BORDER_FADE_END - BORDER_FADE_START) );
+  
+  float travel = distance(posS.xy, tracingPos.xy);
+  float fadeTravel = 1.0f - saturate( (travel - BORDER_FADE_START) / (BORDER_FADE_END - BORDER_FADE_START) );
+  
+  float fade = fadeMirror * fadeBorder * fadeTravel * fadeDepth;
+  tracingColor *= fade;
+    
+  
+  
+  float3 l = normalize(rPosV - posV.xyz);
+  float3 h = normalV;
+  float3 baseColor = gbuf0.xyz;
+  float metallic = gbuf0.w;
+  float3 diffColor = baseColor - baseColor * metallic;
+  float3 specColor = lerp(0.03f, baseColor, metallic);
+  
+  float h_dot_l = max(0.0f, dot(h, l));
+   
+  float3 fresnel = Fresnel_Schlick(l, h, specColor);
+
+  float invPI = 1.0f / 3.1415f;
+  float3 reflectColor = tracingColor.xyz * h_dot_l * invPI * ( fresnel + diffColor);
+  
+  return float4(reflectColor.xyz, tracingColor.w);
+}
+  
+    ]]>
+  </shader>
+  
+  <variable type='DepthStencilState' name='dssStencilMask'>
+    <state name='depthEnable' value='false'/>
+    <state name='stencilEnable' value='true'/>
+    <state name='frontFace'>
+      <state name='stencilFunc' value='EQUAL'/>
+    </state>
+    <state name='stencilRef' value='1'/>
+  </variable>
+  
+  <variable type='BlendState' name='alphaBlend'>
+    <state name='blendRTDesc' index='0'>
+      <state name='blendEnable' value='true'/>
+      <state name='srcBlend' value='SRC_ALPHA'/>
+      <state name='dstBlend' value='ONE'/>
+      <state name='dstBlendAlpha' value='ZERO'/>
+    </state>
+  </variable>
+
+  <technique name="Tracing">
+    <pass>
+      <state value='disableDepth'/>
+      <state value='alphaBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='TracingPS'/>
+    </pass>
+  </technique>
+
+</effect>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  
+  <variable type="Texture2D" name="inTex"/>
+    
+  <variable type="SamplerState" name="samPoint">
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+    
+  <shader>
+    <![CDATA[
+
+float4 DownSamplePS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return inTex.SampleLevel(samPoint, vsOut.tex, 0);
+}
+
+    ]]>
+  </shader>
+
+  <technique>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='DownSamplePS'/>
+    </pass>
+  </technique>
+
+</effect>

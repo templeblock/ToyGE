@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="CommonState.xml"/>
+  <include name="Util.xml"/>
+  
+  <variable type="cbuffer" name="cb_Material">
+    <variable type="float3" name="baseColor"/>
+    <variable type="float" name="roughness"/>
+    <variable type="float" name="metallic"/>
+    <variable type="float" name="pomScale"/>
+    <variable type="float" name="opacity"/>
+    <variable type="float" name="refractionIndex"/>
+  </variable>
+
+  <variable type='Texture2D' name='opacityMaskTex' />
+  <variable type='Texture2D' name='baseColorTex' />
+  <variable type='Texture2D' name='roughnessTex' />
+  <variable type='Texture2D' name='normalTex' />
+  <variable type='Texture2D' name='heightTex' />
+  
+  <shader>
+    <![CDATA[
+    
+#if defined(MAT_BASECOLOR_TEX) || defined(MAT_ROUGHNESS_TEX) || defined(MAT_NORMAL_TEX) || defined(MAT_HEIGHT_TEX) || defined(MAT_OPACITYMASK_TEX)
+#define MAT_UV_COORD
+#endif
+    
+struct Material
+{
+    float3 baseColor;
+    float roughness;
+    float metallic;
+    float3 normal;
+    float opacity;
+    float refractionIndex;
+};
+
+
+float GetOpacityMask(float2 uv)
+{
+    return opacityMaskTex.Sample(samplerLinear, uv).r;
+}
+
+
+float3 GetNormal
+  (
+#ifdef MAT_UV_COORD
+    float3 uvCoord,
+#endif
+    float3 geometryNormal
+#ifdef MAT_NORMAL_TEX
+    , float3 geometryTangent
+#endif
+  )
+{
+    float3 normal;
+#ifdef MAT_NORMAL_TEX
+    float3 N = normalize(geometryNormal);
+  	float3 T = normalize(geometryTangent);
+	  float3 B = cross(N, T);
+  	float3x3 texToWorld = float3x3(T, B, N);
+  	float3 normalSample = normalTex.Sample(samplerLinear, uvCoord.xy).rgb;
+	  normalSample = normalSample * 2.0f - 1.0f;
+	  normalSample = normalize(normalSample);
+	  normal = mul(normalSample, texToWorld);
+#else
+    normal = normalize(geometryNormal);
+#endif
+    return normal;
+}
+
+
+Material GetMeterial
+  (
+#ifdef MAT_UV_COORD
+    float3 uvCoord,
+#endif
+    float3 geometryNormal
+#ifdef MAT_NORMAL_TEX
+    , float3 geometryTangent
+#endif
+  )
+{
+    Material mat;
+
+#ifdef MAT_BASECOLOR_TEX
+    mat.baseColor = baseColorTex.Sample(samplerLinear, uvCoord.xy).rgb;
+    mat.baseColor = GammaCorrectIn(mat.baseColor);
+#else
+    mat.baseColor = baseColor;
+#endif
+    
+#ifdef MAT_ROUGHNESS_TEX
+    mat.roughness = roughnessTex.Sample(samplerLinear, uvCoord.xy).r;
+#else
+    mat.roughness = roughness;
+#endif
+
+    mat.normal = GetNormal
+    (
+    #ifdef MAT_UV_COORD
+      uvCoord,
+    #endif
+      geometryNormal
+    #ifdef MAT_NORMAL_TEX
+      , geometryTangent
+    #endif
+    );
+
+    mat.metallic = metallic;
+    
+    mat.opacity = opacity;
+    mat.refractionIndex = refractionIndex;
+
+    return mat;
+}
+
+
+Material GbufferToMaterial(float4 gbuffer0, float4 gbuffer1)
+{
+    Material mat;
+    mat.baseColor = gbuffer0.xyz;
+    mat.metallic = gbuffer0.w;
+    mat.normal = DecodeNormal(gbuffer1.xyz);
+    //mat.normal = DecodeNormal(gbuffer1.xyz, invView);
+    //mat.normal = normalize(gbuffer1.xyz * 2.0 - 1.0);
+    mat.roughness = gbuffer1.w;
+    
+    return mat;
+}
+    
+    ]]>
+  </shader>
+</effect>

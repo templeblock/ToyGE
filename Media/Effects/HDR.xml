@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="Util.xml"/>
+
+  <variable type="Texture2D" name="sceneTex"/>
+  
+  <variable type='SamplerState' name='samplerPointBorder'>
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='BORDER'/>
+    <state name='addressV' value='BORDER'/>
+    <state name='borderColor' value='0.0f 0.0f 0.0f 0.0f'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+float4 SceneDownSamplePS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return sceneTex.SampleLevel(samplerLinearClamp, vsOut.tex, 0);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='SceneDownSample'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='SceneDownSamplePS'/>
+    </pass>
+  </technique>
+
+  
+
+  
+
+  <variable type="Texture2D" name="sceneDownSampleTex"/>
+  <variable type="Texture2D" format="float2" name="reduceTex"/>
+  
+  <shader>
+    <![CDATA[
+    
+float CalcIlluminacePS_Initial(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 texelSize = 1.0f / sceneDownSampleTex.Length.xy;
+  float2 texelCenterCoord = (vsOut.pos.xy - 0.5f) * 3.0f + 1.5f;
+  float2 texCenter = vsOut.tex;
+  
+  float sum = 0.0f;
+  int numSamples = 0;
+  [unroll] for(int y = -1; y <= 1; ++y)
+  {
+    [unroll] for(int x = -1; x <= 1; ++x)
+    {
+      //float2 texSample = texCenter + texelSize * float2(x, y);
+      float2 texSample = texelSize * (texelCenterCoord + float2(x, y));
+      if(texSample.x <= 1.0f && texSample.y <= 1.0f)
+      {
+        float3 color = sceneDownSampleTex.SampleLevel(samplerPointBorder, texSample, 0).xyz;
+        float ilum = GetIlluminance(color);
+        sum += log(0.001f + ilum);
+        ++numSamples;
+      }
+    }
+  }
+  
+  if(numSamples >= 1)
+    sum /= numSamples;
+  
+  return sum;
+}
+
+float CalcIlluminacePS_ReduceAccum(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 texelCoordLU = (vsOut.pos.xy - 0.5f) * 4.0f + 0.5f;
+  float2 texelSize = 1.0f / reduceTex.Length.xy;
+  
+  float2 texLU = texelCoordLU * texelSize;
+  float sum = 0.0f;
+  [unroll] for(int y = 0; y < 4; ++y)
+  {
+    [unroll] for(int x = 0; x < 4; ++x)
+    {
+      float2 sam = reduceTex.SampleLevel(samplerPointBorder, texLU + texelSize * float2(x, y), 0);
+      sum += sam.x;
+    }
+  }
+  
+  return sum / 16.0f;
+}
+
+    ]]>
+  </shader>
+
+  <technique name='CalcIlluminace_Initial'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='CalcIlluminacePS_Initial'/>
+    </pass>
+  </technique>
+  
+  <technique name='CalcIlluminace_ReduceAccum'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='CalcIlluminacePS_ReduceAccum'/>
+    </pass>
+  </technique>
+
+
+  <variable type='Texture2D' name='ilumReduceTex'/>
+  <variable type='Texture2D' name='prevAvgAdaptedIlumTex'/>
+  
+  <variable type='cbuffer' name='cb_computeAvgAdaptedIlum'>
+    <variable type='float' name='elapsedTime'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+float2 ComputeAvgAndAdaptedIlumPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float logAvgIlum = ilumReduceTex.Load(int3(0, 0, 0)).x;
+  float avgIlum = exp(logAvgIlum);
+  float prevAdaptedIlum = prevAvgAdaptedIlumTex.Load(int3(0, 0, 0)).y;
+  float adaptedIlum = lerp(prevAdaptedIlum, avgIlum, 1.0 - pow(0.98, 100.0 * elapsedTime));
+  
+  return float2(avgIlum, adaptedIlum);
+}
+    
+    ]]>
+  </shader>
+  
+  <technique name='ComputeAvgAndAdaptedIlum'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='ComputeAvgAndAdaptedIlumPS'/>
+    </pass>
+  </technique>
+  
+
+  
+  <variable type='cbuffer' name='cb_bloomDownSample'>
+    <variable type='float2' name='texelSize'/>
+    <variable type='float2' name='_pad_bloomDownSample'/>
+  </variable>
+
+  <variable type='Texture2D' name='bloomDownSampleInTex'/>
+
+  <shader>
+    <![CDATA[
+    
+float4 BloomDownSamplePS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  static const float2 offsets[4] = 
+  {
+    float2(-1.0f, -1.0f),
+    float2( 1.0f, -1.0f),
+    float2(-1.0f,  1.0f),
+    float2( 1.0f,  1.0f)
+  };
+  
+  float4 colorSum = 0.0f;
+  
+  [unroll] for(int i = 0; i < 4; ++i)
+  {
+    colorSum += bloomDownSampleInTex.SampleLevel(samplerLinearClamp, vsOut.tex + offsets[i] * texelSize, 0);
+  }
+  
+  colorSum *= 0.25f;
+  
+  return colorSum;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='BloomDownSample'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BloomDownSamplePS'/>
+    </pass>
+  </technique>
+
+
+  <variable type='Texture2D' name='bloomUpSampleInTex'/>
+
+  <shader>
+    <![CDATA[
+    
+float4 BloomUpSamplePS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return bloomUpSampleInTex.SampleLevel(samplerLinearClamp, vsOut.tex.xy, 0);
+}
+    
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='accumBlend'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="ONE"/>
+      <state name="dstBlend" value="ONE"/>
+      <state name="dstBlendAlpha" value="ZERO"/>
+    </state>
+  </variable>
+
+  <technique name='BloomUpSample'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='accumBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BloomUpSamplePS'/>
+    </pass>
+  </technique>
+  
+  
+
+  <variable type="cbuffer" name="cb_brightPass">
+    <!--threshold, scaleParam-->
+    <variable type="float4" name="brightPassParams"/>
+  </variable>
+
+  <variable type="Texture2D" name="avgAdaptedIlumTex"/>
+  
+  <shader>
+    <![CDATA[
+    
+float4 BrightPassPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float adaptedIllum = avgAdaptedIlumTex.Load(int3(0, 0, 0)).y;
+  float threshold = brightPassParams.x;
+  float scaleParam = brightPassParams.y;
+  
+  float3 color = sceneDownSampleTex.SampleLevel(samplerPoint, vsOut.tex, 0).xyz;
+  float key = max(0.0f, 1.5f - 1.5f / (adaptedIllum * 0.1f + 1.0f)) + 0.1f;
+  float illumScaled = key * GetIlluminance(color) / (adaptedIllum + 0.001f);
+  float lBright = max(0, illumScaled - threshold);
+  float brightScale = lBright / (scaleParam + lBright);
+  
+  return float4(color * brightScale, 1.0f);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='BrightPass'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BrightPassPS'/>
+    </pass>
+  </technique>
+
+  
+
+  <variable type="Texture2D" name="blurTex"/>
+  <variable type="Texture2D" name="blurTex0"/>
+  <variable type="Texture2D" name="blurTex1"/>
+  <variable type="Texture2D" name="blurTex2"/>
+  <variable type="Texture2D" name="streakTex"/>
+  
+  <shader>
+    <![CDATA[
+
+float3 Uncharted2Tonemap(float3 x)
+{
+
+  static float A = 0.15;
+  static float B = 0.50;
+  static float C = 0.10;
+  static float D = 0.20;
+  static float E = 0.02;
+  static float F = 0.30;
+  static float W = 11.2;
+  
+  return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F;
+
+
+/*
+  const float A = 0.22f;
+	const float B = 0.30f;
+	const float C = 0.10f;
+	const float D = 0.20f;
+	const float E = 0.01f;
+	const float F = 0.30f;
+
+	return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+  */
+}
+
+float3 BlueShift(float3 color, float adaptedIlum)
+{
+  float blueShiftCoefficient = 1.0f - (adaptedIlum + 1.5)/4.1;
+  blueShiftCoefficient = saturate(blueShiftCoefficient);
+
+  static const float3 BLUE_SHIFT_VECTOR = float3(1.05f, 0.97f, 1.27f); 
+  float3 rodColor = GetIlluminance(color) * BLUE_SHIFT_VECTOR;
+  
+  return lerp( color, rodColor, blueShiftCoefficient );
+}
+
+float3 BlueShift(float3 color)
+{
+  const float3 BLUE_SHIFT = float3(0.4f, 0.4f, 0.7f);
+  float ilum = GetIlluminance(color);
+  
+  //martin's modified blue shift
+  return lerp(ilum * BLUE_SHIFT, color, saturate(16.0f * ilum));
+}
+
+float3 Tonemap(float3 color, float adaptedIlum)
+{  
+	color = BlueShift(color);
+
+  static float W = 11.2;
+  float exposure = 3 / (max(0.1f, 1 + 10 * lerp(0.2, adaptedIlum, 0.5)));
+  return Uncharted2Tonemap(color * 1.60f * exposure) / Uncharted2Tonemap(W);
+}
+
+float4 CombinePS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float3 sceneColor = sceneTex.SampleLevel(samplerPoint, vsOut.tex, 0).xyz;
+  
+  /*
+  float3 blurColor0 = blurTex0.SampleLevel(samplerLinearClamp, vsOut.tex, 0).xyz;
+  float3 blurColor1 = blurTex1.SampleLevel(samplerLinearClamp, vsOut.tex, 0).xyz;
+  float3 blurColor2 = blurTex2.SampleLevel(samplerLinearClamp, vsOut.tex, 0).xyz;
+  float3 blurColor = blurColor0 + blurColor1 + blurColor2;
+  */
+  
+  float3 blurColor = blurTex.SampleLevel(samplerLinearClamp, vsOut.tex, 0).xyz;
+  
+  float3 streakColor = streakTex.SampleLevel(samplerLinearClamp, vsOut.tex, 0).xyz;
+  
+  float3 mergeColor = sceneColor + 0.15f * blurColor + 0.1f * streakColor;
+  //float3 mergeColor = sceneColor;
+  
+  float adaptedIllum = avgAdaptedIlumTex.Load(int3(0, 0, 0)).y;
+  float3 ldrColor = Tonemap(mergeColor, adaptedIllum);
+  
+  return float4(ldrColor, 1.0f);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="Combine">
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='CombinePS'/>
+    </pass>
+  </technique>
+  
+</effect>

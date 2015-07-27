@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <shader>
+    <![CDATA[
+    
+struct PostProcessVSIn
+{
+  float4 pos : POSITION;
+};
+
+struct PostProcessVSOut
+{
+	float4 pos : SV_POSITION;
+	float2 tex : TEXCOORD;
+};
+
+PostProcessVSOut PostProcessVS(PostProcessVSIn vsIn)
+{
+	PostProcessVSOut vsOut;
+
+	vsOut.pos = vsIn.pos;
+	vsOut.tex = float2(vsIn.pos.x * 0.5f + 0.5f, vsIn.pos.y * -0.5f + 0.5f);
+
+	return vsOut;
+}
+    
+    ]]>
+  </shader>
+</effect>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <variable type='DepthStencilState' name='disableDepth'>
+    <state name='depthEnable' value='false'/>
+  </variable>
+
+  <variable type='SamplerState' name='samplerLinear'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='WRAP'/>
+    <state name='addressV' value='WRAP'/>
+  </variable>
+
+  <variable type='SamplerState' name='samplerLinearClamp'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+
+  <variable type='SamplerState' name='samplerPoint'>
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='WRAP'/>
+    <state name='addressV' value='WRAP'/>
+  </variable>
+
+  <variable type='SamplerState' name='samplerPointClamp'>
+    <state name='filter' value='MIN_MAG_MIP_POINT'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+
+  <variable type='SamplerState' name='samplerAnisotropic'>
+    <state name='filter' value='ANISOTROPIC'/>
+    <state name='addressU' value='WRAP'/>
+    <state name='addressV' value='WRAP'/>
+  </variable>
+  
+</effect>

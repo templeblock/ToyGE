@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Lighting.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="PostProcess.xml"/>
+  <include name="POM.xml"/>
+
+  <variable type="cbuffer" name="cb_vs_perObj">
+    <variable type="float4x4" name="world"/>
+    <variable type="float4" name="pomScale"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_vs_perLight">
+    <variable type="float4x4" name="viewProj"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_vs_perView">
+    <variable type="float4" name="viewPos"/>
+  </variable>
+
+  <variable type="Texture2D" name="heightTex"/>
+  
+  <shader>
+    <![CDATA[
+    
+struct RecieverPosVSIn
+{
+  float3 pos : POSITION;
+#ifdef POM_OFFSET
+  float3 normal : NORMAL;
+  float3 tangent : TANGENT;
+  float3 tex : TEXCOORD;
+#endif
+};
+ 
+struct RecieverPosVSOut
+{
+  float3 posW : POSITION_W;
+  float4 posH : SV_POSITION;
+#ifdef POM_OFFSET
+  float3 normalW : NORMAL;
+  float3 tangentW : TANGENT;
+  float3 tex : TEXCOORD;
+#endif
+};
+ 
+RecieverPosVSOut RecieverPosVS(RecieverPosVSIn vsIn)
+{
+  RecieverPosVSOut vsOut;
+  
+  vsOut.posW = mul(float4(vsIn.pos, 1.0f), world).xyz;
+  vsOut.posH = mul(float4(vsOut.posW, 1.0f), viewProj);
+  
+#ifdef POM_OFFSET
+  vsOut.normalW = mul(float4(vsIn.normal, 0.0f), world).xyz;
+  vsOut.tangentW = mul(float4(vsIn.tangent, 0.0f), world).xyz;
+  vsOut.tex = vsIn.tex;
+#endif
+  
+  return vsOut;
+}
+
+/*
+struct RecieverPosGSOut
+{
+  float3 posW : POSITION_W;
+  float4 posH : SV_POSITION;
+  uint rtIndex : SV_RenderTargetArrayIndex;
+};
+
+[maxvertexcount(6 * 3)]
+void RecieverPosGS(
+   triangle float3 posWs[3] : POSITION,
+   inout TriangleStream<RecieverPosGSOut> outStream)
+{
+  RecieverPosGSOut gsOut;
+  for(uint faceIndex = 0; faceIndex < 6; ++faceIndex)
+  {
+    gsOut.rtIndex = faceIndex;
+    float4x4 viewProj = viewProjArray[faceIndex];
+    for(uint i = 0; i < 3; ++i)
+    {
+      gsOut.posW = posWs[i];
+      gsOut.posH = mul(float4(posWs[i], 1.0f), viewProj);
+      outStream.Append(gsOut);
+    }
+    outStream.RestartStrip();
+  }
+}
+*/
+
+float3 RecieverPosPS(RecieverPosVSOut vsOut) : SV_TARGET
+{
+#ifdef POM_OFFSET
+
+  float3 view = normalize(viewPos.xyz - vsOut.posW);
+  float scale = pomScale.x;
+  vsOut.tex.xy = POM(vsOut.normalW, vsOut.tangentW, view, vsOut.tex.xy, heightTex, scale);
+  
+  float h = heightTex.Sample(samplerLinear, vsOut.tex.xy).x * scale;
+  vsOut.posW += vsOut.normalW * h;
+#endif
+
+  return vsOut.posW;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="RecieverPos">
+    <pass>
+      <vs entry="RecieverPosVS"/>
+      <ps entry="RecieverPosPS"/>
+    </pass>
+  </technique>
+
+  <technique name="RecieverPosPOM">
+    <pass>
+      <vs entry="RecieverPosVS"/>
+      <ps entry="RecieverPosPS"/>
+    </pass>
+  </technique>
+
+
+  <variable type="TextureCube" name="recieverPosTexCube"/>
+
+  <variable type="cbuffer" name="cb_splating_perLight">
+    <variable type="float4" name="pointSize"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_splating_perObj">
+    <variable type="float4" name="refractIndex"/>
+  </variable>
+
+  <variable type="Texture2D" name="pointTex"/>
+
+  <shader>
+<![CDATA[
+
+struct SplatingVSOut
+{
+  float3 posW : POSITION;
+  float3 normalW : NORMAL;
+  float weight : WEIGHT;
+};
+
+SplatingVSOut SplatingVS(
+  float3 pos : POSITION,
+  float3 normal : NORMAL,
+  float weight : WEIGHT)
+{
+  SplatingVSOut vsOut;
+  
+  vsOut.posW = mul(float4(pos, 0.0f), world).xyz;
+  vsOut.normalW = mul(float4(normal, 0.0f), world).xyz;
+  vsOut.weight = weight;
+  
+  return vsOut;
+}
+
+
+struct SplatingGSOut
+{
+  float3 posW : POSITION;
+  float3 normalW : NORMAL;
+  float4 posH : SV_POSITION;
+  float2 texCoord : TEXCOORD;
+  float weight : WEIGHT;
+  //uint rtIndex : SV_RenderTargetArrayIndex;
+};
+
+[maxvertexcount(3 * 2)]
+void SplatingGS(
+   point SplatingVSOut vsOut[1],
+   inout TriangleStream<SplatingGSOut> outStream)
+{
+  //Adjust Pos
+  float3 n = normalize(vsOut[0].normalW);
+  float3 l = normalize(lightPos.xyz - vsOut[0].posW);
+  
+  if(dot(n, l) > 0)
+  {
+    float3 rf = refract(-l, n, 1.0f / refractIndex.x);
+  
+    float d = 1.0f;
+    float3 posAdjW = 0.0f;
+    uint numItrs = 2;
+    for(uint i = 0; i < numItrs; ++i)
+    {
+      float3 p = vsOut[0].posW + d * rf;
+      float3 lp = normalize(lightPos.xyz - p);
+      posAdjW = recieverPosTexCube.SampleLevel(samplerPoint, -lp, 0).xyz;
+      d = length(vsOut[0].posW - posAdjW);
+    }
+    
+    float3 Z = -n;
+    float3 X = abs(Z.x) < 0.99 ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+    float3 Y = normalize(cross(Z, X));
+    X = cross(Y, Z);
+    
+    float extend = 0.5f * pointSize.x;
+    float3 pos[4] = 
+    {
+      posAdjW - extend * X + extend * Y,
+      posAdjW + extend * X + extend * Y,
+      posAdjW + extend * X - extend * Y,
+      posAdjW - extend * X - extend * Y
+    };
+    float2 uv[4] = 
+    {
+      float2(0.0f, 0.0f),
+      float2(1.0f, 0.0f),
+      float2(1.0f, 1.0f),
+      float2(0.0f, 1.0f)
+    };
+
+    SplatingGSOut gsOut;
+    gsOut.posW = posAdjW;
+    gsOut.normalW = n;
+    gsOut.weight = vsOut[0].weight;
+    
+    //for(uint faceIndex = 0; faceIndex < 6; ++faceIndex)
+    //{
+      //gsOut.rtIndex = faceIndex;
+      //float4x4 viewProj = viewProjArray[faceIndex];
+
+      gsOut.posH = mul(float4(pos[0], 1.0f), viewProj);
+      gsOut.texCoord = uv[0];
+      outStream.Append(gsOut);
+      gsOut.posH = mul(float4(pos[1], 1.0f), viewProj);
+      gsOut.texCoord = uv[1];
+      outStream.Append(gsOut);
+      gsOut.posH = mul(float4(pos[2], 1.0f), viewProj);
+      gsOut.texCoord = uv[2];
+      outStream.Append(gsOut);
+      outStream.RestartStrip();
+      
+      gsOut.posH = mul(float4(pos[0], 1.0f), viewProj);
+      gsOut.texCoord = uv[0];
+      outStream.Append(gsOut);
+      gsOut.posH = mul(float4(pos[2], 1.0f), viewProj);
+      gsOut.texCoord = uv[2];
+      outStream.Append(gsOut);
+      gsOut.posH = mul(float4(pos[3], 1.0f), viewProj);
+      gsOut.texCoord = uv[3];
+      outStream.Append(gsOut);
+      outStream.RestartStrip();
+    //}
+  }
+}
+
+float4 SplatingPS(SplatingGSOut gsOut) : SV_TARGET
+{
+  float3 color = lightRadiance.xyz * CalcPointLight(gsOut.posW, gsOut.normalW, lightPos.xyz);
+  color *= pointTex.SampleLevel(samplerLinear, gsOut.texCoord, 0).xyz;
+  
+  float pointArea = pointSize.x * pointSize.x;
+  
+  return float4(color, gsOut.weight / pointArea);
+}
+
+]]>
+  </shader>
+
+  <variable type="DepthStencilState" name="lessEqualDepth">
+    <state name="depthFunc" value="LESS_EQUAL"/>
+  </variable>
+
+  <variable type="DepthStencilState" name="disableDepth">
+    <state name="depthEnable" value="false"/>
+  </variable>
+
+  <variable type="BlendState" name="splatingBlend">
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="SRC_ALPHA"/>
+      <state name="dstBlend" value="ONE"/>
+    </state>
+  </variable>
+
+  <technique name="Splating">
+    <pass>
+      <state value="disableDepth"/>
+      <state value="splatingBlend"/>
+      <vs entry="SplatingVS"/>
+      <gs entry="SplatingGS"/>
+      <ps entry="SplatingPS"/>
+    </pass>
+  </technique>
+
+
+  <variable type="TextureCube" name="causticsTexCube"/>
+  <variable type="Texture2D" name="linearDepthTex"/>
+  <variable type="Texture2D" name="gbuffer0"/>
+  
+  <variable type="cbuffer" name="cb_rendering">
+    <variable type="float4x4" name="invView"/>
+    <variable type="float4x4" name="proj"/>
+    <variable type="float4" name="camNearFar"/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+float4 CausticsRenderingPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float depthVNorm = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f).x;
+  
+  //Calculate posV, posW
+  float2 screenSize = linearDepthTex.Length.xy;
+  float2 posH_xy = (vsOut.pos.xy - 0.5) / screenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+  float near = camNearFar.x;
+  float far = camNearFar.y;
+  float posV_z = depthVNorm * (far - near) + near;
+  float posV_x = posH_xy.x * posV_z / proj[0][0];
+  float posV_y = posH_xy.y * posV_z / proj[1][1];
+  float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
+  float4 posW = mul(posV, invView);
+  
+#ifdef POM_OFFSET
+  
+#endif
+  
+  float3 l = lightPos.xyz - posW.xyz;
+  float dp = length(lightPos.xyz - posW.xyz);
+  l /= dp;
+  
+  float3 recieverPosW = recieverPosTexCube.SampleLevel(samplerPoint, -l, 0).xyz;
+  float dr = length(lightPos.xyz - recieverPosW);
+  float alpha = 0.0f;
+  float threhold = 0.2f;
+  if(dp <= dr + threhold)
+  {
+    alpha = 1.0f;
+  }
+  float3 radiance = causticsTexCube.SampleLevel(samplerLinear, -l, 0).xyz;
+  
+  float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float3 baseColor = gbuf0.xyz;
+  float metallic = gbuf0.w;
+  float3 diffColor = baseColor - baseColor * metallic;
+  
+  return float4(diffColor * radiance / PI, alpha);
+}
+
+    ]]>
+  </shader>
+
+  <technique name="CausticsRendering">
+    <pass>
+      <state value="disableDepth"/>
+      <state value="splatingBlend"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="CausticsRenderingPS"/>
+    </pass>
+  </technique>
+  
+</effect>

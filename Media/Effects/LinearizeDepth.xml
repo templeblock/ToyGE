@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  
+  <!--DepthLinear-->
+
+  <variable type='Texture2D' format='float' name='rawDepthTex'/>
+
+  <variable type='cbuffer' name='cb_depthLinear'>
+    <variable type='float4' name='linearParam'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+float LinearizeDepthPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float z = rawDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0);
+  return ((linearParam.y / (z - linearParam.x)) - linearParam.z) / (linearParam.w - linearParam.z) ;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='LinearizeDepth'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='LinearizeDepthPS'/>
+    </pass>
+  </technique>
+  
+</effect>

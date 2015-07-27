@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="CommonState.xml"/>
+  
+  <variable type="cbuffer" name="cb_filter">
+    <variable type="float4" arraySize="($NUM_SAMPLES + 1) / 2" name="samplesOffsets"/>
+    <variable type="float4" arraySize="($NUM_SAMPLES + 3) / 4" name="samplesWeights"/>
+  </variable>
+
+  <variable type="Texture2D" name="filterTex"/>
+
+  <variable type="SamplerState" name="filterSampler">
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+void FilterVS(
+  float4 pos : POSITION,
+  out float4 posH : SV_POSITION,
+  out float4 uvs[(NUM_SAMPLES + 1) / 2] : UVS)
+{
+	posH = pos;
+	float2 uv = float2(pos.x * 0.5f + 0.5f, pos.y * -0.5f + 0.5f);
+  
+  float2 offsets[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) samplesOffsets;
+  
+  //float2 uvsCast[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) uvs;
+  
+  for(uint i0 = 0; i0 < (NUM_SAMPLES + 1) / 2; ++i0)
+    uvs[i0] = 0.0f;
+  
+  [unroll] for(uint i = 0; i < NUM_SAMPLES; ++i)
+  {
+    //float2 offset = (i & 1) ? samplesOffsets[i/2].zw : samplesOffsets[i/2].xy;
+    float2 offset = offsets[i];
+    if( i & 1)
+      uvs[i / 2].zw = uv + offset;
+    else
+      uvs[i / 2].xy = uv + offset;
+  }
+}
+
+void FilterPS(
+  float4 posH : SV_POSITION,
+  float4 uvs[(NUM_SAMPLES + 1) / 2] : UVS,
+  out float4 outColor : SV_TARGET)
+{
+  outColor = 0.0f;
+  
+  float weights[(NUM_SAMPLES + 3) / 4 * 4] = (float[(NUM_SAMPLES + 3) / 4 * 4]) samplesWeights;
+  
+  float2 uvsCast[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) uvs;
+  
+  [unroll] for(uint i = 0; i < NUM_SAMPLES; ++i)
+  {
+    outColor += filterTex.SampleLevel(filterSampler, uvsCast[i], 0) * weights[i];
+  }
+}
+
+    ]]>
+  </shader>
+
+  <technique name='Filter'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='FilterVS'/>
+      <ps entry='FilterPS'/>
+    </pass>
+  </technique>
+
+</effect>

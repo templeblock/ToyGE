@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="Material.xml"/>
+  <include name="Lighting.xml"/>
+  <include name="IBL.xml"/>
+  
+  <!--Lighting-->
+
+  <variable type='Texture2D' format='float' name='linearDepthTex'/>
+  <variable type='Texture2D' name='gbuffer0'/>
+  <variable type='Texture2D' name='gbuffer1'/>
+  <variable type='Texture2D' format='int' name='reflectionMapIDTex'/>
+
+  <variable type='cbuffer' name='cb_lightingPS_perFrame'>
+    <variable type='float4x4' name='proj'/>
+    <variable type='float4x4' name='invView'/>
+    <variable type='float2' name='camNearFar'/>
+    <variable type='float3' name='viewPos'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb_lightingIBL'>
+    <variable type='int4' name='reflectionMapID'/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+
+struct LightingPSOut
+{
+  float4 light0 : SV_TARGET0;
+  float4 light1 : SV_TARGET1;
+};
+
+LightingPSOut LightingPS(PostProcessVSOut vsOut)
+{
+  LightingPSOut psOut;
+  
+  float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float4 gbuf1 = gbuffer1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+  Material mat = GbufferToMaterial(gbuf0, gbuf1);
+  
+  float linearDepth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+//Compute posV, posW
+  float2 screenSize = gbuffer0.Length.xy;
+  float3 posV = LinearDepthToViewPos(linearDepth, camNearFar, vsOut.pos.xy, screenSize, proj);
+  float3 posW = mul(float4(posV, 1.0f), invView).xyz;
+  
+  float3 n = mat.normal;
+  
+//Compute In Light
+  float3 light_in = ComputeInLightRadiance(posW, n);
+
+//Calculate Shadow
+  float shadow = ComputeShadow(posW, posV.z);
+  light_in *= shadow;
+  
+  float3 l = -GetLightDir(posW);
+  
+  psOut.light0 = 0.0f;
+  psOut.light0.xyz = light_in / PI;
+  
+  float3 v = normalize(viewPos.xyz - posW.xyz);
+	float3 h = normalize(l + v);
+
+  float3 specColor = lerp(0.03f, mat.baseColor, mat.metallic);
+  
+  float D = NDF_GGX(n, h, mat.roughness);
+  float3 F = Fresnel_Schlick(v, h, specColor);
+  float G = G_Smith(n, l, v, mat.roughness);
+  float n_dot_l = max(1e-6, dot(n, l));
+  float n_dot_v = max(1e-6, dot(n, v));
+  
+  psOut.light1 = 0.0f;
+  psOut.light1.xyz = light_in * D * F * G / (4 * n_dot_l * n_dot_v);
+  
+  psOut.light0.w = 1.0f;
+  psOut.light1.w = 1.0f;
+  
+  return psOut;
+}
+
+
+float4 LightingIBLPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  //float3 light1 = lightAccum1.SampleLevel(samplerPoint, vsOut.tex, 0).xyz;
+  
+  int mapID = reflectionMapIDTex.Load(int3(vsOut.pos.xy, 0));
+  if(mapID != reflectionMapID.x)
+    return float4(0.0f, 0.0f, 0.0f, 1.0f);
+
+  float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float4 gbuf1 = gbuffer1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float depthVNorm = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+  //Calculate posV, posW
+  float2 screenSize = gbuffer0.Length.xy;
+  float2 posH_xy = (vsOut.pos.xy - 0.5) / screenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+  float near = camNearFar.x;
+  float far = camNearFar.y;
+  float posV_z = depthVNorm * (far - near) + near;
+  float posV_x = posH_xy.x * posV_z / proj[0][0];
+  float posV_y = posH_xy.y * posV_z / proj[1][1];
+  float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
+  float4 posW = mul(posV, invView);
+  
+  float3 n = normalize(gbuf1.xyz * 2.0f - 1.0f);
+	float3 v = normalize(viewPos.xyz - posW.xyz);
+  
+  float3 baseColor = gbuf0.xyz;
+  float metallic = gbuf0.w;
+  float roughness = gbuf1.w;
+  float3 specColor = lerp(0.03f, baseColor, metallic);
+  
+  float n_dot_v = max(1e-6, dot(n, v));
+  
+  float3 R = reflect(-v, n);
+  float3 iblColor = ComputeIBL(R, roughness, n_dot_v, specColor);
+  
+  return float4(iblColor, 1.0f);
+}
+
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='accumBlend'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="ONE"/>
+      <state name="dstBlend" value="ONE"/>
+      <state name="dstBlendAlpha" value="ZERO"/>
+    </state>
+  </variable>
+
+  <technique name='Lighting'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='accumBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='LightingPS'/>
+    </pass>
+  </technique>
+
+  <technique name='LightingIBL'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='accumBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='LightingIBLPS'/>
+    </pass>
+  </technique>
+  
+</effect>

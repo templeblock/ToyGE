@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+
+  <variable type='Texture1D' format='float2' name='pcssLookupTable'/>
+
+  <variable type='cbuffer' name='cb_pcss'>
+    <!--pcssConfig [blockerSearchCnt, lightSize, , ]  --> 
+    <variable type='float4' name='pcssConfig'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    
+
+float GetPenumbraSize(float reciever, float dBlocker, float maxSize)
+{
+  float lightSize = pcssConfig.y;
+  return clamp( (reciever - dBlocker) / dBlocker * lightSize, 0.0f, maxSize);
+}
+
+float2 RotateVec(float2 vec, float angle)
+{
+  float len = length(vec);
+  float cosA = vec.x / len;
+  float sinA = vec.y / len;
+  float cosB = cos(angle);
+  float sinB = sin(angle);
+  return float2(cosA*cosB - sinA*sinB, sinA*cosB + cosA*sinB) * len;
+}
+    
+/*
+float SearchBlocker_SAVSM_FP(Texture2D tex, float2 uv, float2 dx, float2 dy, float reciever, float near)
+{
+  float lightSize = pcssConfig.y;
+  
+  int blockerSearchCnt = min((int)pcssConfig.x, pcssLookupTable.Length.x);
+  float blockerSearchSize = lightSize * (reciever - near) / reciever;
+  
+  float2 texSize = tex.Length.xy;
+  float2 texelSize = 1.0f / texSize;
+  
+  float dBlocker = 0.0f;
+  int blockerNum = 0;
+   
+  float rotate = dot(uv, uv) / 2;
+  float rotateAngle = rotate * 3.1415 * 2.0f;
+  for(int blockIndex = 0; blockIndex < blockerSearchCnt; ++blockIndex)
+  {
+    float2 offsetLookup = pcssLookupTable[blockIndex];
+    offsetLookup = RotateVec(offsetLookup, rotateAngle);
+    
+    float2 uvOffset = offsetLookup * blockerSearchSize * texelSize;
+    float2 uvBlock = uv + uvOffset;
+    uvBlock = (floor(uvBlock * texSize + 0.5f) + 0.5f) * texelSize;
+    float4 uvAjust = float4(uvBlock, uvBlock + texelSize);
+    uvAjust -= texelSize.xyxy;
+    
+    float4 sat0 = SampleSATSumFP(tex, uvAjust);
+    float2 moments = GetMomentsFP4(sat0);
+    
+    float dOccluder = moments.x;
+    if(reciever > dOccluder)
+    {
+      dBlocker += dOccluder;
+      ++blockerNum;
+    }
+  }
+  
+  if(blockerNum >= 1)
+    dBlocker /= blockerNum;
+  else
+    dBlocker = reciever;
+  
+  return dBlocker;
+}
+*/
+
+float SearchBlocker_SAVSM_FP(Texture2DArray tex, int arrayIndex, float2 uv, float reciever, float near)
+{
+  float lightSize = pcssConfig.y;
+  
+  int blockerSearchCnt = min((int)pcssConfig.x, pcssLookupTable.Length.x);
+  float blockerSearchSize = lightSize * (reciever - near) / reciever;
+  
+  float2 texSize;
+  float numElements;
+  tex.GetDimensions(texSize.x, texSize.y, numElements);
+  float2 texelSize = 1.0f / texSize;
+  
+  float dBlocker = 0.0f;
+  int blockerNum = 0;
+   
+  float rotate = dot(uv, uv) / 2;
+  float rotateAngle = rotate * 3.1415 * 2.0f;
+  for(int blockIndex = 0; blockIndex < blockerSearchCnt; ++blockIndex)
+  {
+    float2 offsetLookup = pcssLookupTable[blockIndex];
+    offsetLookup = RotateVec(offsetLookup, rotateAngle);
+    
+    float2 uvOffset = offsetLookup * blockerSearchSize * texelSize;
+    float2 uvBlock = uv + uvOffset;
+    uvBlock = (floor(uvBlock * texSize + 0.5f) + 0.5f) * texelSize;
+    float4 uvAjust = float4(uvBlock, uvBlock + texelSize);
+    uvAjust -= texelSize.xyxy;
+    
+    float4 sat0 = SampleSATSumFP(tex, arrayIndex, uvAjust);
+    float2 moments = GetMomentsFP4(sat0);
+    
+    float dOccluder = moments.x;
+    if(reciever > dOccluder)
+    {
+      dBlocker += dOccluder;
+      ++blockerNum;
+    }
+  }
+  
+  if(blockerNum >= 1)
+    dBlocker /= blockerNum;
+  else
+    dBlocker = reciever;
+  
+  return dBlocker;
+}
+
+float SearchBlocker_SAVSM_FP(TextureCubeArray tex, int arrayIndex, float3 dir, float reciever, float near)
+{
+  float lightSize = pcssConfig.y;
+  
+  int blockerSearchCnt = min((int)pcssConfig.x, pcssLookupTable.Length.x);
+  float blockerSearchSize = lightSize * (reciever - near) / reciever;
+  
+  float2 texSize;
+  float elementsCnt;
+  tex.GetDimensions(texSize.x, texSize.y, elementsCnt);
+  float2 texelSize = 1.0f / texSize;
+  
+  int texIndex = GetCubeMapSampleIndex(dir);
+  float2 uv = GetTexelUV(dir, texIndex);
+  
+  float dBlocker = 0.0f;
+  int blockerNum = 0;
+   
+  float rotate = dot(uv, uv) / 2;
+  float rotateAngle = rotate * 3.1415 * 2.0f;
+  for(int blockIndex = 0; blockIndex < blockerSearchCnt; ++blockIndex)
+  {
+    float2 offsetLookup = pcssLookupTable[blockIndex];
+    offsetLookup = RotateVec(offsetLookup, rotateAngle);
+    
+    float2 uvOffset = offsetLookup * blockerSearchSize * texelSize;
+    float2 uvBlock = uv + uvOffset;
+    uvBlock = (floor(uvBlock * texSize + 0.5f) + 0.5f) * texelSize;
+    float4 uvAjust = float4(uvBlock, uvBlock + texelSize);
+    uvAjust -= texelSize.xyxy;
+    
+    float4 sat0 = SampleSATSumFP(tex, arrayIndex, texIndex, uvAjust);
+    float2 moments = GetMomentsFP4(sat0);
+    
+    float dOccluder = moments.x;
+    if(reciever > dOccluder)
+    {
+      dBlocker += dOccluder;
+      ++blockerNum;
+    }
+  }
+  
+  if(blockerNum >= 1)
+    dBlocker /= blockerNum;
+  else
+    dBlocker = reciever;
+  
+  return dBlocker;
+}
+
+    
+    ]]>
+  </shader>
+</effect>

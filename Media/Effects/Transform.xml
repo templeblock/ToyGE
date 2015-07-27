@@ -1,0 +1,47 @@
+<?xml version='1.0'?>
+
+<effect>
+  <include name='PostProcess.xml'/>
+  <include name='CommonState.xml'/>
+  
+  <variable type='Texture2D' name='srcTex' />
+  
+  <shader>
+    <![CDATA[
+    
+float4 TransformPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float4 colorSample = srcTex.SampleLevel(samplerLinearClamp, float2(vsOut.tex), 0);
+    
+    float4 outColor = 0.0f;
+    
+#ifdef COLOR_WRITE_R
+    outColor.r = colorSample.r;
+#endif
+
+#ifdef COLOR_WRITE_G
+    outColor.g = colorSample.g;
+#endif
+
+#ifdef COLOR_WRITE_B
+    outColor.b = colorSample.b;
+#endif
+
+#ifdef COLOR_WRITE_A
+    outColor.a = colorSample.a;
+#endif
+    
+    return outColor;
+}
+    ]]>
+  </shader>
+  
+  <technique name='Transform'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='TransformPS'/>
+    </pass>
+  </technique>
+  
+</effect>

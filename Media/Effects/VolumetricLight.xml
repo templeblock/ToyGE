@@ -1,0 +1,564 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Lighting.xml"/>
+  <include name="View.xml"/>
+  <include name="BlurConfig.xml"/>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+
+  <variable type="cbuffer" name="cb_texelSize">
+    <variable type="float2" name="texelSize"/>
+    <variable type="float2" name="_pad_texelSize"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_vs_renderLightVolume_po">
+    <variable type="float4x4" name="world"/>
+    <variable type="float" name="pointLightRadius"/>
+    <variable type="float" name="spotLightAngle"/>
+    <variable type="float" name="spotLightDecrease"/>
+    <variable type="float" name="dirLightDist"/>
+    <variable type="float" name="attenuation"/>
+    <variable type="float" name="scattering"/>
+    <variable type="float" name="phaseFunctionParam"/>
+    <!--<variable type="float" name="_pad_renderLightVolume_po"/>-->
+  </variable>
+
+  <variable type="cbuffer" name="cb_dither">
+    <variable type="float4x4" name="dither"/>
+  </variable>
+
+  <variable type="Texture2D" name="linearDepthTex"/>
+  
+  <shader>
+    <![CDATA[
+    
+#define NUM_SAMPLES 32
+    
+void RenderLightVolumeVS(
+  float3 pos : POSITION,
+  out float4 posH : SV_POSITION,
+  out float3 posW : POSITION_W)
+{
+  posW = mul(float4(pos, 1.0f), world).xyz;
+  float3 posV = mul(float4(posW, 1.0f), view).xyz;
+  posH = mul(float4(posV, 1.0f), proj);
+}
+
+float3 GetWorldPos(
+  float2 posS,
+  float linearDepth,
+  float2 camNearFar,
+  float2 invScreenSize,
+  float4x4 proj,
+  float4x4 invView)
+{
+  float depthV = linearDepth * (camNearFar.y - camNearFar.x) + camNearFar.x;
+  
+  float2 xy_H = posS * invScreenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+  float2 xy_V = xy_H * depthV / float2(proj[0][0], proj[1][1]);
+  
+  float3 posV = float3(xy_V, depthV);
+  float3 posW = mul(float4(posV, 1.0f), invView).xyz;
+  return posW;
+}
+
+float PhaseFunction_HG(float g, float cosTheta)
+{
+  float g2 = g * g;
+  float gg = g + g;
+  float numerator = 1 - gg + g2;
+  numerator *= numerator;
+  
+  return numerator * 0.25 / ( PI * pow(abs(1 + g2 - gg * cosTheta), 3.0/2.0) );
+}
+
+
+void RenderLightVolumePointPS(
+  float4 posH : SV_POSITION,
+  float3 posW : POSITION_W,
+  out float4 color : SV_TARGET)
+{
+  float startLinearZ = linearDepthTex.Load(int3(posH.xy, 0)).x;
+  float3 posFromDepth = GetWorldPos(posH.xy, startLinearZ, cameraNearFar, texelSize, proj, invView);
+  
+  //Compute Start Pos
+  float3 traceDir = normalize(cameraPos - posFromDepth);
+  float3 lightVec = lightPos - cameraPos;
+  float r = pointLightRadius;
+  float d = sqrt( r * r - length(cross(lightVec, traceDir)) );
+  float3 midPos = cameraPos + traceDir * dot(lightVec, traceDir);
+  
+  float3 startPos = posFromDepth;
+  if(length(lightPos - posFromDepth) > pointLightRadius)
+  {
+    startPos = midPos - traceDir * d;
+  }
+  
+  //Compute End Pos
+  float3 endPos = cameraPos;
+  if(length(lightVec) > pointLightRadius)
+  {
+    endPos = midPos + traceDir * d;
+  }
+  
+  //Dither
+  float3 step = (endPos - startPos) / NUM_SAMPLES;
+  uint2 ditherIndex = uint2(posH.x, posH.y) % 4;
+  float ditherOffset = dither[ditherIndex.x][ditherIndex.y];
+  startPos = startPos + step * (1.0 + ditherOffset);
+  
+  //Ray Matching
+  step = (endPos - startPos) / NUM_SAMPLES;
+  float stepLen = length(step);
+  
+  float3 lightAccum = 0.0;
+  
+  float3 p = startPos;
+  
+  float viewDist = length(endPos - p);
+  
+  [unroll] for(
+    int stepIndex = 0;
+    stepIndex < NUM_SAMPLES;
+    ++stepIndex, p += step, viewDist -= stepLen)
+  {
+    float shadow = ComputeShadow(p, 0.0f);
+    float3 l_vec = lightPos - p;
+    float l_d = length(l_vec);
+    float3 l_in = lightRadiance / (l_d * l_d) * exp(-l_d * attenuation) * shadow;
+    float cosTheta = dot( -l_vec / max(0.001f, l_d), traceDir);
+    float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+    l_i = l_i * exp(-viewDist * attenuation);
+    
+    lightAccum += l_i;
+  }
+  
+  color = float4(lightAccum, 1.0f);
+}
+
+bool IntersectionRayCone(
+  float3 coneOrigin,
+  float3 coneDir,
+  float  coneAngle,
+  float3 rayOrigin,
+  float3 rayDir,
+  out float t0,
+  out float t1)
+{
+  float cosTheta = cos(coneAngle);
+  float cosTheta2 = cosTheta * cosTheta;
+  float sinTheta = sin(coneAngle);
+  float sinTheta2 = sinTheta * sinTheta;
+  float3 pa = coneOrigin;
+  float3 va = coneDir;
+  float3 p = rayOrigin;
+  float3 v = rayDir;
+  float v_o_va = dot(v, va);
+  float3 dp = p - pa;
+  float dp_o_va = dot(dp, va);
+  float3 v_0 = v - v_o_va * va;
+  float3 v_1 = dp - dp_o_va * va;
+  float A = cosTheta2 * dot(v_0, v_0) - sinTheta2 * v_o_va * v_o_va;
+  float B = 2.0 * cosTheta2 * dot(v_0, v_1) - 2.0 * sinTheta2 * v_o_va * dp_o_va;
+  float C = cosTheta2 * dot(v_1, v_1) - sinTheta2 * dp_o_va * dp_o_va;
+  
+  float d = B * B - 4.0f * A * C;
+  
+  bool intersect;
+  
+  if(d < 0)
+  {
+    t0 = t1 = 0.0f;
+    intersect = false;
+  }
+  else if( A == 0)
+  {
+    t0 = t1 = -C / B;
+    intersect = true;
+  }
+  else if( A > 0 )
+  {
+    d = sqrt(d);
+    t0 = (-B - d) * 0.5f / A;
+    t1 = (-B + d) * 0.5f / A;
+    intersect = true;
+  }
+  else
+  {
+    d = sqrt(d);
+    t0 = (-B + d) * 0.5f / A;
+    t1 = (-B - d) * 0.5f / A;
+    intersect = true;
+  }
+  return intersect;
+}
+
+#define CONE_CLIP 1
+
+void RenderLightVolumeSpotPS(
+  float4 posH : SV_POSITION,
+  float3 posW : POSITION_W,
+  out float4 color : SV_TARGET)
+{
+  float startLinearZ = linearDepthTex.Load(int3(posH.xy, 0)).x;
+  float3 posFromDepth = GetWorldPos(posH.xy, startLinearZ, cameraNearFar, texelSize, proj, invView);
+  
+  //Compute Start Pos
+  float3 startPos;
+  float3 endPos;
+#if (CONE_CLIP == 1)
+  float3 traceDir = (cameraPos - posFromDepth);
+  float lenTraceVec = length(traceDir);
+  traceDir /= lenTraceVec;
+  float t0, t1;
+  bool intersect = IntersectionRayCone(lightPos, lightDir, spotLightAngle, posFromDepth, traceDir, t0, t1);
+ 
+  float3 v0 = posFromDepth + traceDir * t0;
+  float3 v1 = posFromDepth + traceDir * t1;
+  
+  if(!intersect)
+   t0 = t1 = -FLT_MAX;
+  
+  bool bV1Start = false;
+  
+  if( dot( normalize(posFromDepth - lightPos), lightDir) >= cos(spotLightAngle) )
+  {
+    startPos = posFromDepth;
+    endPos = startPos + min(min(lenTraceVec, t0 > 0.0 ? t0 : FLT_MAX), t1 > 0.0 ? t1 : FLT_MAX) * traceDir;
+  }
+  else
+  {
+    //float3 pos[2] = {v0, v1};
+    int idx = -1;
+    startPos = posFromDepth;
+    if(t0 > 0 && t0 < lenTraceVec && dot(v0 - lightPos, lightDir) >= 0)
+    {
+      startPos = v0;
+      idx = 0;
+    }
+    else if(t1 > 0 && t1 < lenTraceVec && dot(v1 - lightPos, lightDir) >= 0)
+    {
+      startPos = v1;
+      idx = 1;
+    }
+    
+    if(idx == -1)
+      endPos = cameraPos;
+    else if(idx == 0)
+    {
+      if(t1 > 0 && t1 < lenTraceVec && dot(v1 - lightPos, lightDir) >= 0)
+        endPos = v1;
+      else
+        endPos = cameraPos;
+    }
+    else
+    {
+      endPos = cameraPos;
+    }
+    
+  }
+  
+#else
+  float3 traceDir = normalize(cameraPos - startPos);
+  startPos = posFromDepth;
+  endPos = cameraPos;
+#endif
+ 
+
+  //Ray Matching
+  float3 step = (endPos - startPos) / NUM_SAMPLES;
+  float stepLen = length(step);
+  
+  float3 lightAccum = 0.0;
+  
+  //Dither
+  uint2 ditherIndex = uint2(posH.x, posH.y) % 4;
+  float ditherOffset = dither[ditherIndex.x][ditherIndex.y];
+  float3 p = startPos + step * (1.0 + ditherOffset);
+  
+  float viewDist = length(endPos - p);
+  
+  [unroll] for(
+    int stepIndex = 0;
+    stepIndex < NUM_SAMPLES;
+    ++stepIndex, p += step, viewDist -= stepLen)
+  {
+    float shadow = ComputeShadow(p, 0.0f);
+    float3 l_vec = lightPos - p;
+    float l_d = length(l_vec);
+    float3 l_in = lightRadiance * CalcSpotLight(p, lightPos, lightDir, spotLightDecrease) * exp(-l_d * attenuation) * shadow;
+    float cosTheta = dot( -l_vec / max(0.001f, l_d), traceDir);
+    float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+    l_i = l_i * exp(-viewDist * attenuation);
+    
+    lightAccum += l_i;
+  }
+  //lightAccum = 1.0f;
+  
+  color = float4(lightAccum, 1.0f);
+}
+
+
+void RenderLightVolumeDirectionalPS(
+  PostProcessVSOut vsOut,
+  out float4 color : SV_TARGET)
+{
+  float startLinearZ = linearDepthTex.Load(int3(vsOut.pos.xy, 0)).x;
+  float3 posFromDepth = GetWorldPos(vsOut.pos.xy, startLinearZ, cameraNearFar, texelSize, proj, invView);
+  
+  //Compute Start Pos
+  float3 startPos = posFromDepth;
+  float3 traceDir = normalize(cameraPos - startPos);
+  
+  //Compute End pos
+  float3 endPos = cameraPos;
+    
+  //Ray Matching
+  float3 step = (endPos - startPos) / NUM_SAMPLES;
+  float stepLen = length(step);
+  
+  float3 lightAccum = 0.0;
+  
+  //Dither
+  uint2 ditherIndex = uint2(vsOut.pos.x, vsOut.pos.y) % 4;
+  float ditherOffset = dither[ditherIndex.x][ditherIndex.y];
+  float3 p = startPos + step * (1.0 + ditherOffset);
+  
+  float3 stepV = mul(float4(step, 0.0f), view).xyz;
+  float viewDepthStep = stepV.z;
+  float viewDepth = mul(float4(p, 1.0f), view).z;
+  
+  float viewDist = length(endPos - p);
+  
+  [unroll] for(
+    int stepIndex = 0;
+    stepIndex < NUM_SAMPLES;
+    ++stepIndex, p += step, viewDist -= stepLen, viewDepth += viewDepthStep)
+  {
+    float shadow = ComputeShadow(p, viewDepth);
+    if(viewDepth < cameraNearFar.x)
+      shadow = 0.0f;
+    float l_d = dirLightDist;
+    float3 l_in = lightRadiance * exp(-l_d * attenuation) * shadow;
+    float cosTheta = dot( -lightDir, traceDir);
+    float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+    l_i = l_i * exp(-viewDist * attenuation);
+    
+    lightAccum += l_i;
+  }
+  //lightAccum = 1.0f;
+  
+  color = float4(lightAccum, 1.0f);
+}
+    
+    ]]>
+  </shader>
+  
+  <variable type='DepthStencilState' name='renderVolumeDSS'>
+    <state name='depthEnable' value='false'/>
+    <state name='stencilEnable' value='true'/>
+    <state name='frontFace'>
+      <state name='stencilPassOp' value='INCR'/>
+      <state name='stencilFunc' value='EQUAL'/>
+    </state>
+    <state name='backFace'>
+      <state name='stencilPassOp' value='INCR'/>
+      <state name='stencilFunc' value='EQUAL'/>
+    </state>
+    <state name='stencilRef' value='0'/>
+  </variable>
+
+  <variable type='RasterizerState' name='cullNone'>
+    <state name='cullMode' value='NONE'/>
+  </variable>
+
+  <variable type='BlendState' name='accumBS'>
+    <state name='blendRTDesc' index='0'>
+      <state name='blendEnable' value='true'/>
+      <state name='srcBlend' value='ONE'/>
+      <state name='dstBlend' value='ONE'/>
+      <state name='blendOP' value='ADD'/>
+    </state>
+  </variable>
+  
+  <technique name='RenderLightVolumePoint'>
+    <pass>
+      <state value='renderVolumeDSS'/>
+      <state value='cullNone'/>
+      <state value='accumBS'/>
+      <vs entry='RenderLightVolumeVS'/>
+      <ps entry='RenderLightVolumePointPS'/>
+    </pass>
+  </technique>
+
+  <technique name='RenderLightVolumeSpot'>
+    <pass>
+      <state value='renderVolumeDSS'/>
+      <state value='cullNone'/>
+      <state value='accumBS'/>
+      <vs entry='RenderLightVolumeVS'/>
+      <ps entry='RenderLightVolumeSpotPS'/>
+    </pass>
+  </technique>
+  
+  <technique name='RenderLightVolumeDirectional'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='accumBS'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='RenderLightVolumeDirectionalPS'/>
+    </pass>
+  </technique>
+  
+  
+  <variable type='Texture2D' name='lightVolumeTex'/>
+  
+  <shader>
+  <![CDATA[
+  
+#define BLUR_RADIUS 3
+  
+float4 BilateralGaussBlur(PostProcessVSOut vsOut, float2 axis)
+{
+  float weights[MAX_BLUR_RADIUS + 1] = (float[MAX_BLUR_RADIUS + 1])gaussTable;
+  float4 sum = 0.0f;
+  float weightsAll = 0.0f;
+  
+  static const float epison = 0.001f;
+  
+  float2 tc = vsOut.pos.xy * texelSize;
+  float4 vc = lightVolumeTex.SampleLevel(samplerPoint, tc, 0);
+  float dc = linearDepthTex.SampleLevel(samplerPoint, tc, 0).x;
+  float wc = weights[0] * 1.0f / (epison);
+  
+  sum = vc * wc;
+  weightsAll += wc;
+  
+  [unroll]
+  for(int i = -BLUR_RADIUS; i <= BLUR_RADIUS; ++i)
+  {
+    if(i != 0)
+    {
+      float2 ti = (vsOut.pos.xy + i * axis) * texelSize;
+      float4 vi = lightVolumeTex.SampleLevel(samplerPoint, ti, 0);
+      float di = linearDepthTex.SampleLevel(samplerPoint, ti, 0).x;
+      float wi = weights[abs(i)] * 1.0f / (epison + abs(di - dc));
+      sum += wi * vi;
+      weightsAll += wi;
+    }
+  }
+  
+  sum /= weightsAll;
+  
+  return sum;
+}
+
+float4 BilateralGaussBlurXPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return BilateralGaussBlur(vsOut, float2(1.0f, 0.0f));
+}
+
+float4 BilateralGaussBlurYPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  return BilateralGaussBlur(vsOut, float2(0.0f, 1.0f));
+}
+  
+  ]]>  
+  </shader>
+
+  <technique name='BilateralGaussBlurX'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BilateralGaussBlurXPS'/>
+    </pass>
+  </technique>
+  
+  <technique name='BilateralGaussBlurY'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BilateralGaussBlurYPS'/>
+    </pass>
+  </technique>
+
+  
+  <variable type='Texture2D' name='highResLinearDepthTex'/>
+  <variable type='Texture2D' name='lowResLinearDepthTex'/>
+  
+  <shader>
+    <![CDATA[
+    
+float4 BilateralUpSamplingPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float2 lowResPosLU = ceil( (vsOut.pos.xy - 0.5f) * 0.5f ) - 0.5f;
+  float4 bilinearWeights;
+  bilinearWeights.xy = frac(vsOut.pos.xy * 0.5f);
+  bilinearWeights.zw = 1.0f - bilinearWeights.xy;
+  bilinearWeights = bilinearWeights.xzxz * bilinearWeights.yyww;
+  
+  /*
+  float2 lowResTexelSize = texelSize * 2.0f;
+  float2 t0 = lowResPosLU * lowResTexelSize;
+  float2 t1 = (lowResPosLU + float2(1.0f, 0.0f)) * lowResTexelSize;
+  float2 t2 = (lowResPosLU + float2(0.0f, 1.0f)) * lowResTexelSize;
+  float2 t3 = (lowResPosLU + float2(1.0f, 1.0f)) * lowResTexelSize;
+  */
+  
+  int2 p0 = int2(lowResPosLU);
+  int2 p1 = p0 + int2(1, 0);
+  int2 p2 = p0 + int2(0, 1);
+  int2 p3 = p0 + int2(1, 1);
+  
+  float4 c0 = lightVolumeTex.Load(int3(p0, 0));
+  float4 c1 = lightVolumeTex.Load(int3(p1, 0));
+  float4 c2 = lightVolumeTex.Load(int3(p2, 0));
+  float4 c3 = lightVolumeTex.Load(int3(p3, 0));
+  
+  float dc = highResLinearDepthTex.Load(int3(vsOut.pos.xy, 0)).x;
+  float d0 = lowResLinearDepthTex.Load(int3(p0, 0)).x;
+  float d1 = lowResLinearDepthTex.Load(int3(p1, 0)).x;
+  float d2 = lowResLinearDepthTex.Load(int3(p2, 0)).x;
+  float d3 = lowResLinearDepthTex.Load(int3(p3, 0)).x;
+  
+  static const float epison = 0.001f;
+  float w0 = bilinearWeights.x * 1.0f / (epison + abs(d0 - dc));
+  float w1 = bilinearWeights.y * 1.0f / (epison + abs(d1 - dc));
+  float w2 = bilinearWeights.z * 1.0f / (epison + abs(d2 - dc));
+  float w3 = bilinearWeights.w * 1.0f / (epison + abs(d3 - dc));
+  
+  float4 color = c0 * w0 + c1 * w1 + c2 * w2 + c3 * w3;
+  color /= (w0 + w1 + w2 + w3);
+  
+  float depthV = dc * (cameraNearFar.y - cameraNearFar.x) + cameraNearFar.x;
+  float a = exp(-depthV * attenuation);
+  
+  return float4(color.rgb, 1.0f);
+}
+    
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='blendState'>
+    <state name='blendRTDesc' index='0'>
+      <state name='blendEnable' value='true'/>
+      <state name='srcBlend' value='ONE'/>
+      <state name='dstBlend' value='SRC_ALPHA'/>
+      <state name='blendOP' value='ADD'/>
+      <state name='srcBlendAlpha' value='ONE'/>
+      <state name='dstBlendAlpha' value='ZERO'/>
+      <state name='blendOPAlpha' value='ADD'/>
+    </state>
+  </variable>
+
+  <technique name='BilateralUpSampling'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='blendState'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BilateralUpSamplingPS'/>
+    </pass>
+  </technique>
+  
+</effect>

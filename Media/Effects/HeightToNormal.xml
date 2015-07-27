@@ -1,0 +1,71 @@
+<?xml version='1.0'?>
+
+<effect>
+  <variable type='Texture2D' name='height_tex'/>
+
+  <variable type='SamplerState' name='samLinear'>
+    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='WRAP'/>
+    <state name='addressV' value='WRAP'/>
+  </variable>
+
+  <variable type='cbuffer' name='cb'>
+    <variable type='int4' name='imageSize'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    struct VS_IN
+{
+	float4 pos : POSITION;
+};
+
+struct VS_OUT
+{
+	float4 pos : SV_POSITION;
+	float2 tex : TEXCOORD;
+};
+
+VS_OUT QuadVS(VS_IN vsIn)
+{
+	VS_OUT vsOut;
+
+	vsOut.pos = vsIn.pos;
+	vsOut.tex = float2(vsIn.pos.x * 0.5f + 0.5f, vsIn.pos.y * -0.5f + 0.5f);
+
+	return vsOut;
+}
+
+
+float4 HeightToNormalPS(VS_OUT vsOut) : SV_TARGET
+{
+	float h = height_tex.SampleLevel(samLinear, vsOut.pos.xy / imageSize.xy, 0.0f).r;
+  float hx = height_tex.SampleLevel(samLinear, (vsOut.pos.xy + float2(1.0f, 0.0f)) / imageSize.xy, 0.0f).r;
+  float hy = height_tex.SampleLevel(samLinear, (vsOut.pos.xy + float2(0.0f, 1.0f)) / imageSize.xy, 0.0f).r;
+	float scale = 4.0f;
+  float dxh = (hx - h) * scale;
+	float dyh = (hy - h) * scale;
+	float3 s = float3(1.0f, 0.0f, dxh);
+  float3 t = float3(0.0f, 1.0f, dyh);
+  float3 n = cross(s, t);
+  n = normalize(n);
+  n = (n + 1.0f) * 0.5f;
+  
+	return float4(n, 1.0f);
+}
+    ]]>
+  </shader>
+
+  <variable type='DepthStencilState' name='disableDepth'>
+    <state name='depthEnable' value='false'/>
+  </variable>
+
+  <technique name='HeightToNormal'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='QuadVS'/>
+      <ps entry='HeightToNormalPS'/>
+    </pass>
+  </technique>
+
+</effect>
