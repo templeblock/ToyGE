@@ -85,14 +85,14 @@ float3 ComputeInLightRadiance(float3 posW, float3 normalW)
 }
 
 
-float ComputeShadow(float3 posW, float viewDepth)
+float ComputeShadow(float3 posW, float viewDepth, float2 screenPos, float3 normal)
 {
     float shadow = 1.0f;
 
 #ifdef LIGHT_SHADOW
     
 #if LIGHT_TYPE == LIGHT_TYPE_POINT
-    shadow = ComputeShadow_PointLight(posW, lightPos);
+    shadow = ComputeShadow_PointLight(posW, lightPos, screenPos, normal);
 #elif LIGHT_TYPE == LIGHT_TYPE_SPOT
     shadow = ComputeShadow_SpotLight(posW, lightPos);
 #elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
@@ -102,6 +102,21 @@ float ComputeShadow(float3 posW, float viewDepth)
 #endif
 
     return shadow;
+}
+
+float GetShadowDepth(float3 posW, float viewDepth, out float recieverDepth)
+{
+    float depth = 0.0f;
+    
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    depth = GetShadowDepth_PointLight(posW, lightPos, recieverDepth);
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    depth = GetShadowDepth_SpotLight(posW, lightPos, recieverDepth);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    depth = GetShadowDepth_DirectionalLight(posW, viewDepth, recieverDepth);
+#endif
+    
+    return depth;
 }
 
 

@@ -8,7 +8,7 @@
 
   <variable type="cbuffer" name="cb_vs_perObj">
     <variable type="float4x4" name="world"/>
-    <variable type="float4" name="pomScale"/>
+    <variable type="float" name="pomScale"/>
   </variable>
 
   <variable type="cbuffer" name="cb_vs_perLight">
@@ -16,7 +16,7 @@
   </variable>
 
   <variable type="cbuffer" name="cb_vs_perView">
-    <variable type="float4" name="viewPos"/>
+    <variable type="float3" name="viewPos"/>
   </variable>
 
   <variable type="Texture2D" name="heightTex"/>
@@ -98,7 +98,7 @@ float3 RecieverPosPS(RecieverPosVSOut vsOut) : SV_TARGET
   float scale = pomScale.x;
   vsOut.tex.xy = POM(vsOut.normalW, vsOut.tangentW, view, vsOut.tex.xy, heightTex, scale);
   
-  float h = heightTex.Sample(samplerLinear, vsOut.tex.xy).x * scale;
+  float h = heightTex.Sample(samplerLinear, vsOut.tex.xy)[HEIGHT_CHANNEL] * scale;
   vsOut.posW += vsOut.normalW * h;
 #endif
 

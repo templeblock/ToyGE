@@ -131,6 +131,7 @@ namespace ToyGE
 		else
 			_fx->RemoveExtraMacro("GEN_VELOCITY");
 
+
 		//Render Each Opaque Object
 		Ptr<Material> curMat;
 		for (auto & obj : sortedRenderObjs)
@@ -145,6 +146,11 @@ namespace ToyGE
 				curMat->BindMacros(_fx);
 				_fx->UpdateData();
 				curMat->BindParams(_fx);
+
+				if (curMat->IsSubSurfaceScattering())
+					_fx->TechniqueByName("GBuffer")->PassByIndex(0)->SetStencilRef(2);
+				else
+					_fx->TechniqueByName("GBuffer")->PassByIndex(0)->SetStencilRef(1);
 			}
 
 			int32_t reflectionMapID = -1;

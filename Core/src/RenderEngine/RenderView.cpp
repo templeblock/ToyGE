@@ -116,6 +116,9 @@ namespace ToyGE
 		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
 		XMStoreFloat4x4(&_viewParams.viewProj, viewProjXM);
 
+		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
+		XMStoreFloat4x4(&_viewParams.invView, invViewXM);
+
 		_viewParams.preView = GetCamera()->GetViewMatrixCache();
 		_viewParams.cameraPos = *(reinterpret_cast<const float3*>(&GetCamera()->Pos()));
 		_viewParams.cameraNearFar = float2(GetCamera()->Near(), GetCamera()->Far());

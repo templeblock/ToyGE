@@ -28,6 +28,8 @@ namespace ToyGE
 
 	TOYGE_CORE_API Ptr<Texture> HeightToNormal(const Ptr<Texture> & heightTex);
 
+	TOYGE_CORE_API Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale = 1.0f);
+
 	TOYGE_CORE_API Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex);
 
 	TOYGE_CORE_API void Transform(

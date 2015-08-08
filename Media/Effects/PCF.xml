@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Util.xml"/>
+  
+  <variable type="cbuffer" name="cb_PCF">
+    <variable type="float" name="pcfFilterSize"/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    
+#define PCF_NUMSAMPLES 15
+    
+float2 PCFGetSampleOffset(int index)
+{
+
+#if PCF_NUMSAMPLES == 7
+  static const float2 sampleOffsets[PCF_NUMSAMPLES] = 
+  {
+    float2(0.000, 0.000),
+    float2(0.000, 0.200), 
+		float2(0.325, 0.101), 
+		float2(0.272, -0.396), 
+		float2(-0.385, -0.488), 
+		float2(-0.711, 0.274), 
+		float2(0.060, 0.900) 
+  };
+
+#elif PCF_NUMSAMPLES == 15
+  static const float2 sampleOffsets[PCF_NUMSAMPLES] = 
+  {
+    float2(-0.5272434f, 0.4635472f),
+    float2(-0.532829f, -0.1315444f),
+    float2(0.02950153f, 0.07607762f),
+    float2(-0.4308882f, 0.8937178f),
+    float2(0.1684846f, 0.4528822f),
+    float2(-0.846667f, 0.2227635f),
+    float2(0.4612895f, 0.1793739f),
+    float2(0.3341698f, -0.279819f),
+    float2(0.1780205f, 0.9605636f),
+    float2(0.7160961f, 0.5807444f),
+    float2(0.8909534f, 0.1301298f),
+    float2(-0.2277821f, -0.6578089f),
+    float2(-0.7325121f, -0.4811087f),
+    float2(0.6519442f, -0.6258116f),
+    float2(0.1452987f, -0.9162549f)
+  };
+#endif
+
+  return sampleOffsets[index];
+}
+    
+float ComputeShadow_PCF(TextureCubeArray tex, uint arrayIndex, float3 pos, float lightFar, float2 screenPos, float3 normal)
+{
+    float len = length(pos);
+    
+    float shadow = 1.0f;
+    
+    [branch] if(len >= 1e-4)
+    {
+        float bias = 0.02f;
+        pos += bias * normal;
+        
+        float3 zAxis = normal;//pos / len;
+        float3 yAxis = abs(zAxis.y) < 0.99 ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 0.0f, 0.0f);
+        float3 xAxis = cross(yAxis, zAxis);
+        
+        float3 absPos = abs(pos);
+        float reciever = max(max(absPos.x, absPos.y), absPos.z) / lightFar;
+        
+        //float bias = 0.02f / lightFar;
+        
+        //reciever -= bias;
+        
+        float noise = InterleavedGradientNoise(screenPos, PI);
+        float2 sinCos = float2(sin(noise), cos(noise));
+        float2x2 rotation = float2x2(
+            sinCos.x, sinCos.y,
+            -sinCos.y, sinCos.x);
+        
+        shadow = 0.0f;
+        
+        [unroll] for(int i = 0; i < PCF_NUMSAMPLES; ++i)
+        {
+            float2 sampleOffset = mul(PCFGetSampleOffset(i) * pcfFilterSize, rotation);
+            float3 samplePos = pos + sampleOffset.x * xAxis + sampleOffset.y * yAxis;
+            samplePos = normalize(samplePos);
+            float depth = tex.SampleLevel(samplerLinear, float4(samplePos, arrayIndex), 0).x;
+            if(reciever <= depth)
+                shadow += 1.0f;
+        }
+        
+        shadow /= PCF_NUMSAMPLES;
+    }
+    
+    return shadow;
+}
+    
+    ]]>
+  </shader> 
+</effect>

@@ -21,19 +21,19 @@ namespace ToyGE
 			return Ptr<Texture>();
 
 		TextureDesc desc;
-		desc.type = image->Type();
-		desc.format = image->Format();
-		desc.width = image->Width();
-		desc.height = image->Height();
-		desc.depth = image->Depth();
-		desc.arraySize = image->ArraySize();
-		desc.mipLevels = image->MipLevels();
+		desc.type = image->GetType();
+		desc.format = image->GetFormat();
+		desc.width = image->GetWidth();
+		desc.height = image->GetHeight();
+		desc.depth = image->GetDepth();
+		desc.arraySize = image->GetArraySize();
+		desc.mipLevels = image->GetMipLevels();
 		desc.sampleCount = 1;
 		desc.sampleQuality = 0;
 		desc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_IMMUTABLE;
 		desc.cpuAccess = 0;
 
-		return CreateTexture(desc, image->Data());
+		return CreateTexture(desc, image->DataDescs());
 	}
 
 	Ptr<Texture> RenderFactory::CreateTextureFromFile(const Ptr<File> & file, uint32_t bindFlag, uint32_t cpuAccess)
@@ -51,30 +51,11 @@ namespace ToyGE
 		return CreateTextureFromFile(file, bindFlag, cpuAccess);
 	}
 
-	Ptr<Texture> RenderFactory::CreateTextureAutoGenMips(const Ptr<Image> & image, uint32_t bindFlag, uint32_t cpuAccess)
-	{
-		Ptr<Texture> src = CreateTexture(image);
-		if (!src)
-			return Ptr<Texture>();
-		TextureDesc dstDesc = src->Desc();
-		dstDesc.mipLevels = 0;
-		dstDesc.bindFlag = bindFlag | TEXTURE_BIND_GENERATE_MIPS;
-		dstDesc.cpuAccess = cpuAccess;
-		Ptr<Texture> dst = CreateTexture(dstDesc);
-		if (!dst)
-			return Ptr<Texture>();
-		for (uint32_t arrayIndex = 0; arrayIndex != dstDesc.arraySize; ++arrayIndex)
-		{
-			if (!src->CopyTo(dst,
-				0, arrayIndex, 0, 0, 0,
-				0, arrayIndex))
-				return Ptr<Texture>();
-		}
-		if (!dst->GenerateMips())
-			return Ptr<Texture>();
-
-		return dst;
-	}
+	//Ptr<Texture> RenderFactory::CreateTextureAutoGenMips(const Ptr<Image> & image, uint32_t bindFlag, uint32_t cpuAccess)
+	//{
+	//	Ptr<Texture> src = CreateTexture(image, bindFlag, cpuAccess);
+	//	return src->CreateMips();
+	//}
 
 	Ptr<BlendState> RenderFactory::GetBlendStatePooled(const BlendStateDesc & desc)
 	{

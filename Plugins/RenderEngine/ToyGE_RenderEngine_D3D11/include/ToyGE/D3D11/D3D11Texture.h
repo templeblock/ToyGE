@@ -14,14 +14,15 @@ namespace ToyGE
 		D3D11Texture(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList);
 
 		bool GenerateMips() override;
+
 		bool CopyTo(const Ptr<Texture> & dst,
 			int32_t dstMipLevel, int32_t dstArrayIndex, int32_t xOffset, int32_t yOffset, int32_t zOffset,
-			int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox = std::shared_ptr<Box>()) override;
+			int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox = std::shared_ptr<Box>()) const override;
 
 		RenderDataDesc Map(MapType mapFlag, int32_t mipLevel, int32_t arrayIndex) override;
 		void UnMap() override;
 
-		virtual Ptr<ID3D11Resource> RawD3DTexture() = 0;
+		virtual Ptr<ID3D11Resource> RawD3DTexture() const = 0;
 
 		virtual const Ptr<ID3D11ShaderResourceView>& 
 			AcquireRawD3DShaderResourceView

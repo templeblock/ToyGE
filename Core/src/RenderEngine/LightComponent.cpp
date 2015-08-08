@@ -10,6 +10,7 @@
 #include "ToyGE\RenderEngine\Effects\SpotShadowDepthTechnique.h"
 #include "ToyGE\RenderEngine\Effects\CascadedShadowDepthTechnique.h"
 #include "ToyGE\RenderEngine\Effects\VSM.h"
+#include "ToyGE\RenderEngine\Effects\PCF.h"
 #include "ToyGE\RenderEngine\RenderEffect.h"
 
 namespace ToyGE
@@ -79,7 +80,7 @@ namespace ToyGE
 		_shadowTechnique = std::make_shared<ShadowTechnique>();
 		_shadowTechnique->SetDepthTechnique(std::make_shared<PointShadowDepthTechnique>());
 		_shadowTechnique->SetRenderTechnique(std::make_shared<ShadowRenderTechniqueEVSM4>());
-		_shadowTechnique->SetShadowMapSize(256);
+		_shadowTechnique->SetShadowMapSize(512);
 	}
 
 	//static float _ComputePointLightMaxDistance(const XMFLOAT3 & radiance)

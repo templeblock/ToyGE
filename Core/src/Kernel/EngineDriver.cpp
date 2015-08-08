@@ -28,12 +28,12 @@ namespace ToyGE
 	{
 		Logger::Init();
 
-		if (!app)
+		/*if (!app)
 		{
 			Logger::LogLine("error> app null");
 			Logger::LogLine("fatal error> abort");
 			abort();
-		}
+		}*/
 
 		//Create PlatformFactory
 #ifdef PLATFORM_WINDOWS
@@ -152,16 +152,19 @@ namespace ToyGE
 		//Global::GetRenderEngine()->SetRenderActionQueue(renderActionQueue);
 
 		//App Init
-		Global::SetApp(app);
-		Logger::LogLine("info> app startup");
-
-		app->Startup();
+		if (app)
+		{
+			Global::SetApp(app);
+			Logger::LogLine("info> app startup");
+			app->Startup();
+		}
 	}
 
 	void EngineDriver::Run()
 	{
 		auto looper = Global::GetLooper();
 		Logger::LogLine("info> enter loop");
+		Global::GetRenderEngine()->GetWindow()->Show();
 		looper->EnterLoop();
 		Logger::LogLine("info> exit loop");
 		Logger::LogLine("info> clear");

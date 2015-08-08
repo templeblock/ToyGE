@@ -52,7 +52,7 @@ namespace ToyGE
 
 		Ptr<Texture> CreateTextureFromFile(const WString & filePath, uint32_t bindFlag = TEXTURE_BIND_SHADER_RESOURCE, uint32_t cpuAccess = 0);
 
-		Ptr<Texture> CreateTextureAutoGenMips(const Ptr<Image> & image, uint32_t bindFlag = TEXTURE_BIND_SHADER_RESOURCE, uint32_t cpuAccess = 0);
+		//Ptr<Texture> CreateTextureAutoGenMips(const Ptr<Image> & image, uint32_t bindFlag = TEXTURE_BIND_SHADER_RESOURCE, uint32_t cpuAccess = 0);
 
 		virtual Ptr<RenderBuffer> CreateBuffer(const RenderBufferDesc & desc, const void * pInitData) = 0;
 

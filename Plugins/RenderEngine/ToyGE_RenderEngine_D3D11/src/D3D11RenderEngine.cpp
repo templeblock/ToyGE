@@ -127,6 +127,13 @@ namespace ToyGE
 				break;
 			}
 		}
+		if (pSelectAdapter == nullptr)
+		{
+			pSelectAdapter = _rawDXGIAdapterList[0];
+			DXGI_ADAPTER_DESC adapterDesc;
+			pSelectAdapter->GetDesc(&adapterDesc);
+			_adapter.description = adapterDesc.Description;
+		}
 
 		//Create id3d11device
 		auto createDeviceFunc = reinterpret_cast<decltype(::D3D11CreateDevice)*>(_d3d11_Dll->GetProcAddress("D3D11CreateDevice"));

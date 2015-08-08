@@ -23,7 +23,21 @@ namespace ToyGE
 		String filePath;
 		ConvertStr_WToA(file->Path(), filePath);
 
-		uint32_t processFlag = aiProcessPreset_TargetRealtime_Quality | aiProcess_ConvertToLeftHanded;
+		//uint32_t processFlag = aiProcessPreset_TargetRealtime_Quality;
+
+		uint32_t processFlag =
+			aiProcess_CalcTangentSpace |
+			//aiProcess_GenSmoothNormals |
+			aiProcess_JoinIdenticalVertices |
+			aiProcess_ImproveCacheLocality |
+			aiProcess_LimitBoneWeights |
+			aiProcess_RemoveRedundantMaterials |
+			aiProcess_SplitLargeMeshes | 
+			aiProcess_Triangulate |
+			aiProcess_GenUVCoords |
+			aiProcess_SortByPType |
+			//aiProcess_FindDegenerates;
+			aiProcess_FindInvalidData;
 
 		if (bFlipUV)
 			processFlag |= aiProcess_FlipUVs;
@@ -63,6 +77,9 @@ namespace ToyGE
 				mat->AddTexture(MATERIAL_TEXTURE_SPECULAR, basePath + wPath, 0);
 			}
 
+			/*
+			obj bump -> assimp height
+			*/
 			//Normal
 			for (uint32_t texIndex = 0; texIndex != pAiMat->GetTextureCount(aiTextureType_NORMALS); ++texIndex)
 			{
@@ -70,7 +87,7 @@ namespace ToyGE
 				pAiMat->GetTexture(aiTextureType_NORMALS, texIndex, &path);
 				WString wPath;
 				ConvertStr_AToW(path.C_Str(), wPath);
-				mat->AddTexture(MATERIAL_TEXTURE_NORMAL, basePath + wPath, 0);
+				mat->AddTexture(MATERIAL_TEXTURE_BUMP, basePath + wPath, 0);
 			}
 
 			//Height
@@ -80,7 +97,7 @@ namespace ToyGE
 				pAiMat->GetTexture(aiTextureType_HEIGHT, texIndex, &path);
 				WString wPath;
 				ConvertStr_AToW(path.C_Str(), wPath);
-				mat->AddTexture(MATERIAL_TEXTURE_HEIGHT, basePath + wPath, 0);
+				mat->AddTexture(MATERIAL_TEXTURE_BUMP, basePath + wPath, 0);
 			}
 
 			//Shininess
@@ -291,6 +308,42 @@ namespace ToyGE
 				for (uint32_t index = 0; index != pAiFace.mNumIndices; ++index)
 					mesh->AddIndex(pAiFace.mIndices[index]);
 			}
+
+
+			/*auto normalElemDescIndex = mesh->GetVertexData(0).FindElementDesc("NORMAL");
+			for (int32_t v = 0; v < mesh->GetVertexData(0).numVertices; ++v)
+			{
+				mesh->GetVertexData(0).GetElement<float3>(v, vertexDataDesc.elementsDesc[normalElemDescIndex]) = 0.0f;
+			}
+
+			auto posElemDescIndex = mesh->GetVertexData(0).FindElementDesc("POSITION");
+
+			for (int32_t i = 0; i < mesh->NumIndices(); i += 3)
+			{
+				int32_t i0 = mesh->GetIndex(i);
+				int32_t i1 = mesh->GetIndex(i + 1);
+				int32_t i2 = mesh->GetIndex(i + 2);
+
+				auto & p0 = mesh->GetVertexData(0).GetElement<float3>(i0, vertexDataDesc.elementsDesc[posElemDescIndex]);
+				auto & p1 = mesh->GetVertexData(0).GetElement<float3>(i1, vertexDataDesc.elementsDesc[posElemDescIndex]);
+				auto & p2 = mesh->GetVertexData(0).GetElement<float3>(i2, vertexDataDesc.elementsDesc[posElemDescIndex]);
+
+				auto v0 = p1 - p0;
+				auto v1 = p2 - p0;
+
+				auto normal = normalize(cross(v0, v1));
+
+				mesh->GetVertexData(0).GetElement<float3>(i0, vertexDataDesc.elementsDesc[normalElemDescIndex]) += normal;
+				mesh->GetVertexData(0).GetElement<float3>(i1, vertexDataDesc.elementsDesc[normalElemDescIndex]) += normal;
+				mesh->GetVertexData(0).GetElement<float3>(i2, vertexDataDesc.elementsDesc[normalElemDescIndex]) += normal;
+			}
+
+			for (int32_t v = 0; v < mesh->GetVertexData(0).numVertices; ++v)
+			{
+				auto & normal = mesh->GetVertexData(0).GetElement<float3>(v, vertexDataDesc.elementsDesc[normalElemDescIndex]);
+
+				normal = normalize(normal);
+			}*/
 
 			model->AddMesh(mesh);
 		}

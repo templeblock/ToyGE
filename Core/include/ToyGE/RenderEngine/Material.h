@@ -18,9 +18,9 @@ namespace ToyGE
 		MATERIAL_TEXTURE_SPECULAR = 1UL,
 		MATERIAL_TEXTURE_SHININESS = 2UL,
 		MATERIAL_TEXTURE_ROUGHNESS = 3UL,
-		MATERIAL_TEXTURE_NORMAL = 4UL,
-		MATERIAL_TEXTURE_HEIGHT = 5UL,
-		MATERIAL_TEXTURE_OPACITYMASK = 6UL
+		MATERIAL_TEXTURE_BUMP = 4UL,
+		//MATERIAL_TEXTURE_HEIGHT = 5UL,
+		MATERIAL_TEXTURE_OPACITYMASK = 5UL
 	};
 
 	namespace MaterialTextureTypeNum
@@ -179,6 +179,16 @@ namespace ToyGE
 			return _pomScale;
 		}
 
+		void SetSubSurfaceScattering(bool bSubSurface)
+		{
+			_bSubSurfaceScattering = bSubSurface;
+		}
+
+		bool IsSubSurfaceScattering() const
+		{
+			return _bSubSurfaceScattering;
+		}
+
 		void BindMacros(const Ptr<RenderEffect> & effect);
 
 		void BindParams(const Ptr<RenderEffect> & effect);
@@ -196,6 +206,7 @@ namespace ToyGE
 		bool _bDualFace;
 		bool _bPOM;
 		float _pomScale;
+		bool _bSubSurfaceScattering;
 		Ptr<RenderMaterial> _renderData;
 	};
 

@@ -31,19 +31,19 @@ float3 TexToWorld(float3 T, float3 B, float3 N, float3 vec)
   return v;
 }
     
-float2 ParallaxMapping(float3 normal, float3 tangent, float3 view, float2 tex, Texture2D heightTex, float scale)
+float2 ParallaxMapping(float3 normal, float3 tangent, float3 view, float2 uv, Texture2D tex, uint heightChannel, float scale)
 {
   float3 T, B, N;
   GetTBN(normal, tangent, T, B, N);
   float3 v = WorldToTex(T, B, N, view);
-  float h = heightTex.Sample(samplerLinear, tex.xy).x;
+  float h = tex.Sample(samplerLinear, uv)[heightChannel];
   float s = scale;
   float b = 0.01f;
   float hAdj = h * s + b;
   float limit = 0.07f;
   hAdj = min( limit, hAdj / max(0.0001f, v.z) );
-  float2 texNew = tex + v.xy * hAdj;
-  return texNew;
+  float2 uvNew = uv + v.xy * hAdj;
+  return uvNew;
 }
 
 #define POM_MAXSTEPS 50
@@ -52,8 +52,9 @@ void ParallaxOcclusionMapping(
   float3 normal,
   float3 tangent,
   float3 view,
-  float2 tex,
+  float2 uv,
   Texture2D heightTex,
+  uint heightChannel,
   float scale,
   out float3 posT,
   out float3 vecW)
@@ -73,8 +74,8 @@ void ParallaxOcclusionMapping(
     maxSteps = 0;
   }
   
-  float xBound = v.x > 0.0f ? ceil(tex.x) : floor(tex.x);
-  float yBound = v.y > 0.0f ? ceil(tex.y) : floor(tex.y);
+  float xBound = v.x > 0.0f ? ceil(uv.x) : floor(uv.x);
+  float yBound = v.y > 0.0f ? ceil(uv.y) : floor(uv.y);
   
   if(abs(v.x) < 0.0001f)
     v.x = 0.0001f * sign(v.x);
@@ -90,7 +91,7 @@ void ParallaxOcclusionMapping(
   float dz = maxH / v.z;
   
   float d = dz;
-  float3 begin = float3(tex.xy, 0.0f) + v * d;
+  float3 begin = float3(uv.xy, 0.0f) + v * d;
   
   float3 texSize;
   heightTex.GetDimensions(0, texSize.x, texSize.y, texSize.z);
@@ -105,7 +106,7 @@ void ParallaxOcclusionMapping(
   
   if( d != dz )
   {
-    //float jitter = (((uint)(tex.x * texSize.x) + (uint)(tex.y * texSize.y)) & 1) * 0.5f;
+    //float jitter = (((uint)(uv.x * texSize.x) + (uint)(uv.y * texSize.y)) & 1) * 0.5f;
     //begin += step * jitter;
     begin += step  * 0.5f;
   }
@@ -120,7 +121,7 @@ void ParallaxOcclusionMapping(
     stepIndex < maxSteps;
     ++stepIndex, p += step * stride)
   {
-    float h = heightTex.SampleLevel(samplerLinear, p.xy, 0).x;
+    float h = heightTex.SampleLevel(samplerLinear, p.xy, 0)[heightChannel];
     h = h * scale + bias;
     if( p.z <= h )
     {
@@ -136,7 +137,7 @@ void ParallaxOcclusionMapping(
   {
     float3 mid = p1 + step * stride * 0.5f;
     p = mid;
-    float h = heightTex.SampleLevel(samplerLinear, mid.xy, 0).x;
+    float h = heightTex.SampleLevel(samplerLinear, mid.xy, 0)[heightChannel];
     h = h * scale + bias;
     if( mid.z <= h )
       p0 = mid;
@@ -147,7 +148,7 @@ void ParallaxOcclusionMapping(
   }
   
   posT = p;
-  vecW = TexToWorld(T, B, N, posT - float3(tex, 0));
+  vecW = TexToWorld(T, B, N, posT - float3(uv, 0));
 }
     
     ]]>

@@ -63,6 +63,8 @@ namespace ToyGE
 		int2 _shadowMapSize;
 		Ptr<Texture> _shadowMap;
 		std::map<Ptr<Camera>, Ptr<Texture>> _cameraRelevantShadowMap;
+		Ptr<Texture> _rawShadowMap;
+		std::map<Ptr<Camera>, Ptr<Texture>> _cameraRelevantRawShadowMap;
 	};
 
 
@@ -110,15 +112,15 @@ namespace ToyGE
 	/*
 	Render Technique
 	*/
-	enum ShadowRenderTechniqueType
-	{
-		SHADOW_RENDER_TECHNIQUE_VSM = 0,
-		SHADOW_RENDER_TECHNIQUE_EVSM2 = 1,
-		SHADOW_RENDER_TECHNIQUE_EVSM4 = 2,
-		SHADOW_RENDER_TECHNIQUE_ESM = 3,
-		SHADOW_RENDER_TECHNIQUE_SAVSM = 4,
-		SHADOW_RENDER_TECHNIQUE_PCSS_SAVSM = 5
-	};
+	//enum ShadowRenderTechniqueType
+	//{
+	//	SHADOW_RENDER_TECHNIQUE_VSM = 0,
+	//	SHADOW_RENDER_TECHNIQUE_EVSM2 = 1,
+	//	SHADOW_RENDER_TECHNIQUE_EVSM4 = 2,
+	//	SHADOW_RENDER_TECHNIQUE_ESM = 3,
+	//	SHADOW_RENDER_TECHNIQUE_SAVSM = 4,
+	//	SHADOW_RENDER_TECHNIQUE_PCSS_SAVSM = 5
+	//};
 
 	class ShadowRenderTechnique : public std::enable_shared_from_this<ShadowRenderTechnique>
 	{
@@ -131,7 +133,7 @@ namespace ToyGE
 
 		virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap);
 
-		virtual ShadowRenderTechniqueType Type() const = 0;
+		//virtual ShadowRenderTechniqueType Type() const = 0;
 
 		template <class T>
 		std::shared_ptr<T> As()

@@ -22,10 +22,10 @@ namespace ToyGE
 
 		virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap) override;
 
-		ShadowRenderTechniqueType Type() const override
-		{
-			return SHADOW_RENDER_TECHNIQUE_VSM;
-		}
+		//ShadowRenderTechniqueType Type() const override
+		//{
+		//	return SHADOW_RENDER_TECHNIQUE_VSM;
+		//}
 
 		CLASS_GET(Softness, float, _softness);
 		CLASS_SET(Softness, float, _softness);
@@ -62,10 +62,10 @@ namespace ToyGE
 
 		//virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap) override;
 
-		ShadowRenderTechniqueType Type() const override
-		{
-			return SHADOW_RENDER_TECHNIQUE_EVSM2;
-		}
+		//ShadowRenderTechniqueType Type() const override
+		//{
+		//	return SHADOW_RENDER_TECHNIQUE_EVSM2;
+		//}
 	};
 
 
@@ -81,10 +81,10 @@ namespace ToyGE
 
 		//virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap) override;
 
-		ShadowRenderTechniqueType Type() const override
-		{
-			return SHADOW_RENDER_TECHNIQUE_EVSM4;
-		}
+		//ShadowRenderTechniqueType Type() const override
+		//{
+		//	return SHADOW_RENDER_TECHNIQUE_EVSM4;
+		//}
 	};
 
 
@@ -104,10 +104,10 @@ namespace ToyGE
 
 		virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap) override;
 
-		ShadowRenderTechniqueType Type() const override
-		{
-			return SHADOW_RENDER_TECHNIQUE_SAVSM;
-		}
+		//ShadowRenderTechniqueType Type() const override
+		//{
+		//	return SHADOW_RENDER_TECHNIQUE_SAVSM;
+		//}
 
 		void SetFilterSize(float filterSize)
 		{

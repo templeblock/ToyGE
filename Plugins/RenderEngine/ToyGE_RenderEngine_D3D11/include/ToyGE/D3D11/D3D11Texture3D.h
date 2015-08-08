@@ -16,7 +16,7 @@ namespace ToyGE
 			CreateFromRawD3D(
 			const Ptr<ID3D11Device> & rawDevice, const Ptr<ID3D11Texture3D> & rawTexture3D);
 
-		Ptr<ID3D11Resource> RawD3DTexture() override
+		Ptr<ID3D11Resource> RawD3DTexture() const override
 		{
 			return _rawD3DTexture3D;
 		}

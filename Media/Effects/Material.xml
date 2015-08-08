@@ -16,13 +16,12 @@
   <variable type='Texture2D' name='opacityMaskTex' />
   <variable type='Texture2D' name='baseColorTex' />
   <variable type='Texture2D' name='roughnessTex' />
-  <variable type='Texture2D' name='normalTex' />
-  <variable type='Texture2D' name='heightTex' />
+  <variable type='Texture2D' name='bumpTex' />
   
   <shader>
     <![CDATA[
     
-#if defined(MAT_BASECOLOR_TEX) || defined(MAT_ROUGHNESS_TEX) || defined(MAT_NORMAL_TEX) || defined(MAT_HEIGHT_TEX) || defined(MAT_OPACITYMASK_TEX)
+#if defined(MAT_BASECOLOR_TEX) || defined(MAT_ROUGHNESS_TEX) || defined(MAT_BUMP_TEX) || defined(MAT_OPACITYMASK_TEX)
 #define MAT_UV_COORD
 #endif
     
@@ -49,18 +48,18 @@ float3 GetNormal
     float3 uvCoord,
 #endif
     float3 geometryNormal
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
     , float3 geometryTangent
 #endif
   )
 {
     float3 normal;
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
     float3 N = normalize(geometryNormal);
   	float3 T = normalize(geometryTangent);
 	  float3 B = cross(N, T);
   	float3x3 texToWorld = float3x3(T, B, N);
-  	float3 normalSample = normalTex.Sample(samplerLinear, uvCoord.xy).rgb;
+  	float3 normalSample = bumpTex.Sample(samplerLinear, uvCoord.xy).rgb;
 	  normalSample = normalSample * 2.0f - 1.0f;
 	  normalSample = normalize(normalSample);
 	  normal = mul(normalSample, texToWorld);
@@ -77,7 +76,7 @@ Material GetMeterial
     float3 uvCoord,
 #endif
     float3 geometryNormal
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
     , float3 geometryTangent
 #endif
   )
@@ -103,7 +102,7 @@ Material GetMeterial
       uvCoord,
     #endif
       geometryNormal
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
       , geometryTangent
     #endif
     );

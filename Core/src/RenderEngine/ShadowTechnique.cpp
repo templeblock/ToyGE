@@ -37,9 +37,12 @@ namespace ToyGE
 			}
 			else
 			{
-				auto & sm = _cameraRelevantShadowMap[sharedEnv->GetView()->GetCamera()];
+				/*auto & sm = _cameraRelevantShadowMap[sharedEnv->GetView()->GetCamera()];
 				if (sm)
-					sm->Release();
+					sm->Release();*/
+				for (auto & sm : _cameraRelevantShadowMap)
+					sm.second->Release();
+				_cameraRelevantShadowMap.clear();
 			}
 
 			//Get Shadow Map Texture
@@ -73,16 +76,18 @@ namespace ToyGE
 			_depthTechnique->RenderDepth(shadowMap, light, sharedEnv);
 
 			//Process
-			shadowMap = _renderTechnique->ProcessShadowTex(shadowMap, light);
+			auto processedSM = _renderTechnique->ProcessShadowTex(shadowMap, light);
 
 			//Cache
 			if (!IsRelevantWithCamera())
 			{
-				_shadowMap = shadowMap;
+				_shadowMap = processedSM;
+				_rawShadowMap = shadowMap;
 			}
 			else
 			{
-				_cameraRelevantShadowMap[sharedEnv->GetView()->GetCamera()] = shadowMap;
+				_cameraRelevantShadowMap[sharedEnv->GetView()->GetCamera()] = processedSM;
+				_cameraRelevantRawShadowMap[sharedEnv->GetView()->GetCamera()] = shadowMap;
 			}
 		}
 	}
@@ -107,16 +112,34 @@ namespace ToyGE
 	{
 		_depthTechnique->BindParams(fx, light);
 
-		Ptr<Texture> sm;
+		Ptr<Texture> processedSM;
+		Ptr<Texture> rawSM;
 		if (!IsRelevantWithCamera())
 		{
-			sm = _shadowMap;
+			processedSM = _shadowMap;
+			rawSM = _rawShadowMap;
 		}
 		else
 		{
-			sm = _cameraRelevantShadowMap[camera];
+			processedSM = _cameraRelevantShadowMap[camera];
+			rawSM = _cameraRelevantRawShadowMap[camera];
 		}
-		_renderTechnique->BindParams(fx, light, sm);
+
+		auto & texDesc = processedSM->Desc();
+		if (TEXTURE_2D == texDesc.type)
+		{
+			fx->VariableByName("shadowTexArray")->AsShaderResource()->SetValue(processedSM->CreateTextureView(0, 1, 0, texDesc.arraySize));
+			fx->VariableByName("rawShadowTexArray")->AsShaderResource()->SetValue(rawSM->CreateTextureView(0, 1, 0, texDesc.arraySize));
+		}
+		else if (TEXTURE_CUBE == texDesc.type)
+		{
+			fx->VariableByName("shadowTexCubeArray")->AsShaderResource()->SetValue(processedSM->CreateTextureView_Cube(0, 1, 0, texDesc.arraySize));
+			fx->VariableByName("rawShadowTexCubeArray")->AsShaderResource()->SetValue(rawSM->CreateTextureView_Cube(0, 1, 0, texDesc.arraySize));
+			fx->VariableByName("shadowTexArray")->AsShaderResource()->SetValue(processedSM->CreateTextureView(0, 1, 0, texDesc.arraySize * 6));
+			fx->VariableByName("rawShadowTexArray")->AsShaderResource()->SetValue(rawSM->CreateTextureView(0, 1, 0, texDesc.arraySize * 6));
+		}
+
+		_renderTechnique->BindParams(fx, light, processedSM);
 	}
 
 

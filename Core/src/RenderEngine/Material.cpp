@@ -51,7 +51,8 @@ namespace ToyGE
 		_refractionIndex(1.0f),
 		_bDualFace(false),
 		_bPOM(false),
-		_pomScale(0.05f)
+		_pomScale(0.05f),
+		_bSubSurfaceScattering(false)
 	{
 
 	}
@@ -107,16 +108,16 @@ namespace ToyGE
 			MATERIAL_TEXTURE_OPACITYMASK,
 			MATERIAL_TEXTURE_BASECOLOR,
 			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_NORMAL,
-			MATERIAL_TEXTURE_HEIGHT
+			MATERIAL_TEXTURE_BUMP
 		};
 		static const std::vector<String> matTexMacroList =
 		{
 			"MAT_OPACITYMASK_TEX",
 			"MAT_BASECOLOR_TEX",
 			"MAT_ROUGHNESS_TEX",
-			"MAT_NORMAL_TEX",
-			"MAT_HEIGHT_TEX"
+			/*"MAT_NORMAL_TEX",
+			"MAT_HEIGHT_TEX"*/
+			"MAT_BUMP_TEX"
 		};
 
 		for (size_t i = 0; i < matTexTypeList.size(); ++i)
@@ -139,16 +140,14 @@ namespace ToyGE
 			MATERIAL_TEXTURE_OPACITYMASK,
 			MATERIAL_TEXTURE_BASECOLOR,
 			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_NORMAL,
-			MATERIAL_TEXTURE_HEIGHT
+			MATERIAL_TEXTURE_BUMP
 		};
 		static const std::vector<String> matTexVarNameList =
 		{
 			"opacityMaskTex",
 			"baseColorTex",
 			"roughnessTex",
-			"normalTex",
-			"heightTex"
+			"bumpTex"
 		};
 
 		for (size_t i = 0; i < matTexTypeList.size(); ++i)
@@ -175,19 +174,28 @@ namespace ToyGE
 			for (auto & tex : itr->second)
 			{
 				auto renderTex = textureManager->AcquireResource(tex.filePath);
+
+				if (renderTex->Desc().mipLevels == 1)
+				{
+					renderTex = renderTex->CreateMips();
+					textureManager->SetResource(renderTex, tex.filePath);
+				}
+
 				if (renderTex)
+				{
 					_textures[itr->first].push_back(renderTex);
+				}
 			}
 		}
 
-		if (material->NumTextures(MATERIAL_TEXTURE_HEIGHT) > 0 && material->NumTextures(MATERIAL_TEXTURE_NORMAL) == 0)
+		/*if (material->NumTextures(MATERIAL_TEXTURE_HEIGHT) > 0 && material->NumTextures(MATERIAL_TEXTURE_NORMAL) == 0)
 		{
 			for (auto & tex : _textures[MATERIAL_TEXTURE_HEIGHT])
 			{
 				auto normal = HeightToNormal(tex);
 				_textures[MATERIAL_TEXTURE_NORMAL].push_back(normal);
 			}
-		}
+		}*/
 
 		if (material->NumTextures(MATERIAL_TEXTURE_SPECULAR) > 0 && material->NumTextures(MATERIAL_TEXTURE_ROUGHNESS) == 0)
 		{

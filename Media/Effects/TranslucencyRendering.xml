@@ -32,7 +32,7 @@ struct TranslucencyVSIn
 
 	  float3 normal : NORMAL;
     
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
 	  float3 tangent : TANGENT;
 #endif
 };
@@ -49,7 +49,7 @@ struct TranslucencyVSOut
 
     float3 normalW : NORMAL;
   
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
 	  float3 tangentW : TANGENT;
 #endif
 };
@@ -76,7 +76,7 @@ float3 ComputeLigting(Material mat, TranslucencyVSOut vsOut)
 {
   float3 normal = mat.normal;
 
-  float shadow = ComputeShadow(vsOut.posW, vsOut.posV.z);
+  float shadow = ComputeShadow(vsOut.posW, vsOut.posV.z, vsOut.posH.xy, normal);
 
   float3 n = normal;
   float3 l = -GetLightDir(vsOut.posW);
@@ -135,7 +135,7 @@ void OITSceneRenderingPS(TranslucencyVSOut vsOut)
         vsOut.tex,
     #endif
         vsOut.normalW
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );
@@ -203,7 +203,7 @@ float4 RefractionBackFacePS(TranslucencyVSOut vsOut) : SV_TARGET
     vsOut.tex,
   #endif
     vsOut.normalW
-  #ifdef MAT_NORMAL_TEX
+  #ifdef MAT_BUMP_TEX
     , vsOut.tangent
   #endif
   );
@@ -357,7 +357,7 @@ float4 RefractionPS(TranslucencyVSOut vsOut) : SV_TARGET
         vsOut.tex,
     #endif
         vsOut.normalW
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );
@@ -399,7 +399,7 @@ float4 LightingPS(TranslucencyVSOut vsOut) : SV_TARGET
         vsOut.tex,
     #endif
         vsOut.normalW
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );
@@ -422,7 +422,7 @@ float4 LightingEmbientPS(TranslucencyVSOut vsOut) : SV_TARGET
         vsOut.tex,
     #endif
         vsOut.normalW
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );

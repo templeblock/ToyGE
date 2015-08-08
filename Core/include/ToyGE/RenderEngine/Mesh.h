@@ -56,7 +56,7 @@ namespace ToyGE
 		}
 
 		template <typename T>
-		const T & GetElement(int32_t vertexIndex, const VertexElementDesc & elemDesc) const
+		T & GetElement(int32_t vertexIndex, const VertexElementDesc & elemDesc)
 		{
 			return *(reinterpret_cast<T*>(pData.get() + vertexIndex * vertexByteSize + elemDesc.bytesOffset));
 		}
@@ -131,7 +131,7 @@ namespace ToyGE
 			return static_cast<int32_t>(_vertexDatas.size());
 		}
 
-		const VertexDataDesc & GetVertexData(int32_t slotIndex)
+		VertexDataDesc & GetVertexData(int32_t slotIndex)
 		{
 			return _vertexDatas[slotIndex];
 		}

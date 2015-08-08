@@ -42,7 +42,7 @@ float4 HeightToNormalPS(VS_OUT vsOut) : SV_TARGET
 	float h = height_tex.SampleLevel(samLinear, vsOut.pos.xy / imageSize.xy, 0.0f).r;
   float hx = height_tex.SampleLevel(samLinear, (vsOut.pos.xy + float2(1.0f, 0.0f)) / imageSize.xy, 0.0f).r;
   float hy = height_tex.SampleLevel(samLinear, (vsOut.pos.xy + float2(0.0f, 1.0f)) / imageSize.xy, 0.0f).r;
-	float scale = 4.0f;
+	float scale = 40.0f;
   float dxh = (hx - h) * scale;
 	float dyh = (hy - h) * scale;
 	float3 s = float3(1.0f, 0.0f, dxh);

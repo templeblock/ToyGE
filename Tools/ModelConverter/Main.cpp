@@ -45,7 +45,7 @@ void ProcessCmd(int nArgs, const char ** args)
 	}
 	else
 	{
-		dst = src.substr(0, src.find_first_of('.')) + ".tx";
+		dst = src.substr(0, src.rfind('.')) + ".tx";
 	}
 
 
@@ -75,11 +75,6 @@ void ProcessCmd(int nArgs, const char ** args)
 
 		if (model)
 		{
-			if (dst.size() == 0)
-			{
-				dst = src.substr(0, src.find_first_of('.')) + ".tx";
-			}
-
 			ConvertStr_AToW(dst, path);
 
 			auto saveFile = std::make_shared<ToyGE::File>(path, ToyGE::FILE_OPEN_WRITE);

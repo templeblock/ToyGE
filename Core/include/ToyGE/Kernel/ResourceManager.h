@@ -109,9 +109,10 @@ namespace ToyGE
 		}
 
 	private:
-		template <typename FindKey0, typename... FindKey>
+		template <typename MapType, typename FindKey0, typename... FindKey>
 		ResType & _Find(
-			typename ResourceMap<ResType, FindKey0, FindKey...>::MapType & findMap,
+			//typename ResourceMap<ResType, FindKey0, FindKey...>::MapType & findMap,
+			MapType & findMap,
 			const FindKey0 & key0,
 			const FindKey &... key)
 		{
@@ -127,9 +128,10 @@ namespace ToyGE
 			return findMap[key0];
 		}
 
-		template <typename FindKey0, typename... FindKey>
+		template <typename MapType, typename FindKey0, typename... FindKey>
 		bool _Exists(
-			const typename ResourceMap<ResType, FindKey0, FindKey...>::MapType & findMap,
+			//const typename ResourceMap<ResType, FindKey0, FindKey...>::MapType & findMap,
+			const MapType & findMap,
 			const FindKey0 & key0,
 			const FindKey &... key) const
 		{

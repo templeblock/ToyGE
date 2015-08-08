@@ -70,14 +70,17 @@ namespace ToyGE
 
 		//Set window identifier
 		::SetWindowLongPtrW(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
-
-		ShowWindow(_hwnd, SW_SHOWNORMAL);
-		UpdateWindow(_hwnd);
 	}
 
 	void WindowsWindow::SetTitle(const WString & tile)
 	{
-		SetWindowTextW(WindowHandle(), tile.c_str());
+		::SetWindowTextW(WindowHandle(), tile.c_str());
+	}
+
+	void WindowsWindow::Show()
+	{
+		::ShowWindow(_hwnd, SW_SHOWNORMAL);
+		::UpdateWindow(_hwnd);
 	}
 
 	LRESULT CALLBACK WindowsWindow::MsgProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)

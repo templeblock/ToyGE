@@ -24,7 +24,7 @@ namespace ToyGE
 
 	bool D3D11Texture::CopyTo(const Ptr<Texture> & dst,
 		int32_t dstMipLevel, int32_t dstArrayIndex, int32_t xOffset, int32_t yOffset, int32_t zOffset,
-		int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox)
+		int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox) const
 	{
 		if (dst->Desc().format != _desc.format || dst->Desc().type != _desc.type)
 			return false;

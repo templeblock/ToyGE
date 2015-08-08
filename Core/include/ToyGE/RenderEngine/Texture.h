@@ -6,9 +6,12 @@
 #include "ToyGE\RenderEngine\RenderResource.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
 #include "ToyGE\Kernel\Assert.h"
+#include "ToyGE\Math\Math.h"
 
 namespace ToyGE
 {
+	class Image;
+
 	class TOYGE_CORE_API Texture : public RenderResource
 	{
 		friend class RenderFactory;
@@ -23,7 +26,7 @@ namespace ToyGE
 
 		virtual bool CopyTo(const Ptr<Texture> & dst,
 			int32_t dstMipLevel, int32_t dstArrayIndex, int32_t xOffset, int32_t yOffset, int32_t zOffset,
-			int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox = std::shared_ptr<Box>()) = 0;
+			int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox = std::shared_ptr<Box>()) const = 0;
 
 		virtual RenderDataDesc Map(MapType mapFlag, int32_t mipLevel, int32_t arrayIndex) = 0;
 
@@ -53,6 +56,17 @@ namespace ToyGE
 			int32_t heigth,
 			int32_t depth,
 			std::vector<std::tuple<int32_t, int32_t, int32_t>> & outMipSizes);
+
+		Ptr<Image> CreateImage(bool bWithMipMap) const;
+
+		float4 GetTexSize() const
+		{
+			float w = static_cast<float>(Desc().width);
+			float h = static_cast<float>(Desc().height);
+			return float4(w, h, 1.0f / w, 1.0f / h);
+		}
+
+		Ptr<Texture> CreateMips() const;
 
 	protected:
 		TextureDesc _desc;

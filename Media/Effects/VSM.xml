@@ -40,6 +40,18 @@ float CalcShadow_VSM(TextureCubeArray tex, uint arrayIndex, float3 dir, float re
   return CalcShadow_VSM(moments, reciever);
 }
 
+float GetShadowDepth_VSM(Texture2DArray tex, uint arrayIndex, float2 uv)
+{
+    float2 moments = tex.SampleLevel(samplerLinearClamp, float3(uv, arrayIndex), 0).xy;
+    return moments.x;
+}
+
+float GetShadowDepth_VSM(TextureCubeArray tex, uint arrayIndex, float3 dir)
+{
+    float2 moments = tex.SampleLevel(samplerLinearClamp, float4(dir, arrayIndex), 0).xy;
+    return moments.x;
+}
+
 /*
 EVSM
 */
@@ -76,6 +88,18 @@ float CalcShadow_EVSM2(TextureCubeArray tex, uint arrayIndex, float3 dir, float 
   return CalcShadow_EVSM2(moments, reciever);
 }
 
+float GetShadowDepth_EVSM2(Texture2DArray tex, uint arrayIndex, float2 uv)
+{
+  float2 moments = tex.SampleLevel(samplerLinearClamp, float3(uv, arrayIndex), 0).xy;
+  return log(moments.x) / EVSM_POS_EXPONENT;
+}
+
+float GetShadowDepth_EVSM2(TextureCubeArray tex, uint arrayIndex, float3 dir)
+{
+  float2 moments = tex.SampleLevel(samplerLinearClamp, float4(dir, arrayIndex), 0).xy;
+  return log(moments.x) / EVSM_POS_EXPONENT;
+}
+
 
 float CalcShadow_EVSM4(float4 moments, float reciever)
 {
@@ -103,6 +127,17 @@ float CalcShadow_EVSM4(TextureCubeArray tex, uint arrayIndex, float3 dir, float 
   return CalcShadow_EVSM4(moments, reciever);
 }
 
+float GetShadowDepth_EVSM4(Texture2DArray tex, uint arrayIndex, float2 uv)
+{
+  float4 moments = tex.SampleLevel(samplerLinearClamp, float3(uv, arrayIndex), 0);
+  return log(moments.x) / EVSM_POS_EXPONENT;
+}
+
+float GetShadowDepth_EVSM4(TextureCubeArray tex, uint arrayIndex, float3 dir)
+{
+  float4 moments = tex.SampleLevel(samplerLinearClamp, float4(dir, arrayIndex), 0);
+  return log(moments.x) / EVSM_POS_EXPONENT;
+}
 
 /*
 SAVSM

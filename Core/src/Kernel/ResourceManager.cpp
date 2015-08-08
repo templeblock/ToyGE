@@ -37,10 +37,10 @@ namespace ToyGE
 		Ptr<Image> img = Image::Load(std::make_shared<File>(path, FILE_OPEN_READ));
 		Ptr<Texture> texture;
 		auto factory = Global::GetRenderEngine()->GetRenderFactory();
-		if (img->IsDDS())
+		//if (img->GetMipLevels() > 1)
 			texture = factory->CreateTexture(img);
-		else
-			texture = factory->CreateTextureAutoGenMips(img);
+		//else
+			//texture = factory->CreateTextureAutoGenMips(img);
 		return texture;
 	}
 

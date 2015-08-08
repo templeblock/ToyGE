@@ -7,6 +7,7 @@
   <include name="ESM.xml"/>
   <include name="PCSS.xml"/>
   <include name="CSMConfig.xml"/>
+  <include name="PCF.xml"/>
 
   <variable type='cbuffer' name='cb_shadow'>
     <!--shadowConfig [bHasShadow, shadowTechnique, , ]-->
@@ -15,6 +16,8 @@
 
   <variable type='TextureCubeArray' name='shadowTexCubeArray'/>
   <variable type='Texture2DArray' name='shadowTexArray'/>
+  <variable type='TextureCubeArray' name='rawShadowTexCubeArray'/>
+  <variable type='Texture2DArray' name='rawShadowTexArray'/>
   
   <variable type='cbuffer' name='cb_shadow_point'>
     <variable type='float4' name='pointMaxDist'/>
@@ -44,6 +47,7 @@
 #define SHADOW_TYPE_ESM         3
 #define SHADOW_TYPE_SAVSM       4
 #define SHADOW_TYPE_PCSS_SAVSM  5
+#define SHADOW_TYPE_PCF         6
 
 
 int PSSMFindSplitIndex(float z)
@@ -79,7 +83,7 @@ uint PSSMFindSplitIndex(float3 posW)
   return index;
 }
 
-float ComputeShadow_PointLight(float3 posW, float3 lightPos)
+float ComputeShadow_PointLight(float3 posW, float3 lightPos, float2 screenPos, float3 normal)
 {
     float shadow = 1.0f;
     float3 dir = posW.xyz - lightPos.xyz;
@@ -88,7 +92,7 @@ float ComputeShadow_PointLight(float3 posW, float3 lightPos)
   
     float reciever = max(max(absDir.x, absDir.y), absDir.z) / pointMaxDist.x;
     dir /= len;
-    
+
 #if SHADOW_TYPE == SHADOW_TYPE_VSM
 
     shadow = CalcShadow_VSM(shadowTexCubeArray, 0, dir, reciever);
@@ -115,9 +119,49 @@ float ComputeShadow_PointLight(float3 posW, float3 lightPos)
     float penumbraSize = GetPenumbraSize(reciever, dBlocker, 5.0f);
     shadow = CalcShadow_SAVSM_FP(shadowTexCubeArray, 0, dir, reciever, penumbraSize * 2.0f + 2.0f);
       
+#elif SHADOW_TYPE == SHADOW_TYPE_PCF
+    
+    shadow = ComputeShadow_PCF(shadowTexCubeArray, 0, posW.xyz - lightPos.xyz, pointMaxDist.x, screenPos, normal);
+    //shadow += ComputeShadow_PCF(shadowTexCubeArray, 0, posW.xyz - lightPos.xyz, pointMaxDist.x, screenPos * 1.5);
+    
+    //shadow *= 0.5;
+      
 #endif
 
     return shadow;
+}
+
+float GetShadowDepth_PointLight(float3 posW, float3 lightPos, out float recieverDepth)
+{
+    float depth = 0.0f;
+    
+    float3 dir = posW.xyz - lightPos.xyz;
+    
+    float3 absDir = abs(dir);
+    recieverDepth = max(max(absDir.x, absDir.y), absDir.z);
+    
+    float len = length(dir); 
+    dir /= len;
+
+/*
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+
+    depth = GetShadowDepth_VSM(shadowTexCubeArray, 0, dir);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+
+    depth = GetShadowDepth_EVSM2(shadowTexCubeArray, 0, dir);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+
+    depth = GetShadowDepth_EVSM4(shadowTexCubeArray, 0, dir);
+    
+#endif
+*/
+    depth = rawShadowTexCubeArray.SampleLevel(samplerLinear, float4(dir, 0.0f), 0).x;
+    depth = depth * pointMaxDist.x;
+    
+    return depth;
 }
 
 float ComputeShadow_SpotLight(float3 posW, float3 lightPos)
@@ -161,6 +205,40 @@ float ComputeShadow_SpotLight(float3 posW, float3 lightPos)
 
     return shadow;
 }
+
+float GetShadowDepth_SpotLight(float3 posW, float3 lightPos, out float recieverDepth)
+{
+    float depth = 0.0f;
+    
+    float4 posLV = mul(float4(posW, 1.0f), spotView);
+    float4 posLH = mul(posLV, spotProj);
+    posLH /= posLH.w;
+    
+    float2 shadowUV = float2(posLH.x * 0.5f + 0.5f, posLH.y * -0.5f + 0.5f);
+    
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+
+    depth = GetShadowDepth_VSM(shadowTexArray, 0, shadowUV);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+
+    depth = GetShadowDepth_EVSM2(shadowTexArray, 0, shadowUV);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+
+    depth = GetShadowDepth_EVSM4(shadowTexArray, 0, shadowUV);
+    
+#endif
+
+    //depth = depth * (spotNearFar.y - spotNearFar.x) + spotNearFar.x;
+    depth = PespectiveZToDepth(depth, spotNearFar.x, spotNearFar.y);
+    
+    recieverDepth = posLV.z;
+    
+    return depth;
+}
+
+
 
 float ComputeShadow_DirectionalLight(float3 posW, float viewDepth)
 {
@@ -209,6 +287,44 @@ float ComputeShadow_DirectionalLight(float3 posW, float viewDepth)
     }
   
     return shadow;
+}
+
+float GetShadowDepth_DirectionalLight(float3 posW, float viewDepth, out float recieverDepth)
+{
+    float depth = 0.0f;
+    recieverDepth = 0.0f;
+    
+    int splitIndex = PSSMFindSplitIndex(viewDepth);
+  
+    //uint splitIndex = PSSMFindSplitIndex(posW);
+  
+    if(splitIndex != -1)
+    {
+  
+        float4x4 viewCrop = pssmViewCrop[splitIndex];
+        float4 posLH = mul(float4(posW, 1.0f), viewCrop);
+        posLH /= posLH.w;
+        float2 shadowUV = float2(posLH.x * 0.5f + 0.5f, posLH.y * -0.5f + 0.5f);
+    
+#if SHADOW_TYPE == SHADOW_TYPE_VSM
+
+        depth = GetShadowDepth_VSM(shadowTexArray, splitIndex, shadowUV);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM2
+
+        depth = GetShadowDepth_EVSM2(shadowTexArray, splitIndex, shadowUV);
+    
+#elif SHADOW_TYPE == SHADOW_TYPE_EVSM4
+
+        depth = GetShadowDepth_EVSM4(shadowTexArray, splitIndex, shadowUV);
+    
+#endif
+        depth = depth * pssmLightMaxDist[splitIndex].x;
+        
+        recieverDepth = posLH.z * pssmLightMaxDist[splitIndex].x;
+    }
+    
+    return depth;
 }
 
 

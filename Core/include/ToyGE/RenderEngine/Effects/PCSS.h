@@ -16,10 +16,10 @@ namespace ToyGE
 
 		virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap) override;
 
-		ShadowRenderTechniqueType Type() const override
-		{
-			return SHADOW_RENDER_TECHNIQUE_PCSS_SAVSM;
-		}
+		//ShadowRenderTechniqueType Type() const override
+		//{
+		//	return SHADOW_RENDER_TECHNIQUE_PCSS_SAVSM;
+		//}
 
 	private:
 		const int32_t _pcssLookupTableSize;

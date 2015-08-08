@@ -85,12 +85,12 @@ float InterleavedGradientNoise(float2 v, float scale)
   return -scale + 2.0 * scale * frac( magic.z * frac(dot(v, magic.xy)) );
 }
  
-float3 LinearDepthToViewPos(float depth, float2 cameraNearFar, float2 posH, float4x4 proj)
+float3 LinearDepthToViewPos(float linearZ, float2 cameraNearFar, float2 posH, float4x4 proj)
 {
   float2 posH_xy = posH;
   float near = cameraNearFar.x;
   float far = cameraNearFar.y;
-  float posV_z = depth * (far - near) + near;
+  float posV_z = linearZ * (far - near) + near;
   float posV_x = posH_xy.x * posV_z / proj[0][0];
   float posV_y = posH_xy.y * posV_z / proj[1][1];
   //float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
@@ -123,6 +123,12 @@ float3 PespectiveDepthToViewPos(float depth, float2 screenPos, float2 screenSize
   return PespectiveDepthToViewPos(depth, posH_xy, proj);
 }
 
+float PespectiveZToDepth(float z, float n, float f)
+{
+    float A = - f / (n - f);
+    float B = - n * A;
+    return B / (z - A);
+}
 
 float2 EncodeNormalSphereMap(float3 normal)
 {

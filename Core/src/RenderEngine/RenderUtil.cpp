@@ -225,6 +225,29 @@ namespace ToyGE
 		return normalTex;
 	}
 
+	Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale)
+	{
+		auto bumpTexDesc = heightTex->Desc();
+		bumpTexDesc.format = RENDER_FORMAT_R8G8B8A8_UNORM;
+		bumpTexDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
+		auto bumpTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(bumpTexDesc);
+
+		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"HeightToBump.xml");
+		
+		fx->VariableByName("texSize")->AsScalar()->SetValue(&bumpTex->GetTexSize());
+		fx->VariableByName("scale")->AsScalar()->SetValue(&scale);
+
+		fx->VariableByName("heightTex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
+
+		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ bumpTex->CreateTextureView() }, 0);
+
+		RenderQuad(fx->TechniqueByName("HeightToBump"));
+
+		bumpTex->GenerateMips();
+
+		return bumpTex;
+	}
+
 	Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex)
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();

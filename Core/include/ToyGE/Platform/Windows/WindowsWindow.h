@@ -21,6 +21,8 @@ namespace ToyGE
 
 		void SetTitle(const WString & tile) override;
 
+		void Show() override;
+
 	private:
 		HWND _hwnd;
 

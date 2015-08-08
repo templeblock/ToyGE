@@ -31,7 +31,7 @@ struct GBufferVSIn
 
 	  float3 normal : NORMAL;
   
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
 	  float3 tangent : TANGENT;
 #endif
 };
@@ -47,7 +47,7 @@ struct GBufferVSOut
 
 	  float3 normal : NORMAL;
   
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
 	  float3 tangent : TANGENT;
 #endif
 
@@ -78,7 +78,7 @@ GBufferVSOut GBufferVS(GBufferVSIn vsIn)
 #endif
 
 	  vsOut.normal = mul(float4(vsIn.normal.xyz, 0.0f), world).xyz;
-#ifdef MAT_NORMAL_TEX
+#ifdef MAT_BUMP_TEX
 	  vsOut.tangent = mul(float4(vsIn.tangent.xyz, 0.0f), world).xyz;
 #endif
 
@@ -119,7 +119,7 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
     float3 view = normalize(viewPos - vsOut.posW);
     float scale = pomScale;
     float3 posT, vecW;
-    ParallaxOcclusionMapping(vsOut.normal, vsOut.tangent, view, vsOut.tex.xy, heightTex, scale, posT, vecW);
+    ParallaxOcclusionMapping(vsOut.normal, vsOut.tangent, view, vsOut.tex.xy, bumpTex, 3, scale, posT, vecW);
     vsOut.tex.xy = posT.xy;
     vsOut.posW += vecW;
 #endif
@@ -135,7 +135,7 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
         vsOut.tex,
     #endif
         vsOut.normal
-    #ifdef MAT_NORMAL_TEX
+    #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );
@@ -171,17 +171,16 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
     ]]>
   </shader>
 
-  <variable type="DepthStencilState" name="gbufferDSS">
+  <variable type="DepthStencilState" name="stencilReplace">
     <state name="stencilEnable" value="true"/>
     <state name="frontFace">
       <state name="stencilPassOp" value="REPLACE"/>
     </state>
-    <state name="stencilRef" value="1"/>
   </variable>
 
   <technique name='GBuffer'>
     <pass>
-      <state value='gbufferDSS'/>
+      <state value='stencilReplace'/>
       <vs entry='GBufferVS'/>
       <ps entry='GBufferPS'/>
     </pass>

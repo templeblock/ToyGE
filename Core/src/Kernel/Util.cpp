@@ -8,10 +8,13 @@ namespace ToyGE
 	void _ConvertStr_AToW_Windows(const String & src, WString & dst)
 	{
 		const int wStrLen = ::MultiByteToWideChar(CP_ACP, 0, src.c_str(), static_cast<int>(src.size()), nullptr, 0);
-		std::vector<wchar_t> tmp(wStrLen);
-		::MultiByteToWideChar(CP_ACP, 0, src.c_str(), static_cast<int>(src.size()), &tmp[0], wStrLen);
 
-		dst.assign(tmp.begin(), tmp.end());
+		if (wStrLen > 0)
+		{
+			std::vector<wchar_t> tmp(wStrLen);
+			::MultiByteToWideChar(CP_ACP, 0, src.c_str(), static_cast<int>(src.size()), &tmp[0], wStrLen);
+			dst.assign(tmp.begin(), tmp.end());
+		}
 	}
 #endif
 

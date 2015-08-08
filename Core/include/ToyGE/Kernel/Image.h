@@ -12,15 +12,33 @@ namespace ToyGE
 
 	class TOYGE_CORE_API Image
 	{
-		friend bool TOYGE_CORE_API LoadDDSImage(const Ptr<File> & file, const Ptr<Image> & image);
-		friend bool TOYGE_CORE_API LoadCommonImage(const Ptr<File> & file, const Ptr<Image> & image);
-
 	public:
 		static Ptr<Image> Load(const Ptr<File> & file);
 
 		Image();
 
-		TextureType Type() const
+		CLASS_SET(Type, TextureType, _type);
+		CLASS_GET(Type, TextureType, _type);
+
+		CLASS_SET(Format, RenderFormat, _format);
+		CLASS_GET(Format, RenderFormat, _format);
+
+		CLASS_SET(Width, int32_t, _width);
+		CLASS_GET(Width, int32_t, _width);
+
+		CLASS_SET(Height, int32_t, _height);
+		CLASS_GET(Height, int32_t, _height);
+
+		CLASS_SET(Depth, int32_t, _depth);
+		CLASS_GET(Depth, int32_t, _depth);
+
+		CLASS_SET(ArraySize, int32_t, _arraySize);
+		CLASS_GET(ArraySize, int32_t, _arraySize);
+
+		CLASS_SET(MipLevels, int32_t, _mipLevels);
+		CLASS_GET(MipLevels, int32_t, _mipLevels);
+
+		/*TextureType Type() const
 		{
 			return _type;
 		}
@@ -53,16 +71,26 @@ namespace ToyGE
 		RenderFormat Format() const
 		{
 			return _format;
+		}*/
+
+		std::vector<RenderDataDesc> & DataDescs()
+		{
+			return _dataDescs;
 		}
 
-		const std::vector<RenderDataDesc> & Data() const
+		const std::vector<RenderDataDesc> & DataDescs() const
+		{
+			return _dataDescs;
+		}
+
+		std::shared_ptr<uint8_t> & Data()
 		{
 			return _data;
 		}
 
-		bool IsDDS() const
+		const std::shared_ptr<uint8_t> & Data() const
 		{
-			return _isDDS;
+			return _data;
 		}
 
 	private:
@@ -73,10 +101,8 @@ namespace ToyGE
 		int32_t _arraySize;
 		int32_t _mipLevels;
 		RenderFormat _format;
-		std::vector<RenderDataDesc> _data;
-		bool _isDDS = false;
-
-		std::shared_ptr<uint8_t> _rawImageData;
+		std::vector<RenderDataDesc> _dataDescs;
+		std::shared_ptr<uint8_t> _data;
 	};
 }
 

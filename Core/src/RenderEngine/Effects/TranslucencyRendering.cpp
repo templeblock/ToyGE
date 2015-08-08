@@ -623,19 +623,29 @@ namespace ToyGE
 					_causticsFX->VariableByName("world")->AsScalar()->SetValue(&obj->GetTransformMatrix());
 					rc->SetRenderInput(obj->GetMesh()->AcquireRender()->GetRenderInput());
 
-					if (obj->GetMaterial()->IsPOM() && obj->GetMaterial()->NumTextures(MATERIAL_TEXTURE_HEIGHT) > 0)
+					if (obj->GetMaterial()->IsPOM() && obj->GetMaterial()->NumTextures(MATERIAL_TEXTURE_BUMP) > 0)
 					{
+						_causticsFX->AddExtraMacro("POM_OFFSET", "");
+						_causticsFX->AddExtraMacro("HEIGHT_CHANNEL", "3");
+						_causticsFX->UpdateData();
+
 						float scale = obj->GetMaterial()->GetPOMScale();
-						//_causticsFX->VariableByName("pomScale")->AsScalar()->SetValue(&scale, sizeof(scale));
-						auto heightTex = obj->GetMaterial()->AcquireRender()->GetTexture(MATERIAL_TEXTURE_HEIGHT, 0);
+						_causticsFX->VariableByName("pomScale")->AsScalar()->SetValue(&scale);
+						_causticsFX->VariableByName("viewPos")->AsScalar()->SetValue(&pointLight->GetPos());
+
+						auto heightTex = obj->GetMaterial()->AcquireRender()->GetTexture(MATERIAL_TEXTURE_BUMP, 0);
 						_causticsFX->VariableByName("heightTex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
-						//_causticsFX->VariableByName("viewPos")->AsScalar()->SetValue(&pointLight->GetPos(), sizeof(float3));
+
 						_causticsFX->TechniqueByName("RecieverPosPOM")->PassByIndex(0)->Bind();
 						rc->DrawIndexed();
 						_causticsFX->TechniqueByName("RecieverPosPOM")->PassByIndex(0)->UnBind();
 					}
 					else
 					{
+						_causticsFX->RemoveExtraMacro("POM_OFFSET");
+						_causticsFX->RemoveExtraMacro("HEIGHT_CHANNEL");
+						_causticsFX->UpdateData();
+
 						_causticsFX->TechniqueByName("RecieverPos")->PassByIndex(0)->Bind();
 						rc->DrawIndexed();
 						_causticsFX->TechniqueByName("RecieverPos")->PassByIndex(0)->UnBind();

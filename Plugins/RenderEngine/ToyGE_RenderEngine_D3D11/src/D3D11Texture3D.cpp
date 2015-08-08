@@ -3,6 +3,7 @@
 #include "ToyGE\D3D11\D3D11Util.h"
 #include "ToyGE\Kernel\Global.h"
 #include "ToyGE\D3D11\D3D11RenderEngine.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
 
 namespace ToyGE
 {
@@ -134,6 +135,14 @@ namespace ToyGE
 		texture3D_Desc.Height = _desc.height;
 		texture3D_Desc.Depth = _desc.depth;
 		texture3D_Desc.MipLevels = _desc.mipLevels;
+
+		if (IsCompress(_desc.format))
+		{
+			if (texture3D_Desc.Width > 1)
+				texture3D_Desc.Width = (texture3D_Desc.Width + 3) / 4 * 4;
+			if (texture3D_Desc.Height > 1)
+				texture3D_Desc.Height = (texture3D_Desc.Height + 3) / 4 * 4;
+		}
 
 		ExtractD3DBindFlags(hasInitData, texture3D_Desc.BindFlags, texture3D_Desc.CPUAccessFlags, texture3D_Desc.Usage, texture3D_Desc.MiscFlags);
 	}

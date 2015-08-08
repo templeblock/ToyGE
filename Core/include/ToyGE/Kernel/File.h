@@ -50,6 +50,8 @@ namespace ToyGE
 
 		~File();
 
+		void Release();
+
 		size_t Size() const;
 
 		size_t Pos() const;

@@ -113,8 +113,15 @@ namespace ToyGE
 
 	File::~File()
 	{
+		if(_fs)
+			Release();
+	}
+
+	void File::Release()
+	{
 		_fs->close();
 		delete _fs;
+		_fs = nullptr;
 	}
 
 	size_t File::Size() const

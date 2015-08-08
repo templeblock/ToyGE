@@ -84,7 +84,11 @@ namespace ToyGE
 			return _rasterizerState;
 		}
 
+		CLASS_SET(StencilRef, uint32_t, _stencilRef);
+		CLASS_GET(StencilRef, uint32_t, _stencilRef);
+
 		void Bind();
+
 		void UnBind();
 
 	private:

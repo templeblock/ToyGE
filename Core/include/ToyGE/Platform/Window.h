@@ -26,6 +26,7 @@ namespace ToyGE
 		typedef void(RawInputEventType)(const Ptr<Window> &, long long);
 
 		Window(const WindowCreateParams & params);
+
 		virtual ~Window() = default;
 
 		virtual void Init() = 0;
@@ -76,6 +77,8 @@ namespace ToyGE
 		virtual HWINDOW WindowHandle() const = 0;
 
 		virtual void SetTitle(const WString & tile) = 0;
+
+		virtual void Show() = 0;
 
 	protected:
 		WString _name;

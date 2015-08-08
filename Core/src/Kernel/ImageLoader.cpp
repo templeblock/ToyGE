@@ -1,4 +1,4 @@
-#include "ToyGE\Kernel\ImageLoader.h"
+#include "ToyGE\Kernel\ImageHelper.h"
 #include "FreeImage.h"
 #include "ToyGE\Kernel\File.h"
 #include "ToyGE\Kernel\Image.h"
@@ -48,7 +48,7 @@ namespace ToyGE
 						pBytes += 1;
 					}
 				}
-				image->_format = RENDER_FORMAT_R8_UNORM;
+				image->SetFormat(RENDER_FORMAT_R8_UNORM);
 			}
 			else
 			{
@@ -67,22 +67,22 @@ namespace ToyGE
 						pBytes += bpp / 8;
 					}
 				}
-				image->_format = RENDER_FORMAT_R8G8B8A8_UNORM;
+				image->SetFormat(RENDER_FORMAT_R8G8B8A8_UNORM);
 			}
 
-			image->_width = static_cast<int32_t>(imgInfo->bmiHeader.biWidth);
-			image->_height = static_cast<int32_t>(imgInfo->bmiHeader.biHeight);
-			image->_depth = static_cast<int32_t>(imgInfo->bmiHeader.biPlanes);
-			image->_type = TEXTURE_2D;
+			image->SetWidth(static_cast<int32_t>(imgInfo->bmiHeader.biWidth));
+			image->SetHeight(static_cast<int32_t>(imgInfo->bmiHeader.biHeight));
+			image->SetDepth(static_cast<int32_t>(imgInfo->bmiHeader.biPlanes));
+			image->SetType(TEXTURE_2D);
 
 			RenderDataDesc renderData;
 			renderData.pData = &buffer[0];
-			renderData.rowPitch = image->_width * bufferBytesPerPixel;
-			renderData.slicePitch = image->_height * renderData.rowPitch;
-			image->_data.push_back(renderData);
-			image->_arraySize = 1;
-			image->_mipLevels = 1;
-			image->_rawImageData = std::shared_ptr<uint8_t>(buffer.release(), [](uint8_t *p){delete[] p; });
+			renderData.rowPitch = image->GetWidth() * bufferBytesPerPixel;
+			renderData.slicePitch = image->GetHeight() * renderData.rowPitch;
+			image->DataDescs().push_back(renderData);
+			image->SetArraySize(1);
+			image->SetMipLevels(1);
+			image->Data() = std::shared_ptr<uint8_t>(buffer.release(), [](uint8_t *p){delete[] p; });
 
 			return true;
 		}

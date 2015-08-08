@@ -1,10 +1,8 @@
 #include "ToyGE\Kernel\Image.h"
 #include "ToyGE\Kernel\File.h"
-#include "ToyGE\Kernel\ImageLoader.h"
+#include "ToyGE\Kernel\ImageHelper.h"
 #include "ToyGE\Kernel\Logger.h"
 #include "ToyGE\Kernel\Assert.h"
-
-#include "FreeImage.h"
 
 namespace ToyGE
 {
@@ -32,7 +30,7 @@ namespace ToyGE
 		{
 			if (LoadDDSImage(file, image))
 			{
-				image->_isDDS = true;
+				//image->_isDDS = true;
 				return image;
 			}
 			else
