@@ -11,7 +11,9 @@ namespace ToyGE
 	public:
 		DeferredSceneRenderer();
 
-		virtual void Render(const Ptr<RenderView> & view) override;
+		virtual void RenderBase(const Ptr<RenderView> & view) override;
+
+		virtual void RenderShading(const Ptr<RenderView> & view) override;
 
 	private:
 		Ptr<RenderAction> _baseRender;

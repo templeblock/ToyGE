@@ -11,6 +11,8 @@ namespace ToyGE
 
 	class TOYGE_CORE_API RenderBuffer : public RenderResource
 	{
+		friend class RenderFactory;
+
 	public:
 		RenderBuffer(const RenderBufferDesc & desc, const void *pInitData);
 		//RenderBuffer(
@@ -25,6 +27,8 @@ namespace ToyGE
 		{
 			return _desc;
 		}
+
+		void Release();
 
 		CLASS_GET(VertexBufferType, VertexBufferType, _vertexBufferType);
 		CLASS_SET(VertexBufferType, VertexBufferType, _vertexBufferType);
@@ -50,6 +54,7 @@ namespace ToyGE
 		RenderBufferDesc _desc;
 		VertexBufferType _vertexBufferType;
 		std::vector<VertexElementDesc> _vertexElementsDesc;
+		bool _bActive;
 	};
 }
 

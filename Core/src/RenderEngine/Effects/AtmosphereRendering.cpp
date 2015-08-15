@@ -454,6 +454,7 @@ namespace ToyGE
 			_fx->TechniqueByName("InitSampleCoords"),
 			0, 0,
 			_maxSamplesPerLine, _numSampleLines,
+			0.0f, 0.0f, 1.0f, 1.0f,
 			outDepthStencilTex->CreateTextureView());
 	}
 
@@ -511,6 +512,7 @@ namespace ToyGE
 			_fx->TechniqueByName("MarkRayMarchingSamples"),
 			0, 0,
 			_maxSamplesPerLine, _numSampleLines,
+			0.0f, 0.0f, 1.0f, 1.0f,
 			depthStencilTex->CreateTextureView());
 	}
 
@@ -583,6 +585,7 @@ namespace ToyGE
 			0, 0,
 			texDesc.width, texDesc.height,
 			//1280, 720);
+			0.0f, 0.0f, 1.0f, 1.0f,
 			depthStencilTex->CreateTextureView());
 
 		outLightAccumTex = lightAccumTex;

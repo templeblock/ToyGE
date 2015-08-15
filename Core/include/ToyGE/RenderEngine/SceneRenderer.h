@@ -15,7 +15,9 @@ namespace ToyGE
 	public:
 		virtual ~SceneRenderer() = default;
 
-		virtual void Render(const Ptr<RenderView> & view) = 0;
+		virtual void RenderBase(const Ptr<RenderView> & view) = 0;
+
+		virtual void RenderShading(const Ptr<RenderView> & view) = 0;
 
 		CLASS_GET(BackgroundRender, Ptr<RenderAction>, _backgroundRender);
 		CLASS_SET(BackgroundRender, Ptr<RenderAction>, _backgroundRender);

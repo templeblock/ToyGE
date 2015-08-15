@@ -61,6 +61,6 @@ namespace ToyGE
 	void Set##Name(const ParamType & v)\
 	{\
 		(Param) = v;\
-	}\
+	}
 
 #endif

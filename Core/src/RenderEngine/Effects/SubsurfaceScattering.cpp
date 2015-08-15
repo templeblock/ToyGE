@@ -52,6 +52,7 @@ namespace ToyGE
 		RenderQuad(
 			_fx->TechniqueByName("SubsurfaceScatteingBlurX"),
 			0, 0, 0, 0,
+			0.0f, 0.0f, 1.0f, 1.0f,
 			rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 		//BlurY
@@ -65,6 +66,7 @@ namespace ToyGE
 		RenderQuad(
 			_fx->TechniqueByName("SubsurfaceScatteingBlurY"),
 			0, 0, 0, 0,
+			0.0f, 0.0f, 1.0f, 1.0f,
 			rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 
@@ -86,7 +88,10 @@ namespace ToyGE
 
 		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ diffuseTex->CreateTextureView() }, 0);
 
-		RenderQuad(_fx->TechniqueByName("ComputeDiffuse"), 0, 0, 0, 0, rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+		RenderQuad(_fx->TechniqueByName("ComputeDiffuse"),
+			0, 0, 0, 0,
+			0.0f, 0.0f, 1.0f, 1.0f, 
+			rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 		return diffuseTex;
 	}
@@ -108,7 +113,10 @@ namespace ToyGE
 			_fx->UpdateData();
 			light->BindParams(_fx, false, camera);
 
-			RenderQuad(_fx->TechniqueByName("Transmittance"), 0, 0, 0, 0, rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			RenderQuad(_fx->TechniqueByName("Transmittance"),
+				0, 0, 0, 0,
+				0.0f, 0.0f, 1.0f, 1.0f,
+				rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 		}
 	}
 }

@@ -26,8 +26,6 @@ namespace ToyGE
 		return false;
 	}
 
-	TOYGE_CORE_API Ptr<Texture> HeightToNormal(const Ptr<Texture> & heightTex);
-
 	TOYGE_CORE_API Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale = 1.0f);
 
 	TOYGE_CORE_API Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex);
@@ -49,6 +47,10 @@ namespace ToyGE
 		int32_t topLeftY = 0,
 		int32_t width = 0,
 		int32_t height = 0,
+		float topLeftU = 0.0f,
+		float topLeftV = 0.0f,
+		float uvWidth = 1.0f,
+		float uvHeight = 1.0f,
 		const ResourceView & depthStencil = ResourceView());
 
 	TOYGE_CORE_API void TextureFilter(

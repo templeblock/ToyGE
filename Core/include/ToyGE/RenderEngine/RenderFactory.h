@@ -23,6 +23,7 @@ namespace ToyGE
 	class TOYGE_CORE_API RenderFactory
 	{
 		friend class Texture;
+		friend class RenderBuffer;
 	public:
 		RenderFactory();
 
@@ -81,6 +82,8 @@ namespace ToyGE
 
 		Ptr<Texture> GetTexturePooled(const TextureDesc & desc);
 
+		Ptr<RenderBuffer> GetBufferPooled(const RenderBufferDesc & desc);
+
 		void ClearTexturePool();
 
 	private:
@@ -89,8 +92,11 @@ namespace ToyGE
 		std::map<uint64_t, Ptr<DepthStencilState>> _depthStendilStatePool;
 		std::map<uint64_t, Ptr<RasterizerState>> _rasterizerStatePool;
 		std::map<uint64_t, std::vector<Ptr<Texture>>> _texturePoolIdle;
+		std::map<uint64_t, std::vector<Ptr<RenderBuffer>>> _renderBufferPoolIdle;
 
 		void ReleaseTextureToPool(Ptr<Texture> & tex);
+
+		void ReleaseBufferToPool(Ptr<RenderBuffer> & buf);
 	};
 }
 

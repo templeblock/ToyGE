@@ -18,8 +18,16 @@ float4 HeightToBumpPS(PostProcessVSOut vsOut) : SV_TARGET
 {
 	float hc = heightTex.SampleLevel(samplerLinear, vsOut.tex, 0).r;
   
-  float dhdx = ddx(hc) * scale;
-	float dhdy = ddy(hc) * scale;
+  float dhx = 
+  heightTex.SampleLevel(samplerLinear, vsOut.tex + float2(texSize.z, 0.0f), 0).r - 
+  heightTex.SampleLevel(samplerLinear, vsOut.tex - float2(texSize.z, 0.0f), 0).r;
+  
+  float dhy = 
+  heightTex.SampleLevel(samplerLinear, vsOut.tex + float2(0.0f, texSize.w), 0).r -
+  heightTex.SampleLevel(samplerLinear, vsOut.tex - float2(0.0f, texSize.w), 0).r;
+  
+  float dhdx = dhx * scale;
+	float dhdy = dhy * scale;
   
 	float3 s = float3(1.0f, 0.0f, dhdx);
   float3 t = float3(0.0f, 1.0f, dhdy);

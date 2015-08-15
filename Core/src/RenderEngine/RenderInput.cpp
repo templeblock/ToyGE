@@ -49,30 +49,30 @@ namespace ToyGE
 	{
 		if (!_quadInput)
 		{
-			XMFLOAT3 quadVertices[] =
+			XMFLOAT2 quadVertices[] =
 			{
-				{ -1.0f, 1.0f, 0.0f },
-				{ 1.0f, 1.0f, 0.0f },
-				{ 1.0f, -1.0f, 0.0f },
-				{ -1.0f, -1.0f, 0.0f }
+				{ -1.0f,  1.0f },
+				{  1.0f,  1.0f },
+				{ -1.0f, -1.0f },
+				{  1.0f, -1.0f }
 			};
 
 			uint32_t quadIndices[] =
 			{
 				0, 1, 2,
-				0, 2, 3
+				1, 3, 2
 			};
 
 			RenderBufferDesc desc;
 			desc.bindFlag = BUFFER_BIND_VERTEX;
 			desc.cpuAccess = 0;
-			desc.elementSize = sizeof(XMFLOAT3);
+			desc.elementSize = sizeof(XMFLOAT2);
 			desc.numElements = static_cast<int32_t>(_countof(quadVertices));
 			desc.structedByteStride = 0;
 
 			std::vector<VertexElementDesc> verticesEleDesc;
 			VertexElementDesc eleDesc;
-			eleDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+			eleDesc.format = RENDER_FORMAT_R32G32_FLOAT;
 			eleDesc.index = 0;
 			eleDesc.instanceDataRate = 0;
 			eleDesc.name = "POSITION";
@@ -82,6 +82,19 @@ namespace ToyGE
 			vb->SetVertexBufferType(VERTEX_BUFFER_GEOMETRY);
 			vb->SetVertexElementsDesc(verticesEleDesc);
 
+			desc.cpuAccess = CPU_ACCESS_WRITE;
+			desc.elementSize = sizeof(float2);
+			desc.numElements = 4;
+			
+			verticesEleDesc.clear();
+			eleDesc.format = RENDER_FORMAT_R32G32_FLOAT;
+			eleDesc.name = "TEXCOORD";
+			verticesEleDesc.push_back(eleDesc);
+
+			auto uvBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(desc, nullptr);
+			uvBuffer->SetVertexBufferType(VERTEX_BUFFER_GEOMETRY);
+			uvBuffer->SetVertexElementsDesc(verticesEleDesc);
+
 			desc.bindFlag = BUFFER_BIND_INDEX;
 			desc.elementSize = sizeof(uint32_t);
 			desc.numElements = static_cast<int32_t>(_countof(quadIndices));
@@ -89,7 +102,7 @@ namespace ToyGE
 			auto ib = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(desc, quadIndices);
 
 			_quadInput = Global::GetRenderEngine()->GetRenderFactory()->CreateRenderInput();
-			_quadInput->SetVerticesBuffers({ vb });
+			_quadInput->SetVerticesBuffers({ vb, uvBuffer });
 			_quadInput->SetIndicesBuffers(ib);
 			_quadInput->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		}

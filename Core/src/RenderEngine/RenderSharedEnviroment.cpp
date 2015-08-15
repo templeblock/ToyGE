@@ -34,4 +34,9 @@ namespace ToyGE
 			i.second->Release();
 		_sharedParams.clear();
 	}
+
+	Ptr<Texture> RenderSharedEnviroment::GetTextureParam(const String & name) const
+	{
+		return ParamByName(name)->As<SharedParam<Ptr<Texture>>>()->GetValue();
+	}
 }

@@ -34,5 +34,23 @@
     <state name='addressU' value='WRAP'/>
     <state name='addressV' value='WRAP'/>
   </variable>
+
+  <variable type='BlendState' name='bs_srcOne_dstOne_add'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="ONE"/>
+      <state name="dstBlend" value="ONE"/>
+      <state name="dstBlendAlpha" value="ZERO"/>
+    </state>
+  </variable>
+
+  <variable type='BlendState' name='bs_srcAlpha_dstOne_add'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="SRC_ALPHA"/>
+      <state name="dstBlend" value="ONE"/>
+      <state name="dstBlendAlpha" value="ZERO"/>
+    </state>
+  </variable>
   
 </effect>

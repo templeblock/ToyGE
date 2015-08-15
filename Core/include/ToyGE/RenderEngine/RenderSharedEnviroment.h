@@ -56,7 +56,7 @@ namespace ToyGE
 
 		void Clear();
 
-		
+		Ptr<Texture> GetTextureParam(const String & name) const;
 
 	private:
 		std::map<String, std::shared_ptr<SharedParamBase>> _sharedParams;

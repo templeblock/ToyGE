@@ -5,25 +5,19 @@
   <include name="CommonState.xml"/>
   
   <variable type="Texture2D" name="inTex"/>
-    
-  <variable type="SamplerState" name="samPoint">
-    <state name='filter' value='MIN_MAG_MIP_POINT'/>
-    <state name='addressU' value='CLAMP'/>
-    <state name='addressV' value='CLAMP'/>
-  </variable>
-    
+   
   <shader>
     <![CDATA[
 
 float4 DownSamplePS(PostProcessVSOut vsOut) : SV_TARGET
 {
-  return inTex.SampleLevel(samPoint, vsOut.tex, 0);
+  return inTex.SampleLevel(samplerLinearClamp, vsOut.tex, 0);
 }
 
     ]]>
   </shader>
 
-  <technique>
+  <technique name='DownSample'>
     <pass>
       <state value='disableDepth'/>
       <vs entry='PostProcessVS'/>

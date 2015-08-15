@@ -123,7 +123,11 @@ namespace ToyGE
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
 		auto downSampleTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 
-		RenderViewport vp;
+		_hdrFX->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
+
+		rc->SetRenderTargets({ downSampleTex->CreateTextureView() }, 0);
+
+		/*RenderViewport vp;
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
@@ -131,11 +135,11 @@ namespace ToyGE
 		vp.height = static_cast<float>(texDesc.height);
 		rc->SetViewport(vp);
 
-		_hdrFX->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
-		rc->SetRenderTargets({ downSampleTex->CreateTextureView() }, 0);
 		_hdrFX->TechniqueByName("SceneDownSample")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_hdrFX->TechniqueByName("SceneDownSample")->PassByIndex(0)->UnBind();
+		_hdrFX->TechniqueByName("SceneDownSample")->PassByIndex(0)->UnBind();*/
+
+		RenderQuad(_hdrFX->TechniqueByName("SceneDownSample"));
 
 		return downSampleTex;
 	}
@@ -150,37 +154,44 @@ namespace ToyGE
 		auto tex0 = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 		auto tex1 = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 
-		RenderViewport vp;
+		/*RenderViewport vp;
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
+		vp.maxDepth = 1.0f;*/
 
 		//Initial
-		vp.width = static_cast<float>(texDesc.width);
+		/*vp.width = static_cast<float>(texDesc.width);
 		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		_hdrFX->VariableByName("sceneDownSampleTex")->AsShaderResource()->SetValue(downSampleTex->CreateTextureView());
 		rc->SetRenderTargets({ tex0->CreateTextureView() }, 0);
 
-		_hdrFX->TechniqueByName("CalcIlluminace_Initial")->PassByIndex(0)->Bind();
+		RenderQuad(_hdrFX->TechniqueByName("CalcIlluminace_Initial"));
+
+		/*_hdrFX->TechniqueByName("CalcIlluminace_Initial")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_hdrFX->TechniqueByName("CalcIlluminace_Initial")->PassByIndex(0)->UnBind();
+		_hdrFX->TechniqueByName("CalcIlluminace_Initial")->PassByIndex(0)->UnBind();*/
 
 		//Reduce calculate ilumance
 		float w = ceil(static_cast<float>(texDesc.width) / 4.0f);
 		float h = ceil(static_cast<float>(texDesc.height) / 4.0f);
 		while (w >= 1.0f || h >= 1.0f)
 		{
-			vp.width = w;
-			vp.height = h;
-			rc->SetViewport(vp);
+			//vp.width = w;
+			//vp.height = h;
+			//rc->SetViewport(vp);
 
 			_hdrFX->VariableByName("reduceTex")->AsShaderResource()->SetValue(tex0->CreateTextureView());
+
 			rc->SetRenderTargets({ tex1->CreateTextureView() }, 0);
-			_hdrFX->TechniqueByName("CalcIlluminace_ReduceAccum")->PassByIndex(0)->Bind();
+
+			RenderQuad(_hdrFX->TechniqueByName("CalcIlluminace_ReduceAccum"),
+				0, 0, static_cast<int32_t>(w), static_cast<int32_t>(h));
+
+			/*_hdrFX->TechniqueByName("CalcIlluminace_ReduceAccum")->PassByIndex(0)->Bind();
 			rc->DrawIndexed();
-			_hdrFX->TechniqueByName("CalcIlluminace_ReduceAccum")->PassByIndex(0)->UnBind();
+			_hdrFX->TechniqueByName("CalcIlluminace_ReduceAccum")->PassByIndex(0)->UnBind();*/
 
 			tex0.swap(tex1);
 
@@ -243,13 +254,13 @@ namespace ToyGE
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
 		auto brightPassTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 
-		RenderViewport vp;
+		/*RenderViewport vp;
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
 		vp.width = static_cast<float>(texDesc.width);
 		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		_hdrFX->VariableByName("brightPassParams")->AsScalar()->SetValue(&float2(_brightPassThreshold, _brightPassScaleParam), sizeof(float2));
 		//_hdrFX->VariableByName("illuminace")->AsScalar()->SetValue(&_adaptedIlluminace, sizeof(_adaptedIlluminace));
@@ -258,11 +269,14 @@ namespace ToyGE
 		_hdrFX->VariableByName("avgAdaptedIlumTex")->AsShaderResource()->SetValue(_avgAdaptedIlumTex->CreateTextureView());
 
 		rc->SetRenderTargets({ brightPassTex->CreateTextureView() }, 0);
-		_hdrFX->TechniqueByName("BrightPass")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_hdrFX->TechniqueByName("BrightPass")->PassByIndex(0)->UnBind();
 
-		rc->SetRenderTargets({ ResourceView() }, 0);
+		RenderQuad(_hdrFX->TechniqueByName("BrightPass"));
+
+		/*_hdrFX->TechniqueByName("BrightPass")->PassByIndex(0)->Bind();
+		rc->DrawIndexed();
+		_hdrFX->TechniqueByName("BrightPass")->PassByIndex(0)->UnBind();*/
+
+		//rc->SetRenderTargets({ ResourceView() }, 0);
 
 		//brightPassTex->GenerateMips();
 
@@ -279,22 +293,26 @@ namespace ToyGE
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		auto preVP = rc->GetViewport();
+		/*auto preVP = rc->GetViewport();
 		auto vp = preVP;
 		vp.width = static_cast<float>(texDesc.width);
 		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		auto texelSize = 1.0f / float2(static_cast<float>(inTex->Desc().width), static_cast<float>(inTex->Desc().height));
 		_hdrFX->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
 
 		_hdrFX->VariableByName("bloomDownSampleInTex")->AsShaderResource()->SetValue(inTex->CreateTextureView());
-		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		_hdrFX->TechniqueByName("BloomDownSample")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_hdrFX->TechniqueByName("BloomDownSample")->PassByIndex(0)->UnBind();
 
-		rc->SetViewport(preVP);
+		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
+
+		RenderQuad(_hdrFX->TechniqueByName("BloomDownSample"));
+
+		/*_hdrFX->TechniqueByName("BloomDownSample")->PassByIndex(0)->Bind();
+		rc->DrawIndexed();
+		_hdrFX->TechniqueByName("BloomDownSample")->PassByIndex(0)->UnBind();*/
+
+		//rc->SetViewport(preVP);
 
 		return resultTex;
 	}
@@ -303,19 +321,23 @@ namespace ToyGE
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		auto preVP = rc->GetViewport();
+		/*auto preVP = rc->GetViewport();
 		auto vp = preVP;
 		vp.width = static_cast<float>(highResTex->Desc().width);
 		vp.height = static_cast<float>(highResTex->Desc().height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		_hdrFX->VariableByName("bloomUpSampleInTex")->AsShaderResource()->SetValue(lowResTex->CreateTextureView());
+
 		rc->SetRenderTargets({ highResTex->CreateTextureView() }, 0);
-		_hdrFX->TechniqueByName("BloomUpSample")->PassByIndex(0)->Bind();
+
+		RenderQuad(_hdrFX->TechniqueByName("BloomUpSample"));
+
+		/*_hdrFX->TechniqueByName("BloomUpSample")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
 		_hdrFX->TechniqueByName("BloomUpSample")->PassByIndex(0)->UnBind();
 
-		rc->SetViewport(preVP);
+		rc->SetViewport(preVP);*/
 	}
 
 	void HDR::Combine(
@@ -329,21 +351,24 @@ namespace ToyGE
 		auto targetTex = std::static_pointer_cast<Texture>(target.resource);
 		auto targetSize = targetTex->GetMipSize(target.subDesc.textureDesc.firstMipLevel);
 
-		RenderViewport vp;
+		/*RenderViewport vp;
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
 		vp.width = static_cast<float>(std::get<0>(targetSize));
 		vp.height = static_cast<float>(std::get<1>(targetSize));
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		_hdrFX->VariableByName("sceneTex")->AsShaderResource()->SetValue(scene->CreateTextureView());
 		_hdrFX->VariableByName("blurTex")->AsShaderResource()->SetValue(blurTex->CreateTextureView());
 		_hdrFX->VariableByName("streakTex")->AsShaderResource()->SetValue(streakTex->CreateTextureView());
+
 		rc->SetRenderTargets({ target }, 0);
 
-		_hdrFX->TechniqueByName("Combine")->PassByIndex(0)->Bind();
+		RenderQuad(_hdrFX->TechniqueByName("Combine"));
+
+		/*_hdrFX->TechniqueByName("Combine")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_hdrFX->TechniqueByName("Combine")->PassByIndex(0)->UnBind();
+		_hdrFX->TechniqueByName("Combine")->PassByIndex(0)->UnBind();*/
 	}
 }

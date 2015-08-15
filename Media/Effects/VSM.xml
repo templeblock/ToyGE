@@ -72,12 +72,12 @@ float CalcShadow_EVSM2(Texture2DArray tex, uint arrayIndex, float2 uv, float rec
 {
   float shadow = 1.0f;
   
-  if( !any( abs(uv - 0.5f) > 0.5f ) )
-  {
+  //if( !any( abs(uv - 0.5f) > 0.5f ) )
+  //{
   
   float2 moments = tex.SampleLevel(samplerLinearClamp, float3(uv, arrayIndex), 0).xy;
   shadow = CalcShadow_EVSM2(moments, reciever);
-  }
+  //}
   
   return shadow;
 }

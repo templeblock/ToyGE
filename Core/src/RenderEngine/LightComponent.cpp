@@ -72,6 +72,22 @@ namespace ToyGE
 		UpdateLightCuller();
 	}
 
+	float2 LightComponent::GetLightClipPos(const Ptr<Camera> & camera) const
+	{
+		auto posW = this->GetPos();
+		auto posWXM = XMLoadFloat3(&posW);
+		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
+		auto projXM = XMLoadFloat4x4(&camera->ProjMatrix());
+		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
+		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
+		XMFLOAT4 posH;
+		XMStoreFloat4(&posH, posHXM);
+		posH.x /= posH.w;
+		posH.y /= posH.w;
+
+		return float2(posH.x, posH.y);
+	}
+
 
 	//PointLight
 	PointLightComponent::PointLightComponent()
@@ -270,5 +286,26 @@ namespace ToyGE
 	{
 		float3 dir = *reinterpret_cast<const float3*>(&_direction);
 		return dir * -_dist;
+	}
+
+	float2 DirectionalLightComponent::GetLightClipPos(const Ptr<Camera> & camera) const
+	{
+		auto & cameraPos = camera->Pos();
+		float dist = GetDistance();
+		auto posW = XMFLOAT3(
+			cameraPos.x - Direction().x * dist,
+			cameraPos.y - Direction().y * dist,
+			cameraPos.z - Direction().z * dist);
+		auto posWXM = XMLoadFloat3(&posW);
+		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
+		auto projXM = XMLoadFloat4x4(&camera->ProjMatrix());
+		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
+		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
+		XMFLOAT4 posH;
+		XMStoreFloat4(&posH, posHXM);
+		posH.x /= posH.w;
+		posH.y /= posH.w;
+
+		return float2(posH.x, posH.y);
 	}
 }

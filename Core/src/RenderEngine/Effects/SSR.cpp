@@ -62,6 +62,7 @@ namespace ToyGE
 			_fx->TechniqueByName("ScreenSpaceReflection"),
 			0, 0,
 			sceneTex->Desc().width, sceneTex->Desc().height,
+			0.0f, 0.0f, 1.0f, 1.0f,
 			rawDepthTex->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 		sharedEnviroment->GetView()->FlipRenderTarget();

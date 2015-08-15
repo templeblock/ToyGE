@@ -7,6 +7,7 @@
 #include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\Kernel\Util.h"
+#include "ToyGE\RenderEngine\RenderBuffer.h"
 
 namespace ToyGE
 {
@@ -119,12 +120,38 @@ namespace ToyGE
 		}
 	}
 
+	Ptr<RenderBuffer> RenderFactory::GetBufferPooled(const RenderBufferDesc & desc)
+	{
+		auto key = Hash(&desc, sizeof(desc));
+		auto bufIdleFind = _renderBufferPoolIdle.find(key);
+		if (bufIdleFind == _renderBufferPoolIdle.end() || bufIdleFind->second.size() == 0)
+		{
+			auto buf = CreateBuffer(desc, nullptr);
+			return buf;
+		}
+		else
+		{
+			auto buf = bufIdleFind->second.back();
+			bufIdleFind->second.pop_back();
+			buf->_bActive = true;
+			return buf;
+		}
+	}
+
 	void RenderFactory::ReleaseTextureToPool(Ptr<Texture> & tex)
 	{
 		uint64_t key = Hash(&tex->Desc(), sizeof(tex->Desc()));
 		_texturePoolIdle[key].push_back(tex);
 
 		tex->_bActive = false;
+	}
+
+	void RenderFactory::ReleaseBufferToPool(Ptr<RenderBuffer> & buf)
+	{
+		uint64_t key = Hash(&buf->Desc(), sizeof(buf->Desc()));
+		_renderBufferPoolIdle[key].push_back(buf);
+
+		buf->_bActive = false;
 	}
 
 	void RenderFactory::ClearTexturePool()

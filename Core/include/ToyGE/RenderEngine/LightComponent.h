@@ -89,6 +89,8 @@ namespace ToyGE
 
 		virtual void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera);
 
+		virtual float2 GetLightClipPos(const Ptr<Camera> & camera) const;
+
 	protected:
 		bool _bCastShadow;
 		Ptr<ShadowTechnique> _shadowTechnique;
@@ -235,6 +237,8 @@ namespace ToyGE
 		/*void StoreBoundsCache() override;
 
 		bool Intersect(const XNA::AxisAlignedBox & aabb) const override;*/
+
+		float2 GetLightClipPos(const Ptr<Camera> & camera) const override;
 
 	protected:
 		void OnTranformUpdated() override;

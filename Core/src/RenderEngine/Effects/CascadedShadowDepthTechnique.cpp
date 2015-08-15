@@ -20,9 +20,10 @@
 namespace ToyGE
 {
 	int32_t PSSMDepthTechnique::_maxNumSplits = 4;
-	int32_t PSSMDepthTechnique::_defaultNumSplits = 4;
+	int32_t PSSMDepthTechnique::_defaultNumSplits = 3;
 
 	PSSMDepthTechnique::PSSMDepthTechnique()
+		: _splitMaxDist(50.0f)
 	{
 		SetNumSplits(_defaultNumSplits);
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"PSSMShadowDepth.xml");
@@ -37,6 +38,7 @@ namespace ToyGE
 		auto camera = sharedEnv->GetView()->GetCamera();
 
 		float2 nearFar = GetNearFar(sharedEnv);
+		nearFar.y = std::min<float>(nearFar.y, _splitMaxDist);
 
 		auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
 		XMFLOAT3 look = dirLight->Direction();
@@ -383,14 +385,16 @@ namespace ToyGE
 	float2 SDSMDepthTechnique::GetNearFar(const Ptr<RenderSharedEnviroment> & sharedEnviroment) const
 	{
 		auto depthLinearTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
-		float2 nearFarView = ReduceMinMax(depthLinearTex);
-		//nearFarView.y = std::max<float>(0.1f, nearFarView.y);
+		float2 nearFarH = ReduceMinMax(depthLinearTex);
+
 		auto camera = sharedEnviroment->GetView()->GetCamera();
 		float n = camera->Near();
 		float f = camera->Far();
-		float2 nearFar = n + (f - n) * nearFarView;
+
+		float2 nearFar = n + (f - n) * nearFarH;
 		nearFar.x = n;
-		nearFar.y = std::min<float>(50.0f, nearFar.y);
+		nearFar.y += 1.0f;
+
 		return nearFar;
 	}
 

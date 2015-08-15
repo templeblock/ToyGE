@@ -20,11 +20,11 @@
     <![CDATA[
 
 void FilterVS(
-  float4 pos : POSITION,
+  float2 pos : POSITION,
   out float4 posH : SV_POSITION,
   out float4 uvs[(NUM_SAMPLES + 1) / 2] : UVS)
 {
-	posH = pos;
+	posH = float4(pos, 0.0f, 1.0f);
 	float2 uv = float2(pos.x * 0.5f + 0.5f, pos.y * -0.5f + 0.5f);
   
   float2 offsets[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) samplesOffsets;

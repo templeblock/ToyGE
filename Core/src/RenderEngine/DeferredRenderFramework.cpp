@@ -53,6 +53,13 @@ namespace ToyGE
 		/*float time = timer.Upate();
 		DebugInfo::Instance()->SetValue("CullTime", time);*/
 
+		//Render Scene Base
+		for (int32_t viewIndex = 0; viewIndex < numViews; ++viewIndex)
+		{
+			auto renderView = scene->GetView(viewIndex);
+			_sceneRenderer->RenderBase(renderView);
+		}
+
 		//Prepare Shadows
 		std::set<Ptr<LightComponent>> lights;
 		for (int32_t viewIndex = 0; viewIndex < numViews; ++viewIndex)
@@ -76,11 +83,12 @@ namespace ToyGE
 			shadowTech->PrepareShadow(light, nullptr);
 		}
 
-		//Render Scene
+
+		//Render Scene Shading
 		for (int32_t viewIndex = 0; viewIndex < numViews; ++viewIndex)
 		{
 			auto renderView = scene->GetView(viewIndex);
-			_sceneRenderer->Render(renderView);
+			_sceneRenderer->RenderShading(renderView);
 		}
 
 		for (int32_t viewIndex = 0; viewIndex < numViews; ++viewIndex)

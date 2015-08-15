@@ -23,21 +23,21 @@ namespace ToyGE
 		String filePath;
 		ConvertStr_WToA(file->Path(), filePath);
 
-		//uint32_t processFlag = aiProcessPreset_TargetRealtime_Quality;
+		uint32_t processFlag = aiProcessPreset_TargetRealtime_Quality;
 
-		uint32_t processFlag =
-			aiProcess_CalcTangentSpace |
-			//aiProcess_GenSmoothNormals |
-			aiProcess_JoinIdenticalVertices |
-			aiProcess_ImproveCacheLocality |
-			aiProcess_LimitBoneWeights |
-			aiProcess_RemoveRedundantMaterials |
-			aiProcess_SplitLargeMeshes | 
-			aiProcess_Triangulate |
-			aiProcess_GenUVCoords |
-			aiProcess_SortByPType |
-			//aiProcess_FindDegenerates;
-			aiProcess_FindInvalidData;
+		//uint32_t processFlag =
+		//	aiProcess_CalcTangentSpace |
+		//	aiProcess_GenSmoothNormals |
+		//	aiProcess_JoinIdenticalVertices |
+		//	aiProcess_ImproveCacheLocality |
+		//	aiProcess_LimitBoneWeights |
+		//	aiProcess_RemoveRedundantMaterials |
+		//	aiProcess_SplitLargeMeshes | 
+		//	aiProcess_Triangulate |
+		//	aiProcess_GenUVCoords |
+		//	aiProcess_SortByPType |
+		//	//aiProcess_FindDegenerates;
+		//	aiProcess_FindInvalidData;
 
 		if (bFlipUV)
 			processFlag |= aiProcess_FlipUVs;

@@ -9,7 +9,7 @@
   <shader>
     <![CDATA[
     
-float ShininessToRoughnessPS(PostProcessVSOut vsOut) : SV_TARGET
+float SpecularToRoughnessPS(PostProcessVSOut vsOut) : SV_TARGET
 {
   return pow(2.0f / abs(specularTex.SampleLevel(samplerPoint, vsOut.tex, 0).x * 255.0f + 2.0f), 0.25f);
 }
@@ -17,11 +17,11 @@ float ShininessToRoughnessPS(PostProcessVSOut vsOut) : SV_TARGET
     ]]>
   </shader>
 
-  <technique>
+  <technique name="SpecularToRoughness">
     <pass>
       <state value="disableDepth"/>
       <vs entry="PostProcessVS"/>
-      <ps entry="ShininessToRoughnessPS"/>
+      <ps entry="SpecularToRoughnessPS"/>
     </pass>
   </technique>
   

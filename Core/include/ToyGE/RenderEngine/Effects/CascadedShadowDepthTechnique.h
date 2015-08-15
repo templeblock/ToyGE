@@ -47,6 +47,7 @@ namespace ToyGE
 		//}
 
 		void SetNumSplits(int32_t numSplits);
+
 		int32_t NumSplits() const
 		{
 			return _numSplits;
@@ -56,22 +57,27 @@ namespace ToyGE
 		{
 			return _splitConfig[splitIndex];
 		}
+
 		const std::pair<float3, float3> & SplitMinMax(int32_t splitIndex) const
 		{
 			return _splitMinMax[splitIndex];
 		}
 
+		CLASS_SET(SplitMaxDist, float, _splitMaxDist);
+		CLASS_GET(SplitMaxDist, float, _splitMaxDist);
+
 	protected:
 		virtual float2 GetNearFar(const Ptr<RenderSharedEnviroment> & sharedEnviroment) const;
 
 	private:
-		Ptr<RenderEffect> _fx;
 		static int32_t _maxNumSplits;
 		static int32_t _defaultNumSplits;
+
+		Ptr<RenderEffect> _fx;
 		int32_t _numSplits;
+		float _splitMaxDist;
 		std::vector<float> _splitConfig;
 		std::vector<std::pair<float3, float3>> _splitMinMax;
-		//std::vector<float> _lightMaxDist;
 		XMFLOAT4X4 _lightViewMat;
 		std::vector<XMFLOAT4X4> _lightCropMat;
 	};

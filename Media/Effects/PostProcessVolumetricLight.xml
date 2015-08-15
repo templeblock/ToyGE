@@ -5,70 +5,95 @@
   <include name="CommonState.xml"/>
   
   <variable type="Texture2D" name="sceneTex"/>
-  <variable type="Texture2D" name="depthTex"/>
-  <variable type="Texture2D" name="prePassTex"/>
+  <variable type="Texture2D" name="linearDepthTex"/>
 
-  <variable type="cbuffer" name="cb_volumetricLight">
-    <variable type="float4" name="screenLightPos"/>
-  </variable>
-
-  <variable type='SamplerState' name='samPoint'>
-    <state name='filter' value='MIN_MAG_MIP_POINT'/>
-    <state name='addressU' value='CLAMP'/>
-    <state name='addressV' value='CLAMP'/>
-  </variable>
-  
-  <variable type='SamplerState' name='samLinear'>
-    <state name='filter' value='MIN_MAG_MIP_LINEAR'/>
-    <state name='addressU' value='CLAMP'/>
-    <state name='addressV' value='CLAMP'/>
-  </variable>
-  
   <shader>
     <![CDATA[
-  
-#define NUM_SAMPLES 50
-  
-float4 VolumetricLightPS_PrePass(PostProcessVSOut vsOut) : SV_TARGET
-{
-  float depth = depthTex.SampleLevel(samPoint, vsOut.tex, 0).x;
-  float3 color = sceneTex.SampleLevel(samPoint, vsOut.tex, 0).xyz;
-  if(depth <= 0.98f)
-    color = 0.0f;
-  return float4(color, 1.0f);
-}
-  
-float4 VolumetricLightPS(PostProcessVSOut vsOut) : SV_TARGET
-{
-  float density = 0.8f;
-  
-  float2 texCoord = vsOut.tex;
-  float2 deltaTexCoord = texCoord - screenLightPos.xy;
-  deltaTexCoord *= 1.0f / NUM_SAMPLES * density;
-  float4 color = prePassTex.SampleLevel(samLinear, texCoord, 0);
-  float illuminationDecay = 0.6f;
-  
-  float weight = 1.0f;
-  float decay = 0.95f;
-  
-  for(int i = 0; i < NUM_SAMPLES; ++i)
-  {
-    texCoord -= deltaTexCoord;
-    float4 sampleColor = prePassTex.SampleLevel(samLinear, texCoord, 0);
-    sampleColor *= illuminationDecay * weight;
-    color += sampleColor;
     
-    illuminationDecay *= decay;
-  }
+float4 StartupPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float4 color = sceneTex.SampleLevel(samplerPoint, vsOut.tex, 0);
+    float depth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0).x;
   
-  float exposure = 2.0f;
-  return float4(color.xyz * exposure, 0.5f);
+    if(depth <= 0.99f)
+      color = 0.0f;
+    
+    return color;
 }
     
     ]]>
   </shader>
 
-  <variable type='BlendState' name='alphaBlend'>
+  <technique name='Startup'>
+    <pass>
+      <state value='disableDepth'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='StartupPS'/>
+    </pass>
+  </technique>
+  
+
+  
+  <variable type="Texture2D" name="radialBlurInTex"/>
+  
+  <variable type="cbuffer" name="cb_raidalBlur">
+    <variable type="float2" name="lightPosUV"/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+
+#define NUM_SAMPLES 25
+  
+float4 RadialBlurPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+  float density = 0.5f;
+  float weight = 0.4f;
+  float decay = 0.8f;
+  float maxLen = 0.8f;
+  
+  float2 uvCenter = vsOut.tex;
+  
+  float centerToLightUVLen = length(uvCenter - lightPosUV);
+  
+  [branch] if(centerToLightUVLen >= maxLen)
+      return 0.0f;
+  
+  float2 uvStep = (lightPosUV - uvCenter) * density / NUM_SAMPLES;
+  
+  float2 sampleUV = uvCenter;
+  float sampleWeight = weight;
+  
+  float4 colorAccum = radialBlurInTex.SampleLevel(samplerLinearClamp, sampleUV, 0);
+  
+  for(int i = 0; i < NUM_SAMPLES; ++i)
+  {
+    sampleUV += uvStep;
+  
+    float4 sampleColor = radialBlurInTex.SampleLevel(samplerLinearClamp, sampleUV, 0);
+    
+    colorAccum += sampleColor * sampleWeight;
+    
+    sampleWeight *= decay;
+  }
+  
+  colorAccum /= NUM_SAMPLES;
+  
+  float2 lightPosH = lightPosUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+  float centerLen = sqrt(max(1e-4, dot(lightPosH, lightPosH)));
+  float borderDecay = saturate(8.0f -  centerLen * 7.0f);
+  
+  //colorAccum *= borderDecay;
+  
+  colorAccum *= saturate(8.0f - (centerToLightUVLen) / maxLen * 8.0f);
+  
+  return float4(colorAccum.xyz, 1.0f);
+}
+    
+    ]]>
+  </shader>
+
+  <variable type='BlendState' name='accumBlend'>
     <state name='blendRTDesc' index='0'>
       <state name='blendEnable' value='true'/>
       <state name='srcBlend' value='SRC_ALPHA'/>
@@ -77,20 +102,12 @@ float4 VolumetricLightPS(PostProcessVSOut vsOut) : SV_TARGET
     </state>
   </variable>
 
-  <technique name='VolumetricLight_PrePass'>
+  <technique name='RadialBlur'>
     <pass>
       <state value='disableDepth'/>
+      <state value='accumBlend'/>
       <vs entry='PostProcessVS'/>
-      <ps entry='VolumetricLightPS_PrePass'/>
-    </pass>
-  </technique>
-
-  <technique name='VolumetricLight'>
-    <pass>
-      <state value='disableDepth'/>
-      <state value='alphaBlend'/>
-      <vs entry='PostProcessVS'/>
-      <ps entry='VolumetricLightPS'/>
+      <ps entry='RadialBlurPS'/>
     </pass>
   </technique>
   

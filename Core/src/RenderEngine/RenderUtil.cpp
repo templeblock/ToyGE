@@ -15,6 +15,7 @@
 #include "ToyGE\RenderEngine\RenderEffectVariable.h"
 #include "ToyGE\Platform\Window.h"
 #include "ToyGE\Math\Math.h"
+#include "ToyGE\RenderEngine\RenderBuffer.h"
 
 namespace ToyGE
 {
@@ -181,50 +182,6 @@ namespace ToyGE
 		}
 	}
 
-	Ptr<Texture> HeightToNormal(const Ptr<Texture> & heightTex)
-	{
-		auto preInput = Global::GetRenderEngine()->GetRenderContext()->GetRenderInput();
-		auto quadInput = CommonInput::QuadInput();
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderInput(quadInput);
-
-		TextureDesc texDesc = heightTex->Desc();
-		texDesc.format = RENDER_FORMAT_R8G8B8A8_UNORM;
-		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
-		auto normalTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto preRTs = Global::GetRenderEngine()->GetRenderContext()->GetRenderTargets();
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ normalTex->CreateTextureView() }, 0);
-
-		auto preVp = Global::GetRenderEngine()->GetRenderContext()->GetViewport();
-		RenderViewport vp;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		vp.topLeftX = 0.0f;
-		vp.topLeftY = 0.0f;
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		Global::GetRenderEngine()->GetRenderContext()->SetViewport(vp);
-
-		auto preDepthStencil = Global::GetRenderEngine()->GetRenderContext()->GetDepthStencil();
-		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencil(ResourceView());
-
-		auto effect = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"HeightToNormal.xml");
-		effect->VariableByName("height_tex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
-		int2 imageSize = int2(texDesc.width, texDesc.height);
-		effect->VariableByName("imageSize")->AsScalar()->SetValue(&imageSize, sizeof(imageSize));
-		effect->TechniqueByIndex(0)->PassByIndex(0)->Bind();
-		Global::GetRenderEngine()->GetRenderContext()->DrawIndexed();
-		effect->TechniqueByIndex(0)->PassByIndex(0)->UnBind();
-
-		Global::GetRenderEngine()->GetRenderContext()->SetViewport(preVp);
-		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencil(preDepthStencil);
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderInput(preInput);
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets(preRTs, 0);
-
-		normalTex->GenerateMips();
-
-		return normalTex;
-	}
-
 	Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale)
 	{
 		auto bumpTexDesc = heightTex->Desc();
@@ -251,35 +208,21 @@ namespace ToyGE
 	Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex)
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
-		RenderContextStateSave stateSave;
-		rc->SaveState(RENDER_CONTEXT_STATE_INPUT | RENDER_CONTEXT_STATE_RENDERTARGETS | RENDER_CONTEXT_STATE_VIEWPORT, stateSave);
 
 		auto texDesc = shininessTex->Desc();
 		texDesc.format = RENDER_FORMAT_R8_UNORM;
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
 		auto roughnessTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
 
-		RenderViewport vp;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		vp.topLeftX = 0.0f;
-		vp.topLeftY = 0.0f;
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		rc->SetViewport(vp);
-
 		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SpecularToRoughness.xml");
+
 		fx->VariableByName("specularTex")->AsShaderResource()->SetValue(shininessTex->CreateTextureView());
-		rc->SetRenderInput(CommonInput::QuadInput());
+
 		rc->SetRenderTargets({ roughnessTex->CreateTextureView() }, 0);
-		rc->SetDepthStencil(ResourceView());
-		fx->TechniqueByIndex(0)->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		fx->TechniqueByIndex(0)->PassByIndex(0)->UnBind();
+
+		RenderQuad(fx->TechniqueByName("SpecularToRoughness"));
 
 		roughnessTex->GenerateMips();
-
-		rc->RestoreState(stateSave);
 
 		return roughnessTex;
 	}
@@ -448,32 +391,14 @@ namespace ToyGE
 		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
-		RenderContextStateSave stateSave;
-		rc->SaveState(
-			RENDER_CONTEXT_STATE_INPUT
-			| RENDER_CONTEXT_STATE_VIEWPORT
-			| RENDER_CONTEXT_STATE_RENDERTARGETS
-			| RENDER_CONTEXT_STATE_DEPTHSTENCIL, stateSave);
 
-		RenderViewport vp;
-		vp.topLeftX = vp.topLeftY = 0.0f;
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"DownSample.xml");
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
+		fx->VariableByName("inTex")->AsShaderResource()->SetValue(texView);
 
-		auto downSampleFX = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"DownSample.xml");
-		downSampleFX->VariableByName("inTex")->AsShaderResource()->SetValue(texView);
 		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		downSampleFX->TechniqueByIndex(0)->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		downSampleFX->TechniqueByIndex(0)->PassByIndex(0)->UnBind();
 
-		rc->RestoreState(stateSave);
+		RenderQuad(fx->TechniqueByName("DownSample"));
 
 		return resultTex;
 	}
@@ -484,6 +409,10 @@ namespace ToyGE
 		int32_t topLeftY,
 		int32_t width,
 		int32_t height,
+		float topLeftU,
+		float topLeftV,
+		float uvWidth,
+		float uvHeight,
 		const ResourceView & depthStencil)
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
@@ -515,6 +444,20 @@ namespace ToyGE
 		vp.maxDepth = 1.0f;
 		rc->SetViewport(vp);
 
+		float2 uvMap[4];
+		uvMap[0] = float2(topLeftU,				topLeftV);
+		uvMap[1] = float2(topLeftU + uvWidth,	topLeftV);
+		uvMap[2] = float2(topLeftU,				topLeftV + uvHeight);
+		uvMap[3] = float2(topLeftU + uvWidth,	topLeftV + uvHeight);
+
+		auto quadInput = CommonInput::QuadInput();
+		auto uvBufMappedData = quadInput->GetVerticesBuffers()[1]->Map(MAP_WRITE_DISCARD);
+		memcpy(uvBufMappedData.pData, uvMap, sizeof(float2) * 4);
+		quadInput->GetVerticesBuffers()[1]->UnMap();
+
+		/*auto ri = std::make_shared<RenderInput>();
+		ri->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+		rc->SetRenderInput(ri);*/
 		rc->SetRenderInput(CommonInput::QuadInput());
 		rc->SetDepthStencil(depthStencil);
 

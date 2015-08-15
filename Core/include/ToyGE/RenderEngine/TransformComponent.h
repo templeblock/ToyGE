@@ -22,7 +22,7 @@ namespace ToyGE
 			_bDirty = true;
 		}
 
-		const XMFLOAT3 & GetPos() const
+		virtual const XMFLOAT3 & GetPos() const
 		{
 			return _pos;
 		}

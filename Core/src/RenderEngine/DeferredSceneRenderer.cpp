@@ -13,9 +13,13 @@ namespace ToyGE
 		_translucentRender = std::make_shared<TranslucencyRendering>();
 	}
 
-	void DeferredSceneRenderer::Render(const Ptr<RenderView> & view)
+	void DeferredSceneRenderer::RenderBase(const Ptr<RenderView> & view)
 	{
 		_baseRender->Render(view->GetRenderSharedEnviroment());
+	}
+
+	void DeferredSceneRenderer::RenderShading(const Ptr<RenderView> & view)
+	{
 		_ligtingRender->Render(view->GetRenderSharedEnviroment());
 		_shadingRender->Render(view->GetRenderSharedEnviroment());
 		if (_backgroundRender)
