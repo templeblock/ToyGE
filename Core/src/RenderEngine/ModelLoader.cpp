@@ -120,6 +120,16 @@ namespace ToyGE
 				mat->AddTexture(MATERIAL_TEXTURE_OPACITYMASK, basePath + wPath, 0);
 			}
 
+			//Opacity
+			for (uint32_t texIndex = 0; texIndex != pAiMat->GetTextureCount(aiTextureType_EMISSIVE); ++texIndex)
+			{
+				aiString path;
+				pAiMat->GetTexture(aiTextureType_EMISSIVE, texIndex, &path);
+				WString wPath;
+				ConvertStr_AToW(path.C_Str(), wPath);
+				mat->AddTexture(MATERIAL_TEXTURE_EMISSIVE, basePath + wPath, 0);
+			}
+
 			aiColor3D color;
 			float fp;
 

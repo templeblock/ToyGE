@@ -17,10 +17,13 @@ namespace ToyGE
 
 		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
 
-		void SetTexture(const Ptr<Texture> & tex)
+		/*void SetTexture(const Ptr<Texture> & tex)
 		{
 			_tex = tex;
-		}
+		}*/
+
+		CLASS_SET(Texture, Ptr<Texture>, _tex)
+		CLASS_GET(Texture, Ptr<Texture>, _tex)
 
 	private:
 		Ptr<RenderEffect> _skyBoxFX;

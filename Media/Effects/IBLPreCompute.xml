@@ -16,15 +16,15 @@
   <shader>
     <![CDATA[
     
-#define NUM_SAMPLES 1024
+#define NUM_SAMPLES 256
     
 float3 ImportanceSampling(float2 sample2d, float roughness, float3 N)
 {
   float a = roughness * roughness;
   
   float phi = 2 * PI * sample2d.x;
-  float cosTheta = sqrt( (1 - sample2d.y) / ( 1 + (a*a - 1) * sample2d.y ) );
-  float sinTheta = sqrt( 1 - cosTheta * cosTheta );
+  float cosTheta = sqrt( max(1e-4, 1 - sample2d.y) / ( 1 + (a*a - 1) * sample2d.y ) );
+  float sinTheta = sqrt( max(1e-4, 1 - cosTheta * cosTheta) );
   float3 H = 0;
   H.x = sinTheta * sin(phi);
   H.y = cosTheta;
@@ -57,7 +57,7 @@ float3 PrefilterEnvMap(float roughness, float3 R)
     }
   }
   
-  return colorSum / weightSum;
+  return colorSum / max(1e-4, weightSum);
 }
 
 struct PrefilterEnvMapVSOut
@@ -65,10 +65,12 @@ struct PrefilterEnvMapVSOut
   float4 pos : POSITION;
 };
 
-PrefilterEnvMapVSOut PrefilterEnvMapVS(float4 pos : POSITION)
+PrefilterEnvMapVSOut PrefilterEnvMapVS(
+    float2 pos : POSITION,
+    float2 tex : TEXCOORD)
 {
 	PrefilterEnvMapVSOut vsOut;
-	vsOut.pos = pos;
+	vsOut.pos = float4(pos, 0.0f, 1.0f);
 	return vsOut;
 }
 
@@ -129,7 +131,7 @@ float4 PrefilterEnvMapPS(PrefilterEnvMapGSOut gsOut) : SV_TARGET
   float3 Wy = 0.0f;
   GetLookAndUpVec(gsOut.arrayIndex, Wz, Wy);
   float3 Wx = cross(Wy, Wz);
-  uint2 size = (uint2)textureSize.xy;
+  float2 size = textureSize.xy;
   float roughness = lerp(0.1f, 0.9f, textureSize.z);
   
   float2 texelIndex = gsOut.pos.xy - 0.5f;
@@ -146,7 +148,7 @@ float2 IntegrateBRDF(float roughness, float NoV)
 {
   float3 N = float3(0.0f, 1.0f, 0.0f);
   float3 V = 0.0f;
-  V.x = sqrt(1.0f - NoV * NoV);
+  V.x = sqrt(max(1e-4, 1.0f - NoV * NoV));
   V.y = NoV;
   
   float2 resultSum = 0.0f;
@@ -165,7 +167,7 @@ float2 IntegrateBRDF(float roughness, float NoV)
     {
       float D = NDF_GGX(N, H, roughness);
       float G = G_Smith(N, L, V, roughness);
-      float G_t = G * VoH / (NoV * NoH);
+      float G_t = G * VoH / max(1e-4, NoV * NoH);
       float F_t = pow(1.0f - VoH, 5);
       
       resultSum.x += (1.0f - F_t) * G_t;
@@ -178,6 +180,7 @@ float2 IntegrateBRDF(float roughness, float NoV)
 
 float2 LUTPS(PostProcessVSOut vsOut) : SV_TARGET
 {
+  //float2 texCoord = vsOut.tex;// vsOut.pos.xy / textureSize.xy;
   float2 texCoord = vsOut.pos.xy / textureSize.xy;
   float NoV = texCoord.x;
   float roughness = lerp(0.1f, 0.9f, texCoord.y);

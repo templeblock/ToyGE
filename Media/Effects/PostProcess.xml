@@ -8,7 +8,10 @@
   
   <shader>
     <![CDATA[
-    
+ 
+#ifndef POSTPROCESS_H
+#define POSTPROCESS_H
+ 
 struct PostProcessVSIn
 {
   float2 pos : POSITION;
@@ -45,6 +48,8 @@ PostProcessVSOut PostProcessVS(
 
 	  return vsOut;
 }
+
+#endif
     
     ]]>
   </shader>

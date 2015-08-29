@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <effect>
-
+  <include name="Defines.xml"/>
+  
   <variable type="TextureCube" name="prefiltedEnvMap"/>
   <variable type="Texture2D" name="LUT"/>
 
@@ -12,12 +13,17 @@
   <shader>
     <![CDATA[
     
-float3 ComputeIBL(float3 R, float roughness, float NoV, float3 F0)
+float3 ComputeIBL(float3 R, float roughness, float NoV, float3 F0, float3 diffColor)
 {
   float mipLevel = lerp(0.0f, numMipLevels.x - 1.0f, roughness);
   float2 lutSample = LUT.SampleLevel(samplerLinear, float2(NoV, roughness), 0).xy;
   
-  return prefiltedEnvMap.SampleLevel(samplerLinear, R, mipLevel).xyz * (F0 * lutSample.x + lutSample.y);
+  float3 specIBL = prefiltedEnvMap.SampleLevel(samplerLinear, R, mipLevel).xyz * (F0 * lutSample.x + lutSample.y);
+  
+  float2 lutSample2 = LUT.SampleLevel(samplerLinear, float2(NoV, 1.0f), 0).xy;
+  float3 diffIBL = prefiltedEnvMap.SampleLevel(samplerLinear, R, numMipLevels.x - 1).xyz * diffColor / PI;
+  
+  return  specIBL + diffIBL;
 }
     
     ]]>

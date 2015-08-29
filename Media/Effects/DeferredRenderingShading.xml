@@ -10,6 +10,7 @@
   <variable type='Texture2D' name='lightingTex0'/>
   <variable type='Texture2D' name='lightingTex1'/>
   <variable type='Texture2D' name='aoTex'/>
+  
   <variable type='cbuffer' name='cb_shadingPS_perFrame'>
     <variable type='int4' name='screenSize'/>
   </variable>

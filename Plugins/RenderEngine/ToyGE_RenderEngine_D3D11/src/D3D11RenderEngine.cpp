@@ -140,7 +140,7 @@ namespace ToyGE
 
 		ToyGE_ASSERT(createDeviceFunc);
 
-		UINT createDeviceFlags = 0;
+		UINT createDeviceFlags = D3D11_CREATE_DEVICE_DISABLE_GPU_TIMEOUT;
 		//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #if defined(DEBUG) || defined(_DEBUG)
 		createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;

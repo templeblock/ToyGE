@@ -16,6 +16,11 @@ namespace ToyGE
 
 			ID3D11Query * query;
 			d3dRE->RawD3DDevice()->CreateQuery(&queryDesc, &query);
+			/*if (!query)
+			{
+				return false;
+			}*/
+
 			d3dRE->RawD3DDeviceContex()->End(query);
 
 			_query = MakeComShared(query);

@@ -19,15 +19,15 @@ namespace ToyGE
 		MATERIAL_TEXTURE_SHININESS = 2UL,
 		MATERIAL_TEXTURE_ROUGHNESS = 3UL,
 		MATERIAL_TEXTURE_BUMP = 4UL,
-		//MATERIAL_TEXTURE_HEIGHT = 5UL,
-		MATERIAL_TEXTURE_OPACITYMASK = 5UL
+		MATERIAL_TEXTURE_OPACITYMASK = 5UL,
+		MATERIAL_TEXTURE_EMISSIVE = 6UL
 	};
 
 	namespace MaterialTextureTypeNum
 	{
 		enum MaterialTextureTypeNumDef : uint32_t
 		{
-			value = MATERIAL_TEXTURE_OPACITYMASK + 1
+			value = MATERIAL_TEXTURE_EMISSIVE + 1
 		};
 	}
 
@@ -91,6 +91,9 @@ namespace ToyGE
 
 		CLASS_GET(Metallic, float, _metallic);
 		CLASS_SET(Metallic, float, _metallic);
+
+		CLASS_GET(Emissive, float3, _emissive);
+		CLASS_SET(Emissive, float3, _emissive);
 
 		const Ptr<RenderMaterial> & InitRenderData();
 
@@ -199,6 +202,7 @@ namespace ToyGE
 		float3 _baseColor;
 		float _roughness;
 		float _metallic;
+		float3 _emissive;
 		bool _bTranslucent;
 		float _opacity;
 		bool _bRefraction;

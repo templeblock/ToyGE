@@ -8,6 +8,7 @@
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
 #include "ToyGE\RenderEngine\RenderInput.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
 
 namespace ToyGE
 {
@@ -56,7 +57,7 @@ namespace ToyGE
 		auto re = Global::GetRenderEngine();
 		auto rc = re->GetRenderContext();
 
-		RenderContextStateSave save;
+		/*RenderContextStateSave save;
 		rc->SaveState(
 			RENDER_CONTEXT_STATE_DEPTHSTENCIL
 			| RENDER_CONTEXT_STATE_RENDERTARGETS
@@ -69,7 +70,12 @@ namespace ToyGE
 		RenderViewport vp;
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
+		vp.maxDepth = 1.0f;*/
+
+		//LUT
+		//vp.width = static_cast<float>(_LUT->Desc().width);
+		//vp.height = static_cast<float>(_LUT->Desc().height);
+		//rc->SetViewport(vp);
 
 		//PrefilterEnvMap
 		auto numMips = _prefiltedEnvMap->Desc().mipLevels;
@@ -82,42 +88,46 @@ namespace ToyGE
 			textureSize.y = static_cast<float>(height);
 			textureSize.z = static_cast<float>(mipLevel) / static_cast<float>(numMips - 1);
 
-			vp.width = textureSize.x;
-			vp.height = textureSize.y;
-			rc->SetViewport(vp);
+			//vp.width = textureSize.x;
+			//vp.height = textureSize.y;
+			//rc->SetViewport(vp);
 
 			_fx->VariableByName("textureSize")->AsScalar()->SetValue(&textureSize);
 			_fx->VariableByName("envMap")->AsShaderResource()->SetValue(_envMap->CreateTextureView_Cube(0, 1, 0, 1));
 
 			rc->SetRenderTargets({ _prefiltedEnvMap->CreateTextureView(mipLevel, 1, 0, 6) }, 0);
-			_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->Bind();
-			rc->DrawIndexed();
-			_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->UnBind();
+			rc->ClearRenderTargets(0.0f);
 
-			width /= 2;
-			height /= 2;
+			RenderQuad(_fx->TechniqueByName("PrefilterEnvMap"), 0, 0, width, height);
+
+			/*_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->Bind();
+			rc->DrawIndexed();
+			_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->UnBind();*/
+
+			width = std::max<int32_t>(1, width >> 1);
+			height = std::max<int32_t>(1, height >> 1);
 		}
 
-		//LUT
-		vp.width = static_cast<float>(_LUT->Desc().width);
-		vp.height = static_cast<float>(_LUT->Desc().height);
-		rc->SetViewport(vp);
-
 		float4 textureSize = 0.0f;
-		textureSize.x = vp.width;
-		textureSize.y = vp.height;
+		textureSize.x = static_cast<float>(_LUT->Desc().width);
+		textureSize.y = static_cast<float>(_LUT->Desc().height);
 		_fx->VariableByName("textureSize")->AsScalar()->SetValue(&textureSize);
 
 		rc->SetRenderTargets({ _LUT->CreateTextureView() }, 0);
-		_fx->TechniqueByName("LUT")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("LUT")->PassByIndex(0)->UnBind();
+		RenderQuad(_fx->TechniqueByName("LUT"));
+		
+		//_fx->TechniqueByName("LUT")->PassByIndex(0)->Bind();
+		//rc->DrawIndexed();
+		//_fx->TechniqueByName("LUT")->PassByIndex(0)->UnBind();
+		
 
-		rc->RestoreState(save);
+		//rc->RestoreState(save);
 	}
 
 	void ReflectionMap::BindEffectParams(const Ptr<RenderEffect> & fx)
 	{
+		//InitPreComputedData();
+
 		fx->VariableByName("prefiltedEnvMap")->AsShaderResource()->SetValue(_prefiltedEnvMap->CreateTextureView_Cube(0, 0, 0, 1));
 		fx->VariableByName("LUT")->AsShaderResource()->SetValue(_LUT->CreateTextureView());
 		float numMipLevels = static_cast<float>(_prefiltedEnvMap->Desc().mipLevels);

@@ -8,6 +8,7 @@
     <variable type="float3" name="baseColor"/>
     <variable type="float" name="roughness"/>
     <variable type="float" name="metallic"/>
+    <variable type="float3" name="emissive"/>
     <variable type="float" name="pomScale"/>
     <variable type="float" name="opacity"/>
     <variable type="float" name="refractionIndex"/>
@@ -17,11 +18,12 @@
   <variable type='Texture2D' name='baseColorTex' />
   <variable type='Texture2D' name='roughnessTex' />
   <variable type='Texture2D' name='bumpTex' />
+  <variable type='Texture2D' name='emissiveTex' />
   
   <shader>
     <![CDATA[
     
-#if defined(MAT_BASECOLOR_TEX) || defined(MAT_ROUGHNESS_TEX) || defined(MAT_BUMP_TEX) || defined(MAT_OPACITYMASK_TEX)
+#if defined(MAT_BASECOLOR_TEX) || defined(MAT_ROUGHNESS_TEX) || defined(MAT_BUMP_TEX) || defined(MAT_OPACITYMASK_TEX) || defined(MAT_EMISSIVE_TEX)
 #define MAT_UV_COORD
 #endif
     
@@ -30,6 +32,7 @@ struct Material
     float3 baseColor;
     float roughness;
     float metallic;
+    float3 emissive;
     float3 normal;
     float opacity;
     float refractionIndex;
@@ -109,6 +112,12 @@ Material GetMeterial
 
     mat.metallic = metallic;
     
+#ifdef MAT_EMISSIVE_TEX
+    mat.emissive = emissiveTex.Sample(samplerLinear, uvCoord.xy).rgb;
+#else
+    mat.emissive = emissive;
+#endif
+    
     mat.opacity = opacity;
     mat.refractionIndex = refractionIndex;
 
@@ -116,7 +125,7 @@ Material GetMeterial
 }
 
 
-Material GbufferToMaterial(float4 gbuffer0, float4 gbuffer1)
+Material GbufferToMaterial(float4 gbuffer0, float4 gbuffer1, float4 gbuffer2)
 {
     Material mat;
     mat.baseColor = gbuffer0.xyz;
@@ -125,6 +134,8 @@ Material GbufferToMaterial(float4 gbuffer0, float4 gbuffer1)
     //mat.normal = DecodeNormal(gbuffer1.xyz, invView);
     //mat.normal = normalize(gbuffer1.xyz * 2.0 - 1.0);
     mat.roughness = gbuffer1.w;
+    
+    mat.emissive = gbuffer2.xyz;
     
     return mat;
 }

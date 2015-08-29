@@ -50,6 +50,9 @@ namespace ToyGE
 		auto gbuffer0 = factory->GetTexturePooled(desc);
 		auto gbuffer1 = factory->GetTexturePooled(desc);
 
+		desc.format = RENDER_FORMAT_R11G11B10_FLOAT;
+		auto gbuffer2 = factory->GetTexturePooled(desc);
+
 		desc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL | TEXTURE_BIND_SHADER_RESOURCE;
 		desc.format = RENDER_FORMAT_R24G8_TYPELESS;
 		auto rawDepthTex = factory->GetTexturePooled(desc);
@@ -73,9 +76,15 @@ namespace ToyGE
 		{
 			gbuffer0->CreateTextureView(),
 			gbuffer1->CreateTextureView(),
-			reflectionMapID->CreateTextureView()
+			gbuffer2->CreateTextureView(),
 		},
 		0.0f);
+
+		rc->ClearRenderTargets(
+		{
+			reflectionMapID->CreateTextureView()
+		},
+			-1.0f);
 
 		rc->ClearRenderTargets(
 		{
@@ -92,6 +101,7 @@ namespace ToyGE
 			{
 				gbuffer0->CreateTextureView(),
 				gbuffer1->CreateTextureView(),
+				gbuffer2->CreateTextureView(),
 				linearDepth->CreateTextureView(),
 				reflectionMapID->CreateTextureView(),
 				velocity->CreateTextureView()
@@ -103,6 +113,7 @@ namespace ToyGE
 			{
 				gbuffer0->CreateTextureView(),
 				gbuffer1->CreateTextureView(),
+				gbuffer2->CreateTextureView(),
 				linearDepth->CreateTextureView(),
 				reflectionMapID->CreateTextureView()
 			}, 0);
@@ -180,6 +191,7 @@ namespace ToyGE
 		//Set Share
 		sharedEnviroment->SetParam(CommonRenderShareName::GBuffer(0), std::make_shared<SharedParam<Ptr<Texture>>>(gbuffer0));
 		sharedEnviroment->SetParam(CommonRenderShareName::GBuffer(1), std::make_shared<SharedParam<Ptr<Texture>>>(gbuffer1));
+		sharedEnviroment->SetParam(CommonRenderShareName::GBuffer(2), std::make_shared<SharedParam<Ptr<Texture>>>(gbuffer2));
 		sharedEnviroment->SetParam("ReflectionMapID", std::make_shared<SharedParam<Ptr<Texture>>>(reflectionMapID));
 		sharedEnviroment->SetParam(CommonRenderShareName::RawDepth(), std::make_shared<SharedParam<Ptr<Texture>>>(rawDepthTex));
 		sharedEnviroment->SetParam(CommonRenderShareName::LinearDepth(), std::make_shared<SharedParam<Ptr<Texture>>>(linearDepth));
@@ -220,11 +232,13 @@ namespace ToyGE
 		//Render
 		auto gbuffer0 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(0))->As<SharedParam<Ptr<Texture>>>()->GetValue();
 		auto gbuffer1 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(1))->As<SharedParam<Ptr<Texture>>>()->GetValue();
+		auto gbuffer2 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(2))->As<SharedParam<Ptr<Texture>>>()->GetValue();
 		auto linearDepth = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
 
 		//Set Effects Params
 		_deferredFX->VariableByName("gbuffer0")->AsShaderResource()->SetValue(gbuffer0->CreateTextureView());
 		_deferredFX->VariableByName("gbuffer1")->AsShaderResource()->SetValue(gbuffer1->CreateTextureView());
+		_deferredFX->VariableByName("gbuffer2")->AsShaderResource()->SetValue(gbuffer2->CreateTextureView());
 		_deferredFX->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepth->CreateTextureView());
 
 		auto & cameraPos = sharedEnviroment->GetView()->GetCamera()->Pos();
@@ -273,9 +287,12 @@ namespace ToyGE
 			auto id = map->GetID();
 			_deferredFX->VariableByName("reflectionMapID")->AsScalar()->SetValue(&id, sizeof(id));
 			map->BindEffectParams(_deferredFX);
-			_deferredFX->TechniqueByName("LightingIBL")->PassByIndex(0)->Bind();
+
+			RenderQuad(_deferredFX->TechniqueByName("LightingIBL"), 0, 0, desc.width, desc.height);
+
+			/*_deferredFX->TechniqueByName("LightingIBL")->PassByIndex(0)->Bind();
 			rc->DrawIndexed();
-			_deferredFX->TechniqueByName("LightingIBL")->PassByIndex(0)->UnBind();
+			_deferredFX->TechniqueByName("LightingIBL")->PassByIndex(0)->UnBind();*/
 		}
 
 		//Set Share

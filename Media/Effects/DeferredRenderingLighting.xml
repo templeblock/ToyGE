@@ -11,6 +11,7 @@
   <variable type='Texture2D' format='float' name='linearDepthTex'/>
   <variable type='Texture2D' name='gbuffer0'/>
   <variable type='Texture2D' name='gbuffer1'/>
+  <variable type='Texture2D' name='gbuffer2'/>
   <variable type='Texture2D' format='int' name='reflectionMapIDTex'/>
 
   <variable type='cbuffer' name='cb_lightingPS_perFrame'>
@@ -39,8 +40,9 @@ LightingPSOut LightingPS(PostProcessVSOut vsOut)
   
   float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
   float4 gbuf1 = gbuffer1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  float4 gbuf2 = gbuffer2.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
   
-  Material mat = GbufferToMaterial(gbuf0, gbuf1);
+  Material mat = GbufferToMaterial(gbuf0, gbuf1, gbuf2);
   
   float linearDepth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
   
@@ -77,6 +79,8 @@ LightingPSOut LightingPS(PostProcessVSOut vsOut)
   psOut.light1 = 0.0f;
   psOut.light1.xyz = light_in * D * F * G / (4 * n_dot_l * n_dot_v);
   
+  psOut.light1.xyz += mat.emissive;
+  
   psOut.light0.w = 1.0f;
   psOut.light1.w = 1.0f;
   
@@ -94,31 +98,26 @@ float4 LightingIBLPS(PostProcessVSOut vsOut) : SV_TARGET
 
   float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
   float4 gbuf1 = gbuffer1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
-  float depthVNorm = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
   
-  //Calculate posV, posW
+  Material mat = GbufferToMaterial(gbuf0, gbuf1, 0.0f);
+  
+  float linearDepth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+//Compute posV, posW
   float2 screenSize = gbuffer0.Length.xy;
-  float2 posH_xy = (vsOut.pos.xy - 0.5) / screenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
-  float near = camNearFar.x;
-  float far = camNearFar.y;
-  float posV_z = depthVNorm * (far - near) + near;
-  float posV_x = posH_xy.x * posV_z / proj[0][0];
-  float posV_y = posH_xy.y * posV_z / proj[1][1];
-  float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
-  float4 posW = mul(posV, invView);
+  float3 posV = LinearDepthToViewPos(linearDepth, camNearFar, vsOut.pos.xy, screenSize, proj);
+  float3 posW = mul(float4(posV, 1.0f), invView).xyz;
   
-  float3 n = normalize(gbuf1.xyz * 2.0f - 1.0f);
+  float3 n = mat.normal;
 	float3 v = normalize(viewPos.xyz - posW.xyz);
   
-  float3 baseColor = gbuf0.xyz;
-  float metallic = gbuf0.w;
-  float roughness = gbuf1.w;
-  float3 specColor = lerp(0.03f, baseColor, metallic);
+  float3 specColor = lerp(0.03f, mat.baseColor, mat.metallic);
+  float3 diffColor = mat.baseColor - mat.baseColor * mat.metallic;
   
   float n_dot_v = max(1e-6, dot(n, v));
   
   float3 R = reflect(-v, n);
-  float3 iblColor = ComputeIBL(R, roughness, n_dot_v, specColor);
+  float3 iblColor = ComputeIBL(R, mat.roughness, n_dot_v, specColor, diffColor);
   
   return float4(iblColor, 1.0f);
 }

@@ -17,7 +17,7 @@ namespace ToyGE
 		Ptr<Texture> _normalsFittingTex;
 		Ptr<RenderEffect> _fx;
 
-		void InitTextures(int32_t width, int32_t height);
+		//void InitTextures(int32_t width, int32_t height);
 	};
 
 	class TOYGE_CORE_API DeferredRenderingLighting : public RenderAction
@@ -30,7 +30,7 @@ namespace ToyGE
 	private:
 		Ptr<RenderEffect> _deferredFX;
 
-		void InitTextures(int32_t width, int32_t height);
+		//void InitTextures(int32_t width, int32_t height);
 	};
 
 	class TOYGE_CORE_API DeferredRenderingShading : public RenderAction
@@ -43,7 +43,7 @@ namespace ToyGE
 	private:
 		Ptr<RenderEffect> _deferredFX;
 
-		void InitTextures(int32_t width, int32_t height);
+		//void InitTextures(int32_t width, int32_t height);
 	};
 }
 

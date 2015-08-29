@@ -45,6 +45,7 @@ namespace ToyGE
 		:_baseColor(1.0f, 1.0f, 1.0f),
 		_roughness(1.0f),
 		_metallic(0.0f),
+		_emissive(0.0f),
 		_bTranslucent(false),
 		_opacity(1.0f),
 		_bRefraction(false),
@@ -108,7 +109,8 @@ namespace ToyGE
 			MATERIAL_TEXTURE_OPACITYMASK,
 			MATERIAL_TEXTURE_BASECOLOR,
 			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_BUMP
+			MATERIAL_TEXTURE_BUMP,
+			MATERIAL_TEXTURE_EMISSIVE
 		};
 		static const std::vector<String> matTexMacroList =
 		{
@@ -117,7 +119,8 @@ namespace ToyGE
 			"MAT_ROUGHNESS_TEX",
 			/*"MAT_NORMAL_TEX",
 			"MAT_HEIGHT_TEX"*/
-			"MAT_BUMP_TEX"
+			"MAT_BUMP_TEX",
+			"MAT_EMISSIVE_TEX"
 		};
 
 		for (size_t i = 0; i < matTexTypeList.size(); ++i)
@@ -140,14 +143,16 @@ namespace ToyGE
 			MATERIAL_TEXTURE_OPACITYMASK,
 			MATERIAL_TEXTURE_BASECOLOR,
 			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_BUMP
+			MATERIAL_TEXTURE_BUMP,
+			MATERIAL_TEXTURE_EMISSIVE
 		};
 		static const std::vector<String> matTexVarNameList =
 		{
 			"opacityMaskTex",
 			"baseColorTex",
 			"roughnessTex",
-			"bumpTex"
+			"bumpTex",
+			"emissiveTex"
 		};
 
 		for (size_t i = 0; i < matTexTypeList.size(); ++i)
@@ -160,6 +165,7 @@ namespace ToyGE
 		effect->VariableByName("baseColor")->AsScalar()->SetValue(&_baseColor);
 		effect->VariableByName("roughness")->AsScalar()->SetValue(&_roughness);
 		effect->VariableByName("metallic")->AsScalar()->SetValue(&_metallic);
+		effect->VariableByName("emissive")->AsScalar()->SetValue(&_emissive);
 		effect->VariableByName("pomScale")->AsScalar()->SetValue(&_pomScale);
 		effect->VariableByName("opacity")->AsScalar()->SetValue(&_opacity);
 		effect->VariableByName("refractionIndex")->AsScalar()->SetValue(&_refractionIndex);
