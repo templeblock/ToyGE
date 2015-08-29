@@ -113,7 +113,7 @@ void SampleCommon::Startup()
 	Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->SetBackgroundRender(skyboxRender);
 
 	//UI
-	_twBar = TwNewBar("DeferredRendering");
+	_twBar = TwNewBar("Sample");
 
 	int size[2] = { 200, 400 };
 	TwSetParam(_twBar, nullptr, "size", TW_PARAM_INT32, 2, size);
