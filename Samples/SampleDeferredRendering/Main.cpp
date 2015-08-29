@@ -76,7 +76,6 @@ public:
 		auto twEnumType = TwDefineEnum("DeferredViewTextureType", bufferTypeEnumVals, _countof(bufferTypeEnumVals));
 		TwAddVarRW(_twBar, "ShowBuffer", twEnumType, &_viewTextureType, nullptr);
 
-
 		TwEnumVal colorWriteEnumVals[] = 
 		{
 			{ COLOR_WRITE_R, "R" },

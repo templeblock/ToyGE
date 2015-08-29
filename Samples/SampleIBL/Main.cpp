@@ -103,6 +103,7 @@ public:
 		camera->SetPos(XMFLOAT3(0.0f, 1.0f, 2.0f));
 		camera->Yaw(-XM_PI);
 
+		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "IBL");
 
 		TwAddVarRW(_twBar, "BaseColor", TW_TYPE_COLOR3F, &_matBaseColor, nullptr);
