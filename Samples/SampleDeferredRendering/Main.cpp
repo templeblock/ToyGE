@@ -61,6 +61,8 @@ public:
 
 
 		//Init UI
+		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "DeferredRendering");
+
 		TwEnumVal bufferTypeEnumVals[] = 
 		{
 			{ NONE, "None" },
@@ -73,7 +75,6 @@ public:
 
 		auto twEnumType = TwDefineEnum("DeferredViewTextureType", bufferTypeEnumVals, _countof(bufferTypeEnumVals));
 		TwAddVarRW(_twBar, "ShowBuffer", twEnumType, &_viewTextureType, nullptr);
-
 
 		TwEnumVal colorWriteEnumVals[] = 
 		{
