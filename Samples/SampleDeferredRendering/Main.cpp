@@ -61,6 +61,8 @@ public:
 
 
 		//Init UI
+		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "DeferredRendering");
+
 		TwEnumVal bufferTypeEnumVals[] = 
 		{
 			{ NONE, "None" },
