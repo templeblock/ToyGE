@@ -3,7 +3,7 @@
 using namespace ToyGE;
 using namespace XNA;
 
-class IBLSample : public SampleCommon
+class SampleIBL : public SampleCommon
 {
 public:
 	Ptr<Material> _mat;
@@ -29,7 +29,7 @@ public:
 	SceneType _curScene;
 	std::vector<Ptr<RenderComponent>> _objs;
 
-	IBLSample()
+	SampleIBL()
 		: _matBaseColor(1.0f),
 		_matRoughness(0.0f),
 		_matMetallic(1.0f),
@@ -153,7 +153,7 @@ public:
 
 int main()
 {
-	SampleCommon::Start(std::make_shared<IBLSample>());
+	SampleCommon::Start(std::make_shared<SampleIBL>());
 
 	return 0;
 }

@@ -4,7 +4,7 @@
 using namespace ToyGE;
 using namespace XNA;
 
-class DeferredRenderingSample : public SampleCommon
+class SampleDeferredRendering : public SampleCommon
 {
 public:
 	enum DeferredViewTextureType
@@ -21,7 +21,7 @@ public:
 	Ptr<SharedParamRender> _paramRender;
 	Vector4<ColorWriteMask> _colorWriteMask;
 
-	DeferredRenderingSample()
+	SampleDeferredRendering()
 	{
 		_sampleName = L"DeferredRendering";
 
@@ -127,7 +127,7 @@ public:
 
 int main()
 {
-	SampleCommon::Start(std::make_shared<DeferredRenderingSample>());
+	SampleCommon::Start(std::make_shared<SampleDeferredRendering>());
 
 	return 0;
 }
