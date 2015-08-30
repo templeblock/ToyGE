@@ -96,7 +96,10 @@ namespace ToyGE
 	void RenderView::RenderPostProcess()
 	{
 		for (auto & render : _postProcessRenders)
-			render->Render(_renderSharedEnv);
+		{
+			if(render->GetEnable())
+				render->Render(_renderSharedEnv);
+		}
 	}
 
 	void RenderView::BindParams(const Ptr<RenderEffect> & effect) const
