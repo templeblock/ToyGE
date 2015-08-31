@@ -39,6 +39,30 @@ namespace ToyGE
 		_look = look;
 		_up = up;
 		UpdateViewMatrix();
+
+		float3 look_ = *reinterpret_cast<const float3*>(&look);
+		float3 up_ = *reinterpret_cast<const float3*>(&up);
+		float3 right_ = cross(up_, look_);
+		up_ = cross(look_, right_);
+
+		_up = *reinterpret_cast<const XMFLOAT3*>(&up_);
+		_right = *reinterpret_cast<const XMFLOAT3*>(&right_);
+	}
+
+	void Camera::LookAt(const XMFLOAT3 & lookPos)
+	{
+		if (lookPos.x == _pos.x && lookPos.y == _pos.y && lookPos.z == _pos.z)
+			return;
+
+		float3 lookPos_ = *reinterpret_cast<const float3*>(&lookPos);
+		float3 pos_ = *reinterpret_cast<const float3*>(&_pos);
+		float3 look = normalize(lookPos_ - pos_);
+
+		XMFLOAT3 up = XMFLOAT3(0.0f, 1.0f, 0.0f);
+		if(std::abs(look.y) >= 0.99f)
+			up = XMFLOAT3(1.0f, 0.0f, 0.0f);
+
+		LookTo(_pos, *reinterpret_cast<const XMFLOAT3*>(&look), up);
 	}
 
 	void Camera::Walk(float value)
@@ -124,12 +148,22 @@ namespace ToyGE
 	{
 		_nearZ = nearZ;
 		_farZ = farZ;
-		auto xmProj = XMMatrixPerspectiveFovLH(FovAngle(), AspectRatio(), nearZ, farZ);
-		XMStoreFloat4x4(&_projMatrix, xmProj);
+		
+		UpdateProjMatrix();
+	}
 
-		using namespace XNA;
-		//XMMATRIX xmProj = XMLoadFloat4x4(&ProjMatrix());
-		ComputeFrustumFromProjection(&_frustum, &xmProj);
+	void PerspectiveCamera::SetNearPlane(float nearPlane)
+	{
+		_nearZ = nearPlane;
+
+		UpdateProjMatrix();
+	}
+
+	void PerspectiveCamera::SetFarPlane(float farPlane)
+	{
+		_farZ = farPlane;
+
+		UpdateProjMatrix();
 	}
 
 	XNA::Frustum PerspectiveCamera::GetFrustum() const
@@ -146,6 +180,16 @@ namespace ToyGE
 		XMStoreFloat4(&ret.Orientation, rot);
 
 		return ret;
+	}
+
+	void PerspectiveCamera::UpdateProjMatrix()
+	{
+		auto xmProj = XMMatrixPerspectiveFovLH(FovAngle(), AspectRatio(), _nearZ, _farZ);
+		XMStoreFloat4x4(&_projMatrix, xmProj);
+
+		using namespace XNA;
+		//XMMATRIX xmProj = XMLoadFloat4x4(&ProjMatrix());
+		ComputeFrustumFromProjection(&_frustum, &xmProj);
 	}
 
 

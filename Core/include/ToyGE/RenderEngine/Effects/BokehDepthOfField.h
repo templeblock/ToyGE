@@ -33,6 +33,21 @@ namespace ToyGE
 		CLASS_GET(BokehIlluminanceScale, float, _bokehIlluminanceScale);
 		CLASS_SET(BokehIlluminanceScale, float, _bokehIlluminanceScale);
 
+		CLASS_GET(FocalDistance, float, _focalDistance);
+		CLASS_SET(FocalDistance, float, _focalDistance);
+
+		CLASS_GET(FocalAreaLength, float, _focalAreaLength);
+		CLASS_SET(FocalAreaLength, float, _focalAreaLength);
+
+		CLASS_GET(NearAreaLength, float, _nearAreaLength);
+		CLASS_SET(NearAreaLength, float, _nearAreaLength);
+
+		CLASS_GET(FarAreaLength, float, _farAreaLength);
+		CLASS_SET(FarAreaLength, float, _farAreaLength);
+
+		CLASS_GET(MaxCoC, float, _maxCoC);
+		CLASS_SET(MaxCoC, float, _maxCoC);
+
 	private:
 		Ptr<RenderEffect> _fx;
 		Ptr<Texture> _bokehTex;
@@ -42,6 +57,13 @@ namespace ToyGE
 		float _maxBokehSize;
 		float _bokehSizeScale;
 		float _bokehIlluminanceScale;
+		float _focalDistance;
+		float _focalAreaLength;
+		float _nearAreaLength;
+		float _farAreaLength;
+		float _maxCoC;
+
+		Ptr<Texture> ComputeCoCPhy(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera);
 
 		Ptr<Texture> ComputeCoC(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera);
 

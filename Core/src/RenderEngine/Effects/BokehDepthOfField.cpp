@@ -18,14 +18,20 @@ namespace ToyGE
 {
 	BokehDepthOfField::BokehDepthOfField()
 		: _bDiskBlur(false),
-		_bokehIlluminanceThreshold(4.0f),
-		_minBokehSize(2.0f),
-		_maxBokehSize(20.0f),
+		_bokehIlluminanceThreshold(1.0f),
+		_minBokehSize(5.0f),
+		_maxBokehSize(10.0f),
 		_bokehSizeScale(1.0f),
-		_bokehIlluminanceScale(1.0f)
+		_bokehIlluminanceScale(1.0f),
+
+		_focalDistance(1.0f),
+		_focalAreaLength(1.0f),
+		_nearAreaLength(1.0f),
+		_farAreaLength(1.0f),
+		_maxCoC(20.0f)
 	{
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"BokehDOF.xml");
-		_bokehTex = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>()->AcquireResource(L"bokeh.dds");
+		_bokehTex = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>()->AcquireResource(L"Bokeh_Circle.dds");
 	}
 
 	void BokehDepthOfField::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
@@ -74,7 +80,7 @@ namespace ToyGE
 		bokehPointsResult.second->Release();
 	}
 
-	Ptr<Texture> BokehDepthOfField::ComputeCoC(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera)
+	Ptr<Texture> BokehDepthOfField::ComputeCoCPhy(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera)
 	{
 		auto re = Global::GetRenderEngine();
 		auto rc = re->GetRenderContext();
@@ -89,8 +95,8 @@ namespace ToyGE
 
 		auto phyCam = std::static_pointer_cast<PhysicalCamera>(camera);
 
-		_fx->VariableByName("focalLength")->AsScalar()->SetValue(&phyCam->GetFocalLength());
-		_fx->VariableByName("focalDistance")->AsScalar()->SetValue(&phyCam->GetFocalDistance());
+		_fx->VariableByName("phyFocalLength")->AsScalar()->SetValue(&phyCam->GetFocalLength());
+		_fx->VariableByName("phyFocalDistance")->AsScalar()->SetValue(&phyCam->GetFocalDistance());
 		float apertureSize = phyCam->GetFocalLength() / phyCam->GetFStops() * 0.5f;
 		_fx->VariableByName("aperture")->AsScalar()->SetValue(&apertureSize);
 
@@ -108,9 +114,39 @@ namespace ToyGE
 		rc->SetRenderInput(CommonInput::QuadInput());
 		rc->SetDepthStencil(rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
-		_fx->TechniqueByName("ComputeCoC")->PassByIndex(0)->Bind();
+		_fx->TechniqueByName("ComputeCoCPhy")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_fx->TechniqueByName("ComputeCoC")->PassByIndex(0)->UnBind();
+		_fx->TechniqueByName("ComputeCoCPhy")->PassByIndex(0)->UnBind();
+
+		return cocTex;
+	}
+
+	Ptr<Texture> BokehDepthOfField::ComputeCoC(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera)
+	{
+		auto texDesc = linearDepth->Desc();
+		texDesc.bindFlag = TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_SHADER_RESOURCE;
+		texDesc.format = RENDER_FORMAT_R16_FLOAT;
+
+		auto cocTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+
+		_fx->VariableByName("focalDistance")->AsScalar()->SetValue(&_focalDistance);
+		_fx->VariableByName("focalAreaLength")->AsScalar()->SetValue(&_focalAreaLength);
+		_fx->VariableByName("nearAreaLength")->AsScalar()->SetValue(&_nearAreaLength);
+		_fx->VariableByName("farAreaLength")->AsScalar()->SetValue(&_farAreaLength);
+		_fx->VariableByName("maxCoC")->AsScalar()->SetValue(&_maxCoC);
+
+		float2 camNearFar = float2(camera->Near(), camera->Far());
+		_fx->VariableByName("camNearFar")->AsScalar()->SetValue(&camNearFar);
+
+		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepth->CreateTextureView());
+
+		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ cocTex->CreateTextureView() }, 0);
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTargets(0.0f);
+
+		RenderQuad(_fx->TechniqueByName("ComputeCoC"),
+			0, 0, 0, 0,
+			0.0f, 0.0f, 1.0f, 1.0f,
+			rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 		return cocTex;
 	}
@@ -344,8 +380,8 @@ namespace ToyGE
 		//_fx->VariableByName("farBlurTex2")->AsShaderResource()->SetValue(farBlurTex[1]->CreateTextureView());
 		//_fx->VariableByName("minMaxCoCTex")->AsShaderResource()->SetValue(minMaxCoCTex->CreateTextureView());
 
-		float maxBlur = 15.0f;
-		_fx->VariableByName("maxBlur")->AsScalar()->SetValue(&maxBlur);
+		//float maxBlur = 15.0f;
+		_fx->VariableByName("maxCoC")->AsScalar()->SetValue(&_maxCoC);
 
 		rc->SetRenderTargets({ target }, 0);
 		rc->SetRenderInput(CommonInput::QuadInput());

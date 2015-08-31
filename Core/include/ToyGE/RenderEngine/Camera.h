@@ -37,6 +37,8 @@ namespace ToyGE
 
 		void LookTo(const XMFLOAT3 & pos, const XMFLOAT3 & look, const XMFLOAT3 & up);
 
+		void LookAt(const XMFLOAT3 & lookPos);
+
 		const XMFLOAT4X4 & ViewMatrix() const
 		{
 			return _viewMatrix;
@@ -120,11 +122,17 @@ namespace ToyGE
 			return _aspectRatio;
 		}
 
+		void SetNearPlane(float nearPlane);
+
+		void SetFarPlane(float farPlane);
+
 	protected:
 		XMFLOAT4X4 _projMatrix;
 		XNA::Frustum _frustum;
 		float _fovAngle;
 		float _aspectRatio;
+
+		void UpdateProjMatrix();
 	};
 
 	class TOYGE_CORE_API PhysicalCamera : public PerspectiveCamera
