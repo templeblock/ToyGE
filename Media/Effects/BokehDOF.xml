@@ -7,14 +7,15 @@
   <!--<include name="BlurConfig.xml"/>-->
   <include name="Util.xml"/>
 
+  <variable type="cbuffer" name="cb_camera">
+    <variable type="float2" name="camNearFar"/>
+  </variable>
 
-
-  <variable type="cbuffer" name="cb_coc">
-    <variable type="float" name="focalLength"/>
-    <variable type="float" name="focalDistance"/>
+  <variable type="cbuffer" name="cb_cocPhy">
+    <variable type="float" name="phyFocalLength"/>
+    <variable type="float" name="phyFocalDistance"/>
     <variable type="float" name="aperture"/>
     <variable type="float" name="pixelsPerMM"/>
-    <variable type="float2" name="camNearFar"/>
     <variable type="float2" name="_pad_coc"/>
   </variable>
   
@@ -23,12 +24,12 @@
   <shader>
     <![CDATA[
     
-float ComputeCoCPS(PostProcessVSOut vsOut) : SV_TARGET
+float ComputeCoCPhyPS(PostProcessVSOut vsOut) : SV_TARGET
 {
-  float f = focalLength; // in mm
+  float f = phyFocalLength; // in mm
   float p = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0).x;
   p = p * (camNearFar.y - camNearFar.x) + camNearFar.x;
-  float o = focalDistance;
+  float o = phyFocalDistance;
   float d = aperture; // in mm
   
   p *= 1000.0f;
@@ -54,6 +55,44 @@ float ComputeCoCPS(PostProcessVSOut vsOut) : SV_TARGET
     <state name='stencilRef' value='1'/>
   </variable>
 
+  <technique name="ComputeCoCPhy">
+    <pass>
+      <state value="disableDepth"/>
+      <vs entry="PostProcessVS"/>
+      <ps entry="ComputeCoCPhyPS"/>
+    </pass>
+  </technique>
+
+
+  <variable type="cbuffer" name="cb_coc">
+    <variable type="float" name="focalDistance"/>
+    <variable type="float" name="focalAreaLength"/>
+    <variable type="float" name="nearAreaLength"/>
+    <variable type="float" name="farAreaLength"/>
+    <variable type="float" name="maxCoC"/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+float ComputeCoCPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float z = linearDepthTex.SampleLevel(samplerLinear, vsOut.tex, 0).x;
+    float d = z * (camNearFar.y - camNearFar.x) + camNearFar.x;
+    
+    float coc = 0.0f;
+    
+    if(d > focalDistance)
+        coc = saturate( (d - focalDistance - focalAreaLength * 0.5f) / max(1e-4, farAreaLength) ) * maxCoC;
+    else
+        coc = saturate( (focalDistance - d - focalAreaLength * 0.5f) / max(1e-4, nearAreaLength) ) * maxCoC;
+        
+    return coc;
+}
+    
+    ]]>
+  </shader>
+
   <technique name="ComputeCoC">
     <pass>
       <state value="disableDepth"/>
@@ -61,12 +100,7 @@ float ComputeCoCPS(PostProcessVSOut vsOut) : SV_TARGET
       <ps entry="ComputeCoCPS"/>
     </pass>
   </technique>
-
-
-  <variable type="cbuffer" name="cb_layer">
-    <variable type="float" name="maxBlur"/>
-    <variable type="float3" name="_pad_layer"/>
-  </variable>
+  
 
   <variable type="Texture2D" name="cocTex"/>
   <variable type="Texture2D" name="sceneTex"/>
@@ -83,7 +117,7 @@ void SplitLayersPS(
   farLayer  = 0.0f;
   
   float coc = cocTex.SampleLevel(samplerPoint, vsOut.tex, 0).x;
-  //float blurSize = abs(coc) * maxBlur;
+  //float blurSize = abs(coc) * maxCoC;
   if(abs(coc) > 0.5f)
   {
     float4 sceneColor = sceneTex.SampleLevel(samplerLinear, vsOut.tex, 0);
@@ -184,7 +218,7 @@ float4 UnfocusedDiskBlurPS(PostProcessVSOut vsOut) : SV_TARGET
   color += color_o;
   weightAll += 1.0f;
   
-  float2 offset = min(abs(coc_o), maxBlur) * 0.5f * texelSize;
+  float2 offset = min(abs(coc_o), maxCoC) * 0.5f * texelSize;
   
   for(int i = 0; i < NUM_DISK_SAMPLES; ++i)
   {
@@ -192,8 +226,8 @@ float4 UnfocusedDiskBlurPS(PostProcessVSOut vsOut) : SV_TARGET
     float2 t_i = t_o + diskOffset * offset;
     
     float coc_i = cocTex.SampleLevel(samplerPointClamp, t_i, 0).x;
-    float weight_i = (coc_i >= coc_o) ? 1.0f : saturate(abs(coc_i) / maxBlur);
-    //weight_i *= abs(coc_i) >= length(diskOffset * min(abs(coc_o), maxBlur)) ? 1.0f : saturate(abs(coc_i) / maxBlur) * 0.5f;
+    float weight_i = (coc_i >= coc_o) ? 1.0f : saturate(abs(coc_i) / maxCoC);
+    //weight_i *= abs(coc_i) >= length(diskOffset * min(abs(coc_o), maxCoC)) ? 1.0f : saturate(abs(coc_i) / maxCoC) * 0.5f;
     //float weight_i = (coc_i >= coc_o) ? 1.0f : 0.0f;
     
     float4 color_i = blurInputTex.SampleLevel(samplerLinearClamp, t_i, 0);
@@ -454,7 +488,7 @@ float4 RecombinePS(PostProcessVSOut vsOut) : SV_TARGET
   float4 near = nearBlurTex.SampleLevel(samplerLinear, vsOut.tex, 0);
   
   float farMask = far.a;
-  float focalMask = 1.0f - saturate((abs(coc) - 0.5f) / maxBlur);
+  float focalMask = 1.0f - saturate((abs(coc) - 0.5f) / maxCoC);
   float nearMask = near.a;
   
   float4 color = 0.0f;
