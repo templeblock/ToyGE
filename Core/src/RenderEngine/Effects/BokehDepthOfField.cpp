@@ -165,11 +165,11 @@ namespace ToyGE
 		auto nearLayerTex = re->GetRenderFactory()->GetTexturePooled(texDesc);
 		auto farLayerTex = re->GetRenderFactory()->GetTexturePooled(texDesc);
 
-		auto preVP = rc->GetViewport();
+		/*auto preVP = rc->GetViewport();
 		auto vp = preVP;
 		vp.width = static_cast<float>(texDesc.width);
 		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		float maxBlur = 5.0f;
 		//_fx->VariableByName("maxBlur")->AsScalar()->SetValue(&maxBlur);
@@ -178,14 +178,18 @@ namespace ToyGE
 		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
 
 		rc->SetRenderTargets({ nearLayerTex->CreateTextureView(), farLayerTex->CreateTextureView() }, 0);
-		rc->SetRenderInput(CommonInput::QuadInput());
+		rc->ClearRenderTargets(0.0f);
+
+		RenderQuad(_fx->TechniqueByName("SplitLayers"));
+
+		/*rc->SetRenderInput(CommonInput::QuadInput());
 		rc->SetDepthStencil(ResourceView());
 
 		_fx->TechniqueByName("SplitLayers")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
 		_fx->TechniqueByName("SplitLayers")->PassByIndex(0)->UnBind();
 
-		rc->SetViewport(preVP);
+		rc->SetViewport(preVP);*/
 
 		return std::make_pair(nearLayerTex, farLayerTex);
 	}
@@ -287,20 +291,23 @@ namespace ToyGE
 
 		_fx->VariableByName("computeBokehInTex")->AsShaderResource()->SetValue(inputTex->CreateTextureView());
 
-		auto preVP = rc->GetViewport();
+		/*auto preVP = rc->GetViewport();
 		auto vp = preVP;
 		vp.width = static_cast<float>(resultTex->Desc().width);
 		vp.height = static_cast<float>(resultTex->Desc().height);
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
 		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		rc->SetRenderInput(CommonInput::QuadInput());
+
+		RenderQuad(_fx->TechniqueByName("ComputeBokehPoints"));
+
+		/*rc->SetRenderInput(CommonInput::QuadInput());
 
 		_fx->TechniqueByName("ComputeBokehPoints")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
 		_fx->TechniqueByName("ComputeBokehPoints")->PassByIndex(0)->UnBind();
 
-		rc->SetViewport(preVP);
+		rc->SetViewport(preVP);*/
 
 		return std::make_pair(bokehBuffer, resultTex);
 	}

@@ -14,8 +14,20 @@ namespace ToyGE
 
 		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
 
+		CLASS_SET(AORadius, float, _aoRadius)
+		CLASS_GET(AORadius, float, _aoRadius)
+
+		CLASS_SET(AOPower, float, _aoPower)
+		CLASS_GET(AOPower, float, _aoPower)
+
+		CLASS_SET(AOIntensity, float, _aoIntensity)
+		CLASS_GET(AOIntensity, float, _aoIntensity)
+
 	private:
 		Ptr<RenderEffect> _fx;
+		float _aoRadius;
+		float _aoPower;
+		float _aoIntensity;
 
 		void DownSampleNormalDepth(
 			const Ptr<Texture> & inNormalTex,
