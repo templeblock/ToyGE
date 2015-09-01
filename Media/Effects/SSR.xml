@@ -52,6 +52,8 @@ float HZBBuildPS(PostProcessVSOut vsOut) : SV_TARGET
     <variable type="float4x4" name="proj"/>
     <variable type="float2" name="cameraNearFar"/>
     <variable type="uint" name="frameCount"/>
+    <variable type="float" name="ssrMaxRoughness"/>
+    <variable type="float" name="ssrIntensity"/>
   </variable>
 
   <variable type="cbuffer" name="cb_dither">
@@ -240,10 +242,10 @@ float4 ScreenSpaceReflectionPS(PostProcessVSOut vsOut) : SV_TARGET
   float4 gbuf1 = gbuffer1.SampleLevel(samplerPointClamp, vsOut.tex, 0.0f);
   float roughness = gbuf1.w;
   
-  float maxRoughness = 0.9f;
-  float roughnessFade = 1.0 - saturate(roughness / maxRoughness);
+  //float maxRoughness = 0.9f;
+  float roughnessFade = 1.0 - saturate( roughness / max(1e-4, ssrMaxRoughness) );
   
-  [branch] if(roughnessFade == 0)
+  [branch] if(roughnessFade <= 1e-4)
     return 0;
   
   float curDepth = depthTex.SampleLevel(samplerPointClamp, vsOut.tex.xy, 0).x;
@@ -255,6 +257,7 @@ float4 ScreenSpaceReflectionPS(PostProcessVSOut vsOut) : SV_TARGET
   float metallic = gbuf0.w;
   float roughnessAdj = lerp(0.1f, 0.9f, roughness);
   float3 specColor = lerp(0.03f, baseColor, metallic);
+  float3 diffColor = baseColor - baseColor * metallic;
   
   float3 curNormalW = DecodeNormal(gbuf1.xyz);//normalize(gbuf1.xyz * 2.0f - 1.0f);
   float3 curNormalV = mul(float4(curNormalW, 0.0f), view).xyz;
@@ -328,7 +331,7 @@ float4 ScreenSpaceReflectionPS(PostProcessVSOut vsOut) : SV_TARGET
   float3 F = Fresnel_Schlick(v, n, specColor);
   float n_dot_v = max(1e-5, dot(n, v));
   
-  float3 reflectColor = traceColor * F * 5.0f;
+  float3 reflectColor = traceColor * (F + diffColor) * max(0.0f, ssrIntensity);
   
   return float4(reflectColor, 1.0f);
 }

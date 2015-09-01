@@ -16,6 +16,8 @@
 namespace ToyGE
 {
 	SSR::SSR()
+		: _ssrMaxRoughness(0.9f),
+		_ssrIntensity(5.0f)
 	{
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SSR.xml");
 
@@ -50,6 +52,9 @@ namespace ToyGE
 		auto frameCount = Global::GetInfo()->GetFrameCount();
 		_fx->VariableByName("frameCount")->AsScalar()->SetValue(&frameCount);
 
+		_fx->VariableByName("ssrMaxRoughness")->AsScalar()->SetValue(&_ssrMaxRoughness);
+		_fx->VariableByName("ssrIntensity")->AsScalar()->SetValue(&_ssrIntensity);
+
 		_fx->VariableByName("depthTex")->AsShaderResource()->SetValue(hzb->CreateTextureView(0, 0));
 		_fx->VariableByName("gbuffer0")->AsShaderResource()->SetValue(gbuffer0->CreateTextureView());
 		_fx->VariableByName("gbuffer1")->AsShaderResource()->SetValue(gbuffer1->CreateTextureView());
@@ -71,22 +76,22 @@ namespace ToyGE
 		//sceneTex->Release();
 	}
 
-	void SSR::InitDither()
-	{
-		float data[] =
-		{
-			0.0f, 8.0f, 2.0f, 10.0f,
-			12.0f, 4.0f, 14.0f, 6.0f,
-			3.0f, 11.0f, 1.0f, 9.0f,
-			15.0f, 7.0f, 13.0f, 5.0f
-		};
-		for (auto & i : data)
-		{
-			i /= 16.0f;
-		}
+	//void SSR::InitDither()
+	//{
+	//	float data[] =
+	//	{
+	//		0.0f, 8.0f, 2.0f, 10.0f,
+	//		12.0f, 4.0f, 14.0f, 6.0f,
+	//		3.0f, 11.0f, 1.0f, 9.0f,
+	//		15.0f, 7.0f, 13.0f, 5.0f
+	//	};
+	//	for (auto & i : data)
+	//	{
+	//		i /= 16.0f;
+	//	}
 
-		_fx->VariableByName("dither")->AsScalar()->SetValue(data);
-	}
+	//	_fx->VariableByName("dither")->AsScalar()->SetValue(data);
+	//}
 
 	Ptr<Texture> SSR::BuildHZB(const Ptr<Texture> & depthTex)
 	{
