@@ -16,6 +16,9 @@
 namespace ToyGE
 {
 	SSAO::SSAO()
+		: _aoRadius(0.05f),
+		_aoPower(10.0f),
+		_aoIntensity(0.5f)
 	{
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SSAO.xml");
 	}
@@ -27,17 +30,11 @@ namespace ToyGE
 
 		sharedEnviroment->GetView()->BindParams(_fx);
 
-		/*auto camera = std::static_pointer_cast<PerspectiveCamera>(sharedEnviroment->GetView()->GetCamera());
-		_fx->VariableByName("view")->AsScalar()->SetValue(&camera->ViewMatrix());
-		_fx->VariableByName("proj")->AsScalar()->SetValue(&camera->ProjMatrix());
-		float2 cameraNearFar = float2(camera->Near(), camera->Far());
-		_fx->VariableByName("cameraNearFar")->AsScalar()->SetValue(&cameraNearFar);*/
-
-		float invViewRatio = 1.0f;// / camera->AspectRatio();
+		auto camera = std::static_pointer_cast<PerspectiveCamera>(sharedEnviroment->GetView()->GetCamera());
+		float invViewRatio = 1.0f / camera->AspectRatio();
 		_fx->VariableByName("invViewRatio")->AsScalar()->SetValue(&invViewRatio);
 
-		float aoRadius = 0.08f;
-		_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&aoRadius);
+		_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&_aoRadius);
 
 		int32_t numMips = 2;
 
@@ -52,14 +49,14 @@ namespace ToyGE
 		}
 
 		std::vector<Ptr<Texture>> aoTexs(numMips);
-		float radius = aoRadius * static_cast<float>(1 << (numMips - 1));
+		float radius = _aoRadius * static_cast<float>(1 << (numMips - 1));
 		_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&radius);
 		aoTexs.back() = RenderAOTex(normalTexs.back(), depthTexs.back(), nullptr, nullptr, nullptr, false, numMips == 1);
 
 		for (int32_t i = numMips - 2; i >= 0; --i)
 		{
 			aoTexs[i] = RenderAOTex(normalTexs[i], depthTexs[i], aoTexs[i + 1], normalTexs[i + 1], depthTexs[i + 1], true, i == 0);
-			float radius = aoRadius * static_cast<float>(1 << i);
+			float radius = _aoRadius * static_cast<float>(1 << i);
 			_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&radius);
 		}
 
@@ -80,6 +77,8 @@ namespace ToyGE
 		CombineAO(aoTexs[0], sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView());
 		//Transform(aoTexs[0]->CreateTextureView(), sharedEnviroment->GetRenderTarget(), COLOR_WRITE_R);
 
+		sharedEnviroment->SetParam("AOTex", std::make_shared<SharedParam<Ptr<Texture>>>(aoTexs[0]));
+
 		/*normalTexMip1->Release();
 		depthTexMip1->Release();
 		aoTexMip1->Release();
@@ -88,8 +87,8 @@ namespace ToyGE
 			i->Release();
 		for (auto & i : depthTexs)
 			i->Release();
-		for (auto & i : aoTexs)
-			i->Release();
+		for (size_t i = 1; i < aoTexs.size(); ++i)
+			aoTexs[i]->Release();
 	}
 
 	void SSAO::DownSampleNormalDepth(
@@ -154,6 +153,9 @@ namespace ToyGE
 		float h = static_cast<float>(depthTex->Desc().height);
 		float4 texSize = float4(w, h, 1.0f / w, 1.0f / h);
 		_fx->VariableByName("texSize")->AsScalar()->SetValue(&texSize);
+
+		_fx->VariableByName("aoPower")->AsScalar()->SetValue(&_aoPower);
+		_fx->VariableByName("aoIntensity")->AsScalar()->SetValue(&_aoIntensity);
 
 		_fx->VariableByName("depthTex")->AsShaderResource()->SetValue(depthTex->CreateTextureView());
 		_fx->VariableByName("normalTex")->AsShaderResource()->SetValue(normalTex->CreateTextureView());
