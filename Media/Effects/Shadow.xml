@@ -83,7 +83,7 @@ uint PSSMFindSplitIndex(float3 posW)
   return index;
 }
 
-float ComputeShadow_PointLight(float3 posW, float3 lightPos, float2 screenPos, float3 normal)
+float ComputeShadow_PointLight(float3 posW, float3 lightPos)
 {
     float shadow = 1.0f;
     float3 dir = posW.xyz - lightPos.xyz;
@@ -121,7 +121,7 @@ float ComputeShadow_PointLight(float3 posW, float3 lightPos, float2 screenPos, f
       
 #elif SHADOW_TYPE == SHADOW_TYPE_PCF
     
-    shadow = ComputeShadow_PCF(shadowTexCubeArray, 0, posW.xyz - lightPos.xyz, pointMaxDist.x, screenPos, normal);
+    //shadow = ComputeShadow_PCF(shadowTexCubeArray, 0, posW.xyz - lightPos.xyz, pointMaxDist.x, screenPos, normal);
     //shadow += ComputeShadow_PCF(shadowTexCubeArray, 0, posW.xyz - lightPos.xyz, pointMaxDist.x, screenPos * 1.5);
     
     //shadow *= 0.5;

@@ -57,7 +57,7 @@ LightingPSOut LightingPS(PostProcessVSOut vsOut)
   float3 light_in = ComputeInLightRadiance(posW, n);
 
 //Calculate Shadow
-  float shadow = ComputeShadow(posW, posV.z, vsOut.pos.xy, mat.normal);
+  float shadow = ComputeShadow(posW, posV.z);
   light_in *= shadow;
   
   float3 l = -GetLightDir(posW);

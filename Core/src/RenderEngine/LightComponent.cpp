@@ -218,6 +218,7 @@ namespace ToyGE
 
 		effect->VariableByName("lightPos")->AsScalar()->SetValue(&_pos);
 		effect->VariableByName("lightDir")->AsScalar()->SetValue(&_direction);
+		effect->VariableByName("spotLightDecreaseFac")->AsScalar()->SetValue(&_decreaseSpeed);
 	}
 
 	void SpotLightComponent::OnRadianceChanged(const XMFLOAT3 & prevRadiance)
