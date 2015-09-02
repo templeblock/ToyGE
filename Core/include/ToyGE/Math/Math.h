@@ -163,13 +163,15 @@ namespace ToyGE
 	template <class T>
 	Vector3<T> normalize(const Vector3<T> & v)
 	{
-		return v / length(v);
+		float l = length(v);
+		return l == 0.0f ? 0.0f : v / l;
 	}
 
 	template <class T>
 	Vector4<T> normalize(const Vector4<T> & v)
 	{
-		return v / length(v);
+		float l = length(v);
+		return l == 0.0f ? 0.0f : v / l;
 	}
 
 

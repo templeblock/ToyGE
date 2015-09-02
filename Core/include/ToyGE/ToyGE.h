@@ -40,4 +40,5 @@
 #include "ToyGE\RenderEngine\Effects\MotionBlur.h"
 #include "ToyGE\RenderEngine\Effects\BokehDepthOfField.h"
 #include "ToyGE\RenderEngine\Effects\FXAA.h"
+#include "ToyGE\RenderEngine\Effects\VolumetricLight.h"
 

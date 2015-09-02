@@ -19,6 +19,9 @@
 namespace ToyGE
 {
 	VolumetricLight::VolumetricLight()
+		: _attenuation(0.1f),
+		_scattering(0.5f),
+		_phaseFunctionParam(0.5f)
 	{
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"VolumetricLight.xml");
 
@@ -122,9 +125,9 @@ namespace ToyGE
 		auto lightVolumeTexBlur = BilateralGaussBlur(lightVolumeTex, lowResLinearDepthTex);
 
 		//Upsampling
-		BilateralUpSampling(lightVolumeTexBlur, linearDepthTex, lowResLinearDepthTex, sharedEnviroment->GetView()->GetRenderTarget()->CreateTextureView());
+		BilateralUpSampling(lightVolumeTexBlur, linearDepthTex, lowResLinearDepthTex, sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView());
 
-		sharedEnviroment->GetView()->FlipRenderTarget();
+		//sharedEnviroment->GetView()->FlipRenderTarget();
 
 		//Restore Viewport
 		rc->SetViewport(preVP);
@@ -172,17 +175,19 @@ namespace ToyGE
 		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&light->Radiance());*/
 		_fx->VariableByName("pointLightRadius")->AsScalar()->SetValue(&maxDist);
 
+		light->BindMacros(_fx, false, camera);
+		_fx->UpdateData();
 		light->BindParams(_fx, false, camera);
 
 		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
 		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
 
-		float attenuation = 0.1f;
+		/*float attenuation = 0.1f;
 		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&phaseFunctionParam);
+		float phaseFunctionParam = 0.5f;*/
+		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
+		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
+		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
 
 		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
 
@@ -232,12 +237,27 @@ namespace ToyGE
 		float xzScale = tan(angle) * maxDist;
 		_spotLightVolumeGeo->SetScale(XMFLOAT3(xzScale, maxDist, xzScale));
 
-		float3 v0 = float3(0.0f, 1.0f, 0.0f);
+		float3 v0 = float3(0.0f, -1.0f, 0.0f);
 		float3 v1 = *(reinterpret_cast<const float3*>(&light->Direction()));
 		float3 rotateAxis = cross(v0, v1);
 		float sinAngle = length(rotateAxis);
-		//rotateAxis /= sinAngle;
-		float4 orientation = float4(rotateAxis.x, rotateAxis.y, rotateAxis.z, sqrt(1.0f - sinAngle * sinAngle));
+		float rotateAngle = std::asin(sinAngle);
+		float sinAngle_d2 = sin(rotateAngle * 0.5f);
+		float cosAngle_d2 = cos(rotateAngle * 0.5f);
+		rotateAxis = normalize(rotateAxis);
+
+		float4 orientation = float4(
+			rotateAxis.x * sinAngle_d2,
+			rotateAxis.y * sinAngle_d2,
+			rotateAxis.z * sinAngle_d2,
+			cosAngle_d2);
+		/*if (cosAngle <= 1e-4)
+		{
+			orientation.x *= cosAngle;
+			orientation.y *= cosAngle;
+			orientation.z *= cosAngle;
+		}*/
+
 		_spotLightVolumeGeo->SetOrientation(XMFLOAT4(orientation.x, orientation.y, orientation.z, orientation.w));
 		_spotLightVolumeGeo->UpdateTransform();
 		_fx->VariableByName("world")->AsScalar()->SetValue(&_spotLightVolumeGeo->GetTransformMatrix());
@@ -249,17 +269,19 @@ namespace ToyGE
 		_fx->VariableByName("spotLightAngle")->AsScalar()->SetValue(&angle);
 		_fx->VariableByName("spotLightDecrease")->AsScalar()->SetValue(&light->DecreaseSpeed());
 
+		light->BindMacros(_fx, false, camera);
+		_fx->UpdateData();
 		light->BindParams(_fx, false, camera);
 
 		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
 		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
 
-		float attenuation = 0.1f;
+		/*float attenuation = 0.1f;
 		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&phaseFunctionParam);
+		float phaseFunctionParam = 0.5f;*/
+		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
+		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
+		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
 
 		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
 
@@ -304,17 +326,19 @@ namespace ToyGE
 		/*_fx->VariableByName("lightDir")->AsScalar()->SetValue(&light->Direction());
 		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&light->Radiance());*/
 
+		light->BindMacros(_fx, false, camera);
+		_fx->UpdateData();
 		light->BindParams(_fx, false, camera);
 
 		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
 		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
 
-		float attenuation = 0.1f;
+		/*float attenuation = 0.1f;
 		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&phaseFunctionParam);
+		float phaseFunctionParam = 0.5f;*/
+		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
+		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
+		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
 
 		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
 
@@ -359,16 +383,20 @@ namespace ToyGE
 		//BlurX
 		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(lightVolumeTex->CreateTextureView());
 		rc->SetRenderTargets({ resultTexTmp->CreateTextureView() }, 0);
-		_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->UnBind();
+		RenderQuad(_fx->TechniqueByName("BilateralGaussBlurX"));
+
+		//_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->Bind();
+		//rc->DrawIndexed();
+		//_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->UnBind();
 
 		//BlurY
 		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(resultTexTmp->CreateTextureView());
 		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->Bind();
+		RenderQuad(_fx->TechniqueByName("BilateralGaussBlurY"));
+
+		/*_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->UnBind();
+		_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->UnBind();*/
 
 		resultTexTmp->Release();
 
@@ -383,27 +411,29 @@ namespace ToyGE
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		RenderViewport vp;
+		/*RenderViewport vp;
 		vp.width = static_cast<float>(highResLinearDepthTex->Desc().width);
 		vp.height = static_cast<float>(highResLinearDepthTex->Desc().height);
 		vp.topLeftX = vp.topLeftY = 0.0f;
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
-		rc->SetViewport(vp);
+		rc->SetViewport(vp);*/
 
-		float2 texelSize = 1.0f / float2(vp.width, vp.height);
+		float2 texelSize = 1.0f / highResLinearDepthTex->GetTexSize().v(VEC_Z, VEC_W);
 		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
 
 		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(lightVolumeTex->CreateTextureView());
 		_fx->VariableByName("highResLinearDepthTex")->AsShaderResource()->SetValue(highResLinearDepthTex->CreateTextureView());
 		_fx->VariableByName("lowResLinearDepthTex")->AsShaderResource()->SetValue(lowResLinearDepthTex->CreateTextureView());
 
-		rc->SetRenderInput(CommonInput::QuadInput());
+		//rc->SetRenderInput(CommonInput::QuadInput());
 		rc->SetRenderTargets({ target }, 0);
-		rc->SetDepthStencil(ResourceView());
+		//rc->SetDepthStencil(ResourceView());
 
-		_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->Bind();
+		RenderQuad(_fx->TechniqueByName("BilateralUpSampling"));
+
+		/*_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->Bind();
 		rc->DrawIndexed();
-		_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->UnBind();
+		_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->UnBind();*/
 	}
 }

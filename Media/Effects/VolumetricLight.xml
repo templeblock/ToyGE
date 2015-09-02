@@ -63,6 +63,7 @@ float3 GetWorldPos(
   return posW;
 }
 
+/*
 float PhaseFunction_HG(float g, float cosTheta)
 {
   float g2 = g * g;
@@ -71,6 +72,14 @@ float PhaseFunction_HG(float g, float cosTheta)
   numerator *= numerator;
   
   return numerator * 0.25 / ( PI * pow(abs(1 + g2 - gg * cosTheta), 3.0/2.0) );
+}
+*/
+
+float PhaseFunction_HG(float g, float cosTheta)
+{
+  float g2 = g * g;
+  
+  return 1.0 / (4.0 * PI) * (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 3.0/2.0);
 }
 
 
@@ -371,6 +380,7 @@ void RenderLightVolumeDirectionalPS(
 
   <variable type='RasterizerState' name='cullNone'>
     <state name='cullMode' value='NONE'/>
+    <state name='depthClipEnable' value='false'/>
   </variable>
 
   <variable type='BlendState' name='accumBS'>

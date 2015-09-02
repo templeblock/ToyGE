@@ -85,14 +85,14 @@ float3 ComputeInLightRadiance(float3 posW, float3 normalW)
 }
 
 
-float ComputeShadow(float3 posW, float viewDepth, float2 screenPos, float3 normal)
+float ComputeShadow(float3 posW, float viewDepth)
 {
     float shadow = 1.0f;
 
 #ifdef LIGHT_SHADOW
     
 #if LIGHT_TYPE == LIGHT_TYPE_POINT
-    shadow = ComputeShadow_PointLight(posW, lightPos, screenPos, normal);
+    shadow = ComputeShadow_PointLight(posW, lightPos);
 #elif LIGHT_TYPE == LIGHT_TYPE_SPOT
     shadow = ComputeShadow_SpotLight(posW, lightPos);
 #elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
