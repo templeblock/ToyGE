@@ -17,6 +17,7 @@
 #include "ToyGE\RenderEngine\DeferredRenderFramework.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
 #include "ToyGE\RenderEngine\ShadowTechnique.h"
+#include "ToyGE\RenderEngine\Scene.h"
 
 namespace ToyGE
 {
@@ -310,6 +311,8 @@ namespace ToyGE
 	{
 		auto re = Global::GetRenderEngine();
 		auto rc = re->GetRenderContext();
+
+		sharedEnviroment->GetView()->GetScene()->BindParams(_deferredFX);
 
 		auto gbuffer0 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(0))->As<SharedParam<Ptr<Texture>>>()->GetValue();
 		auto lightingTex0 = sharedEnviroment->ParamByName(CommonRenderShareName::Lighting(0))->As<SharedParam<Ptr<Texture>>>()->GetValue();

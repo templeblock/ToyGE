@@ -224,6 +224,7 @@ namespace ToyGE
 		auto mipsTexDesc = Desc();
 		mipsTexDesc.mipLevels = 0;
 		mipsTexDesc.bindFlag |= TEXTURE_BIND_GENERATE_MIPS;
+		mipsTexDesc.bindFlag &= ~TEXTURE_BIND_IMMUTABLE;
 		auto mipsTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(mipsTexDesc);
 
 		int32_t adjustArraySize = Desc().arraySize;
@@ -243,6 +244,8 @@ namespace ToyGE
 				arrayIndex //srcArrayIndex
 				);
 		}
+
+		mipsTex->GenerateMips();
 
 		return mipsTex;
 	}

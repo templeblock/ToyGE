@@ -72,6 +72,7 @@ void SampleCommon::Startup()
 	//Create Scene
 	auto scene = std::make_shared<Scene>();
 	Global::SetScene(scene);
+	scene->SetAmbientColor(0.1f);
 
 	//Create View
 	_renderView = std::make_shared<RenderView>();

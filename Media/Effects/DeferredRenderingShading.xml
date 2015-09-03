@@ -3,7 +3,8 @@
 <effect>
   <include name="PostProcess.xml"/>
   <include name="CommonState.xml"/>
-  
+  <include name="Scene.xml"/>
+
   <!--Shading-->
 
   <variable type='Texture2D' name='gbuffer0'/>
@@ -28,14 +29,14 @@ float4 ShadingPS(PostProcessVSOut vsOut) : SV_TARGET
   float metallic = gbuf0.w;
   float3 diffColor = baseColor - baseColor * metallic;
 
-  float3 embient = 0.05f;
+  //float3 embient = 0.05f;
   
   float ao = 1.0f;
 #ifdef SHADING_AO
   ao = aoTex.SampleLevel(samLinear, vsOut.tex, 0).x;
 #endif
   
-  float3 color = diffColor * light0.xyz + baseColor * embient * ao + light1.xyz;
+  float3 color = diffColor * light0.xyz + baseColor * ambientColor * ao + light1.xyz;
   //float3 color = light0.xyz;
   
   return float4(color, 1.0f);

@@ -4,15 +4,19 @@
 
 #include "ToyGE\Kernel\PreIncludes.h"
 #include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Math\Math.h"
 
 namespace ToyGE
 {
 	class SceneObject;
 	class RenderView;
+	class RenderEffect;
 
-	class TOYGE_CORE_API Scene
+	class TOYGE_CORE_API Scene : public std::enable_shared_from_this<Scene>
 	{
 	public:
+		Scene();
+
 		int32_t AddSceneObject(const Ptr<SceneObject> & obj);
 
 		Ptr<SceneObject> GetSceneObject(int32_t objID) const;
@@ -21,10 +25,7 @@ namespace ToyGE
 
 		void RemoveSceneObject(int32_t objID);
 
-		void AddView(const Ptr<RenderView> & view)
-		{
-			_views.push_back(view);
-		}
+		void AddView(const Ptr<RenderView> & view);
 
 		int32_t NumViews() const
 		{
@@ -36,15 +37,16 @@ namespace ToyGE
 			return _views[index];
 		}
 
-		//void InitViews();
+		CLASS_SET(AmbientColor, float3, _ambientColor);
+		CLASS_GET(AmbientColor, float3, _ambientColor);
 
-		/*void RenderSpecific(uint32_t stepID);
-		void RenderExtra();*/
+		void BindParams(const Ptr<RenderEffect> & fx);
 
 	private:
 		static int32_t objID;
 		std::map<int32_t, Ptr<SceneObject>> _sceneObjsMap;
 		std::vector<Ptr<RenderView>> _views;
+		float3 _ambientColor;
 	};
 }
 

@@ -5,6 +5,8 @@
   <include name='Material.xml'/>
   <include name='View.xml'/>
   <include name='ScreenSpaceTracing.xml'/>
+  <include name='CommonState.xml'/>
+  <include name="Scene.xml"/>
   
   <variable type='cbuffer' name='cb_translucencyVS_perObj'>
     <variable type='float4x4' name='world'/>
@@ -47,10 +49,10 @@ struct TranslucencyVSOut
 	  float3 tex : TEXCOORD;
 #endif
 
-    float3 normalW : NORMAL;
+    float3 normal : NORMAL;
   
 #ifdef MAT_BUMP_TEX
-	  float3 tangentW : TANGENT;
+	  float3 tangent : TANGENT;
 #endif
 };
 
@@ -64,9 +66,9 @@ TranslucencyVSOut TranslucencyVS(TranslucencyVSIn vsIn)
 #ifdef MAT_UV_COORD
     vsOut.tex = vsIn.tex;
 #endif
-    vsOut.normalW = mul(float4(vsIn.normal, 0.0f), world).xyz;
-#ifdef NORMAL_TEX
-    vsOut.tangentW = mul(float4(vsIn.normal, 0.0f), world).xyz;
+    vsOut.normal = mul(float4(vsIn.normal, 0.0f), world).xyz;
+#ifdef MAT_BUMP_TEX
+    vsOut.tangent = mul(float4(vsIn.normal, 0.0f), world).xyz;
 #endif
   
     return vsOut;
@@ -134,7 +136,7 @@ void OITSceneRenderingPS(TranslucencyVSOut vsOut)
     #ifdef MAT_UV_COORD
         vsOut.tex,
     #endif
-        vsOut.normalW
+        vsOut.normal
     #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
@@ -143,11 +145,11 @@ void OITSceneRenderingPS(TranslucencyVSOut vsOut)
   
   float3 diffColor = mat.baseColor - mat.baseColor * mat.metallic;
   
-  float3 transmittance = diffColor * (1.0f - mat.opacity);
+  float3 transmittance = (1.0f - mat.opacity);
   
 #ifdef OIT_EMBIENT
-  float3 embient = 0.2f;
-  float3 lighting = diffColor * embient * opacity;
+  //float3 embient = 0.2f;
+  float3 lighting = diffColor * ambientColor * mat.opacity + mat.emissive;
 #else
   float3 lighting = ComputeLigting(mat, vsOut);
 #endif
@@ -191,6 +193,93 @@ void OITSceneRenderingPS(TranslucencyVSOut vsOut)
   <shader>
     <![CDATA[
     
+float3 NoOITLigthingPS(TranslucencyVSOut vsOut) : SV_TARGET
+{
+#ifdef MAT_OPACITYMASK_TEX
+    float opacityMask = GetOpacityMask(vsOut.tex.xy);
+    clip(opacityMask - 0.1f);
+#endif
+    
+    Material mat = GetMeterial
+    (
+    #ifdef MAT_UV_COORD
+        vsOut.tex,
+    #endif
+        vsOut.normal
+    #ifdef MAT_BUMP_TEX
+        , vsOut.tangent
+    #endif
+    );
+  
+    float3 lighting = ComputeLigting(mat, vsOut);
+  
+    return lighting;
+}
+
+
+float4 NoOITTransmittancePS(TranslucencyVSOut vsOut) : SV_TARGET
+{
+#ifdef MAT_OPACITYMASK_TEX
+    float opacityMask = GetOpacityMask(vsOut.tex.xy);
+    clip(opacityMask - 0.1f);
+#endif
+    
+    Material mat = GetMeterial
+    (
+    #ifdef MAT_UV_COORD
+        vsOut.tex,
+    #endif
+        vsOut.normal
+    #ifdef MAT_BUMP_TEX
+        , vsOut.tangent
+    #endif
+    );
+
+    float3 diffColor = mat.baseColor - mat.baseColor * mat.metallic;
+  
+    //float3 transmittance = diffColor * (1.0f - mat.opacity);
+    
+    //float3 embient = 0.2f;
+    float3 lighting = diffColor * ambientColor * mat.opacity + mat.emissive;
+    
+    return float4(lighting, 1.0f - mat.opacity);
+}
+    
+    ]]>
+  </shader>
+
+  <technique name="NoOITLigthing">
+    <pass>
+      <state value="noDepthWrite"/>
+      <state value="bs_srcOne_dstOne_add"/>
+      <vs entry="TranslucencyVS"/>
+      <ps entry="NoOITLigthingPS"/>
+    </pass>
+  </technique>
+
+  <technique name="NoOITLigthingDualFace">
+    <pass>
+      <state value="noDepthWrite"/>
+      <state value="cullNone"/>
+      <state value="bs_srcOne_dstOne_add"/>
+      <vs entry="TranslucencyVS"/>
+      <ps entry="NoOITLigthingPS"/>
+    </pass>
+  </technique>
+  
+  <technique name="NoOITTransmittancePS">
+    <pass>
+      <state value="noDepthWrite"/>
+      <state value="bs_srcOne_dstSrcAlpha_add"/>
+      <vs entry="TranslucencyVS"/>
+      <ps entry="NoOITTransmittancePS"/>
+    </pass>
+  </technique>
+  
+
+  <shader>
+    <![CDATA[
+    
 float4 RefractionBackFacePS(TranslucencyVSOut vsOut) : SV_TARGET
 {
   float4 result;
@@ -202,7 +291,7 @@ float4 RefractionBackFacePS(TranslucencyVSOut vsOut) : SV_TARGET
   #ifdef MAT_UV_COORD
     vsOut.tex,
   #endif
-    vsOut.normalW
+    vsOut.normal
   #ifdef MAT_BUMP_TEX
     , vsOut.tangent
   #endif
@@ -356,7 +445,7 @@ float4 RefractionPS(TranslucencyVSOut vsOut) : SV_TARGET
     #ifdef MAT_UV_COORD
         vsOut.tex,
     #endif
-        vsOut.normalW
+        vsOut.normal
     #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
@@ -398,7 +487,7 @@ float4 LightingPS(TranslucencyVSOut vsOut) : SV_TARGET
     #ifdef MAT_UV_COORD
         vsOut.tex,
     #endif
-        vsOut.normalW
+        vsOut.normal
     #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
@@ -421,15 +510,15 @@ float4 LightingEmbientPS(TranslucencyVSOut vsOut) : SV_TARGET
     #ifdef MAT_UV_COORD
         vsOut.tex,
     #endif
-        vsOut.normalW
+        vsOut.normal
     #ifdef MAT_BUMP_TEX
         , vsOut.tangent
     #endif
     );
   float3 diffColor = mat.baseColor - mat.baseColor * mat.metallic;
 
-  float embient = 1.0f;
-  float3 color = diffColor * embient * mat.opacity;
+  //float embient = 1.0f;
+  float3 color = diffColor * ambientColor * mat.opacity;
   
   return float4(color, 1.0f);
 }
