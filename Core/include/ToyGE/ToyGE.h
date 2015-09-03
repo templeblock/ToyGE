@@ -41,4 +41,7 @@
 #include "ToyGE\RenderEngine\Effects\BokehDepthOfField.h"
 #include "ToyGE\RenderEngine\Effects\FXAA.h"
 #include "ToyGE\RenderEngine\Effects\VolumetricLight.h"
+#include "ToyGE\RenderEngine\Effects\AtmosphereRendering.h"
+#include "ToyGE\RenderEngine\Effects\PostProcessVolumetricLight.h"
+#include "ToyGE\RenderEngine\Effects\ImageBasedLensFlare.h"
 

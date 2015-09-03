@@ -3,6 +3,7 @@
 <effect>
   <include name="PostProcess.xml"/>
   <include name="CommonState.xml"/>
+  <include name="Util.xml"/>
   
   <variable type="Texture2D" name="sceneTex"/>
   <variable type="Texture2D" name="linearDepthTex"/>
@@ -10,7 +11,7 @@
   <shader>
     <![CDATA[
     
-float4 StartupPS(PostProcessVSOut vsOut) : SV_TARGET
+float4 SetupPS(PostProcessVSOut vsOut) : SV_TARGET
 {
     float4 color = sceneTex.SampleLevel(samplerPoint, vsOut.tex, 0);
     float depth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0).x;
@@ -24,11 +25,11 @@ float4 StartupPS(PostProcessVSOut vsOut) : SV_TARGET
     ]]>
   </shader>
 
-  <technique name='Startup'>
+  <technique name='Setup'>
     <pass>
       <state value='disableDepth'/>
       <vs entry='PostProcessVS'/>
-      <ps entry='StartupPS'/>
+      <ps entry='SetupPS'/>
     </pass>
   </technique>
   
@@ -38,31 +39,33 @@ float4 StartupPS(PostProcessVSOut vsOut) : SV_TARGET
   
   <variable type="cbuffer" name="cb_raidalBlur">
     <variable type="float2" name="lightPosUV"/>
+    <variable type="float" name="density"/>
+    <variable type="float" name="intensity"/>
+    <variable type="float" name="decay"/>
   </variable>
   
   <shader>
     <![CDATA[
 
-#define NUM_SAMPLES 25
+#define NUM_SAMPLES 12
   
 float4 RadialBlurPS(PostProcessVSOut vsOut) : SV_TARGET
 {
-  float density = 0.5f;
-  float weight = 0.4f;
-  float decay = 0.8f;
-  float maxLen = 0.8f;
+  //float density = 0.8f;
+  //float weight = 0.7f;
+  //float decay = 0.9f;
   
   float2 uvCenter = vsOut.tex;
   
   float centerToLightUVLen = length(uvCenter - lightPosUV);
   
-  [branch] if(centerToLightUVLen >= maxLen)
-      return 0.0f;
-  
   float2 uvStep = (lightPosUV - uvCenter) * density / NUM_SAMPLES;
   
-  float2 sampleUV = uvCenter;
-  float sampleWeight = weight;
+  float dither = InterleavedGradientNoise(vsOut.pos.xy, 0.5f);
+  dither = dither + 0.5f;
+  
+  float2 sampleUV = uvCenter + dither * uvStep;
+  float sampleWeight = 1.0f;
   
   float4 colorAccum = radialBlurInTex.SampleLevel(samplerLinearClamp, sampleUV, 0);
   
@@ -81,13 +84,11 @@ float4 RadialBlurPS(PostProcessVSOut vsOut) : SV_TARGET
   
   float2 lightPosH = lightPosUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
   float centerLen = sqrt(max(1e-4, dot(lightPosH, lightPosH)));
-  float borderDecay = saturate(8.0f -  centerLen * 7.0f);
+  float borderDecay = 1.0f - saturate( (centerLen - 0.0f) / 1.0f );
   
-  //colorAccum *= borderDecay;
+  colorAccum *= borderDecay;
   
-  colorAccum *= saturate(8.0f - (centerToLightUVLen) / maxLen * 8.0f);
-  
-  return float4(colorAccum.xyz, 1.0f);
+  return float4(colorAccum.xyz * intensity, 1.0f);
 }
     
     ]]>
@@ -105,9 +106,57 @@ float4 RadialBlurPS(PostProcessVSOut vsOut) : SV_TARGET
   <technique name='RadialBlur'>
     <pass>
       <state value='disableDepth'/>
-      <state value='accumBlend'/>
+      <!--<state value='accumBlend'/>-->
       <vs entry='PostProcessVS'/>
       <ps entry='RadialBlurPS'/>
+    </pass>
+  </technique>
+
+
+  <variable type='cbuffer' name='cb_blurVL'>
+    <variable type='float4' name='texSize'/>
+  </variable>
+
+  <variable type='Texture2D' name='volumetricLightTex'/>
+
+  <shader>
+    <![CDATA[
+  
+float4 BlurVolumetricLightPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float4 centerColor = volumetricLightTex.SampleLevel(samplerLinear, vsOut.tex, 0);
+    
+    float4 colorSum = 0.0f;
+    
+    float2 dir = lightPosUV - vsOut.tex;
+    float len = length(dir);
+    if(len <= 1e-4)
+        return centerColor;
+        
+    dir /= len;
+    
+    [unroll] for(int i = -1; i <= 1; ++i)
+    {
+        if( i == 0 )
+            continue;
+        
+        colorSum += volumetricLightTex.SampleLevel(samplerLinear, vsOut.tex + i * dir * texSize.z * 2.0f, 0);
+    }
+    
+    colorSum /= 3;
+    
+    return colorSum;
+}
+  
+    ]]>
+  </shader>
+  
+  <technique name='BlurVolumetricLight'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='accumBlend'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='BlurVolumetricLightPS'/>
     </pass>
   </technique>
   
