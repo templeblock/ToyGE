@@ -856,6 +856,14 @@ void AddSingleScatteringPS(
 //#define NUM_SAMPLELINES 1024
 //#define MAX_SAMPLES_PERLINE 1024
 
+#ifndef NUM_SAMPLELINES
+#define NUM_SAMPLELINES 1024
+#endif
+
+#ifndef MAX_SAMPLES_PERLINE
+#define MAX_SAMPLES_PERLINE 1024
+#endif
+
 bool IsInScreen(float2 pos)
 {
   static const float epison = 0.2;
