@@ -5,10 +5,17 @@
 #include "ToyGE\RenderEngine\SceneCuller.h"
 #include "ToyGE\RenderEngine\Camera.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
+#include "ToyGE\RenderEngine\RenderEffect.h"
 
 namespace ToyGE
 {
 	int32_t Scene::objID = 0;
+
+	Scene::Scene()
+		: _ambientColor(0.0f)
+	{
+
+	}
 
 	int32_t Scene::AddSceneObject(const Ptr<SceneObject> & obj)
 	{
@@ -37,6 +44,18 @@ namespace ToyGE
 	void Scene::RemoveSceneObject(int32_t objID)
 	{
 		_sceneObjsMap.erase(objID);
+	}
+
+	void Scene::AddView(const Ptr<RenderView> & view)
+	{
+		_views.push_back(view);
+		view->SetScene(shared_from_this());
+	}
+
+
+	void Scene::BindParams(const Ptr<RenderEffect> & fx)
+	{
+		fx->VariableByName("ambientColor")->AsScalar()->SetValue(&_ambientColor);
 	}
 
 	//void Scene::InitViews()

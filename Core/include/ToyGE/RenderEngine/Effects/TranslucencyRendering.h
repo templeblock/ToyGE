@@ -32,6 +32,13 @@ namespace ToyGE
 		Ptr<RenderBuffer> _oitCounterBuffer;
 		Ptr<RenderEffect> _oitSortFX;
 
+		void NoOITRender(
+			const std::vector<Ptr<RenderComponent>> & objs,
+			const std::vector<Ptr<LightComponent>> & lights,
+			const Ptr<Camera> & camera,
+			const Ptr<Texture> & targetTex, 
+			const ResourceView & rawDepth);
+
 		void OITRender(
 			const std::vector<Ptr<RenderComponent>> & objs,
 			const Ptr<LightComponent> & light,

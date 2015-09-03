@@ -120,7 +120,7 @@ namespace ToyGE
 				mat->AddTexture(MATERIAL_TEXTURE_OPACITYMASK, basePath + wPath, 0);
 			}
 
-			//Opacity
+			//EMISSIVE
 			for (uint32_t texIndex = 0; texIndex != pAiMat->GetTextureCount(aiTextureType_EMISSIVE); ++texIndex)
 			{
 				aiString path;

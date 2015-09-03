@@ -20,6 +20,7 @@
 #include "ToyGE\RenderEngine\RenderInput.h"
 #include "boost\assert.hpp"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
+#include "ToyGE\RenderEngine\Scene.h"
 
 namespace ToyGE
 {
@@ -95,6 +96,8 @@ namespace ToyGE
 		});
 
 		//Rendering Caustics
+		//sharedEnviroment->GetView()->BindParams(_fx);
+
 		auto & view = sharedEnviroment->GetView()->GetCamera()->ViewMatrix();
 		auto viewXM = XMLoadFloat4x4(&view);
 		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
@@ -128,39 +131,54 @@ namespace ToyGE
 		rc->SetDepthStencil(rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
 		sharedEnviroment->GetView()->BindParams(_fx);
+		sharedEnviroment->GetView()->GetScene()->BindParams(_fx);
 
-		std::vector<Ptr<RenderComponent>> oitRenderObjs;
+		bool bOIT = CheckRenderConfig<String>(sharedEnviroment, "OIT", "true");
+
+		std::vector<Ptr<RenderComponent>> batchRenderObjs;
 
 		_fx->SetExtraMacros({});
 		int32_t objIndex = 0;
 		while (objIndex < static_cast<int32_t>(translucentObjs.size()))
 		{
-			oitRenderObjs.clear();
+			batchRenderObjs.clear();
 
 			while (objIndex < static_cast<int32_t>(translucentObjs.size()) && !translucentObjs[objIndex]->GetMaterial()->IsRefraction())
-				oitRenderObjs.push_back(translucentObjs[objIndex++]);
+				batchRenderObjs.push_back(translucentObjs[objIndex++]);
 
-			for (auto & light : sharedEnviroment->GetView()->GetRenderLights())
+			if (bOIT)
 			{
+
+				for (auto & light : sharedEnviroment->GetView()->GetRenderLights())
+				{
+					OITRender(
+						batchRenderObjs,
+						light,
+						sharedEnviroment->GetView()->GetCamera(),
+						sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
+						backgroundTex,
+						rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+
+					sceneTex->CopyTo(backgroundTex, 0, 0, 0, 0, 0, 0, 0);
+				}
+				//Embient
 				OITRender(
-					oitRenderObjs,
-					light,
+					batchRenderObjs,
+					nullptr,
 					sharedEnviroment->GetView()->GetCamera(),
 					sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
 					backgroundTex,
 					rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
-
-				sceneTex->CopyTo(backgroundTex, 0, 0, 0, 0, 0, 0, 0);
 			}
-			//Embient
-			OITRender(
-				oitRenderObjs,
-				nullptr,
-				sharedEnviroment->GetView()->GetCamera(),
-				sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
-				backgroundTex,
-				rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
-
+			else
+			{
+				NoOITRender(
+					batchRenderObjs,
+					sharedEnviroment->GetView()->GetRenderLights(),
+					sharedEnviroment->GetView()->GetCamera(),
+					sharedEnviroment->GetView()->GetRenderResult(),
+					rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			}
 			sceneTex->CopyTo(backgroundTex, 0, 0, 0, 0, 0, 0, 0);
 
 			//Refraction
@@ -184,6 +202,67 @@ namespace ToyGE
 		backgroundTex->Release();
 		lightingTex->Release();
 		resultTex->Release();
+	}
+
+	void TranslucencyRendering::NoOITRender(
+		const std::vector<Ptr<RenderComponent>> & objs,
+		const std::vector<Ptr<LightComponent>> & lights,
+		const Ptr<Camera> & camera,
+		const Ptr<Texture> & targetTex,
+		const ResourceView & rawDepth)
+	{
+		auto rc = Global::GetRenderEngine()->GetRenderContext();
+
+		//auto texDesc = targetTex->Desc();
+		//auto lightingTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+
+		//rc->ClearRenderTargets({ lightingTex->CreateTextureView() }, 0.0f);
+
+		rc->SetRenderTargets({ targetTex->CreateTextureView() }, 0);
+		rc->SetDepthStencil({ rawDepth });
+
+		_fx->SetExtraMacros({});
+
+		Ptr<Material> curMat;
+		for (auto & obj : objs)
+		{
+			if (curMat != obj->GetMaterial())
+			{
+				curMat = obj->GetMaterial();
+				curMat->BindMacros(_fx);
+				_fx->UpdateData();
+				curMat->BindParams(_fx);
+			}
+
+			//Ambient
+			_fx->VariableByName("world")->AsScalar()->SetValue(&obj->GetTransformMatrix());
+			rc->SetRenderInput(obj->GetMesh()->AcquireRender()->GetRenderInput());
+			for (int32_t passIndex = 0; passIndex < _fx->TechniqueByName("NoOITTransmittancePS")->NumPasses(); ++passIndex)
+			{
+				_fx->TechniqueByName("NoOITTransmittancePS")->PassByIndex(passIndex)->Bind();
+				rc->DrawIndexed();
+				_fx->TechniqueByName("NoOITTransmittancePS")->PassByIndex(passIndex)->UnBind();
+			}
+
+			String techName = curMat->IsDualFace() ? "NoOITLigthingDualFace" : "NoOITLigthing";
+
+			//Lighting
+			for (auto & light : lights)
+			{
+				light->BindMacros(_fx, false, camera);
+				_fx->UpdateData();
+				light->BindParams(_fx, false, camera);
+
+				_fx->VariableByName("world")->AsScalar()->SetValue(&obj->GetTransformMatrix());
+				rc->SetRenderInput(obj->GetMesh()->AcquireRender()->GetRenderInput());
+				for (int32_t passIndex = 0; passIndex < _fx->TechniqueByName(techName)->NumPasses(); ++passIndex)
+				{
+					_fx->TechniqueByName(techName)->PassByIndex(passIndex)->Bind();
+					rc->DrawIndexed();
+					_fx->TechniqueByName(techName)->PassByIndex(passIndex)->UnBind();
+				}
+			}
+		}
 	}
 
 	void TranslucencyRendering::OITRender(

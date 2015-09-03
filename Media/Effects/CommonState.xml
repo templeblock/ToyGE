@@ -52,5 +52,14 @@
       <state name="dstBlendAlpha" value="ZERO"/>
     </state>
   </variable>
+
+  <variable type='BlendState' name='bs_srcOne_dstSrcAlpha_add'>
+    <state name="blendRTDesc" index="0">
+      <state name="blendEnable" value="true"/>
+      <state name="srcBlend" value="ONE"/>
+      <state name="dstBlend" value="SRC_ALPHA"/>
+      <state name="dstBlendAlpha" value="ZERO"/>
+    </state>
+  </variable>
   
 </effect>
