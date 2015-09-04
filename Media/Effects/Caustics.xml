@@ -19,7 +19,7 @@
     <variable type="float3" name="viewPos"/>
   </variable>
 
-  <variable type="Texture2D" name="heightTex"/>
+  <variable type="Texture2D" name="bumpTex"/>
   
   <shader>
     <![CDATA[
@@ -96,10 +96,15 @@ float3 RecieverPosPS(RecieverPosVSOut vsOut) : SV_TARGET
 
   float3 view = normalize(viewPos.xyz - vsOut.posW);
   float scale = pomScale.x;
-  vsOut.tex.xy = POM(vsOut.normalW, vsOut.tangentW, view, vsOut.tex.xy, heightTex, scale);
   
-  float h = heightTex.Sample(samplerLinear, vsOut.tex.xy)[HEIGHT_CHANNEL] * scale;
-  vsOut.posW += vsOut.normalW * h;
+  float3 posT, vecW;
+  ParallaxOcclusionMapping(vsOut.normalW, vsOut.tangentW, view, vsOut.tex.xy, bumpTex, 3, scale, posT, vecW);
+  
+  vsOut.tex.xy = posT.xy;
+  vsOut.posW += vecW;
+  
+  //float h = heightTex.Sample(samplerLinear, vsOut.tex.xy)[HEIGHT_CHANNEL] * scale;
+  //vsOut.posW += vsOut.normalW * h;
 #endif
 
   return vsOut.posW;
@@ -257,7 +262,7 @@ float4 SplatingPS(SplatingGSOut gsOut) : SV_TARGET
   
   float pointArea = pointSize.x * pointSize.x;
   
-  return float4(color, gsOut.weight / pointArea);
+  return float4(color, gsOut.weight / (pointArea));
 }
 
 ]]>
