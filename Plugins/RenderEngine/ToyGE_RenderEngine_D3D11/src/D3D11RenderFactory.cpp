@@ -74,7 +74,7 @@ namespace ToyGE
 
 			std::stringstream ss;
 			auto str = shaderText.c_str();// reinterpret_cast<const char*>(pData);
-			for (size_t i = 0; str[i] != 0; ++i)
+			for (size_t i = 0; i < shaderText.size(); ++i)
 			{
 				if (str[i] == '%')
 					ss << '%';

@@ -60,7 +60,7 @@ namespace ToyGE
 
 		Ptr<Mesh> CreateCausticsMesh(const Ptr<Mesh> & mesh);
 
-		void InitCausticsMap(const Ptr<LightComponent> & light);
+		void InitCausticsMap(const Ptr<LightComponent> & light, float pointSize);
 	};
 }
 

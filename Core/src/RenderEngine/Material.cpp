@@ -130,6 +130,11 @@ namespace ToyGE
 			else
 				effect->RemoveExtraMacro(matTexMacroList[i]);
 		}
+
+		if(IsPOM())
+			effect->AddExtraMacro("MAT_POM", "");
+		else
+			effect->RemoveExtraMacro("MAT_POM");
 	}
 
 	void Material::BindParams(const Ptr<RenderEffect> & effect)

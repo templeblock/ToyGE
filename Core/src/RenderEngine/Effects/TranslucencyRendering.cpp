@@ -21,6 +21,7 @@
 #include "boost\assert.hpp"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
 #include "ToyGE\RenderEngine\Scene.h"
+#include "ToyGE\RenderEngine\RenderConfig.h"
 
 namespace ToyGE
 {
@@ -48,7 +49,7 @@ namespace ToyGE
 		auto rc = re->GetRenderContext();
 		auto factory = re->GetRenderFactory();
 
-		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();//std::static_pointer_cast<Texture>(sharedEnviroment->GetView()->GetRenderTarget().resource);
+		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();
 		auto rawDepth = sharedEnviroment->ParamByName(CommonRenderShareName::RawDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
 		auto linearDepth = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
 		auto gbuffer0 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(0))->As<SharedParam<Ptr<Texture>>>()->GetValue();
@@ -61,16 +62,6 @@ namespace ToyGE
 		auto lightingTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 		auto backgroundTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		/*texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
-		auto backFaceInfo = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		texDesc.mipLevels = 1;
-		texDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
-		texDesc.format = RENDER_FORMAT_D32_FLOAT;
-		auto backFaceRenderDepth = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);*/
-
-		ToyGE_ASSERT(sceneTex->CopyTo(backgroundTex, 0, 0, 0, 0, 0, 0, 0));
 
 		//Cull And Sort Objects
 		std::vector<Ptr<RenderComponent>> translucentObjs;
@@ -96,8 +87,6 @@ namespace ToyGE
 		});
 
 		//Rendering Caustics
-		//sharedEnviroment->GetView()->BindParams(_fx);
-
 		auto & view = sharedEnviroment->GetView()->GetCamera()->ViewMatrix();
 		auto viewXM = XMLoadFloat4x4(&view);
 		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
@@ -110,23 +99,34 @@ namespace ToyGE
 		_causticsFX->VariableByName("camNearFar")->AsScalar()->SetValue(&camNearFar, sizeof(camNearFar));
 		_causticsFX->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepth->CreateTextureView());
 		_causticsFX->VariableByName("gbuffer0")->AsShaderResource()->SetValue(gbuffer0->CreateTextureView());
+
+		auto pointSizeConfig = sharedEnviroment->GetView()->GetRenderConfig()->configMap["CausticsPointSize"];
+		float pointSize = 0.1f;
+		if(pointSizeConfig.size() > 0)
+			 pointSize = std::stof(pointSizeConfig);
+
 		for (auto & light : sharedEnviroment->GetView()->GetRenderLights())
 		{
 			if (light->IsCastCaustics())
 			{
-				InitCausticsMap(light);
+				InitCausticsMap(light, pointSize);
 				auto recieverPosMap = _causticsRecieverPosMap[light];
 				auto causticsMap = _causticsRenderMap[light];
 				_causticsFX->VariableByName("recieverPosTexCube")->AsShaderResource()->SetValue(recieverPosMap->CreateTextureView_Cube(0, 1, 0, 1));
 				_causticsFX->VariableByName("causticsTexCube")->AsShaderResource()->SetValue(causticsMap->CreateTextureView_Cube(0, 1, 0, 1));
-				rc->SetRenderTargets({ backgroundTex->CreateTextureView() }, 0);
-				rc->SetDepthStencil(ResourceView());
+				rc->SetRenderTargets({ sceneTex->CreateTextureView() }, 0);
+
+				RenderQuad(_causticsFX->TechniqueByName("CausticsRendering"));
+
+				/*rc->SetDepthStencil(ResourceView());
 				rc->SetRenderInput(CommonInput::QuadInput());
 				_causticsFX->TechniqueByName("CausticsRendering")->PassByIndex(0)->Bind();
 				rc->DrawIndexed();
-				_causticsFX->TechniqueByName("CausticsRendering")->PassByIndex(0)->UnBind();
+				_causticsFX->TechniqueByName("CausticsRendering")->PassByIndex(0)->UnBind();*/
 			}
 		}
+
+		ToyGE_ASSERT(sceneTex->CopyTo(backgroundTex, 0, 0, 0, 0, 0, 0, 0));
 
 		rc->SetDepthStencil(rawDepth->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
@@ -591,7 +591,7 @@ namespace ToyGE
 		return causticsMesh;
 	}
 
-	void TranslucencyRendering::InitCausticsMap(const Ptr<LightComponent> & light)
+	void TranslucencyRendering::InitCausticsMap(const Ptr<LightComponent> & light, float pointSize)
 	{
 		auto recieverPosMapFind = _causticsRecieverPosMap.find(light);
 		if (recieverPosMapFind == _causticsRecieverPosMap.end())
@@ -713,7 +713,7 @@ namespace ToyGE
 						_causticsFX->VariableByName("viewPos")->AsScalar()->SetValue(&pointLight->GetPos());
 
 						auto heightTex = obj->GetMaterial()->AcquireRender()->GetTexture(MATERIAL_TEXTURE_BUMP, 0);
-						_causticsFX->VariableByName("heightTex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
+						_causticsFX->VariableByName("bumpTex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
 
 						_causticsFX->TechniqueByName("RecieverPosPOM")->PassByIndex(0)->Bind();
 						rc->DrawIndexed();
@@ -753,7 +753,7 @@ namespace ToyGE
 				_causticsFX->VariableByName("lightPos")->AsScalar()->SetValue(&lightPos, sizeof(lightPos));
 				auto & radiance = pointLight->Radiance();
 				_causticsFX->VariableByName("lightRadiance")->AsScalar()->SetValue(&radiance, sizeof(radiance));
-				float pointSize = 0.1f;
+				//float pointSize = 0.1f;
 				_causticsFX->VariableByName("pointSize")->AsScalar()->SetValue(&pointSize, sizeof(pointSize));
 				_causticsFX->VariableByName("pointTex")->AsShaderResource()->SetValue(pointTex->CreateTextureView());
 

@@ -117,10 +117,10 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
     GBufferPSOut psOut;
   
 #ifdef MAT_POM
-    float3 view = normalize(viewPos - vsOut.posW);
+    float3 viewDir = normalize(cameraPos - vsOut.posW);
     float scale = pomScale;
     float3 posT, vecW;
-    ParallaxOcclusionMapping(vsOut.normal, vsOut.tangent, view, vsOut.tex.xy, bumpTex, 3, scale, posT, vecW);
+    ParallaxOcclusionMapping(vsOut.normal, vsOut.tangent, viewDir, vsOut.tex.xy, bumpTex, 3, scale, posT, vecW);
     vsOut.tex.xy = posT.xy;
     vsOut.posW += vecW;
 #endif
