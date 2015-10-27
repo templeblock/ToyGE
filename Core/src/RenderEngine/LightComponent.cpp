@@ -237,7 +237,7 @@ namespace ToyGE
 		memset(&_influenceAABB, 0, sizeof(_influenceAABB));
 
 		_shadowTechnique = std::make_shared<ShadowTechnique>();
-		_shadowTechnique->SetDepthTechnique(std::make_shared<SDSMDepthTechnique>());
+		_shadowTechnique->SetDepthTechnique(std::make_shared<PSSMDepthTechnique>());
 		auto evsm = std::make_shared<ShadowRenderTechniqueEVSM2>();
 		//evsm->SetSoftness(0.08f);
 		_shadowTechnique->SetRenderTechnique(evsm);
