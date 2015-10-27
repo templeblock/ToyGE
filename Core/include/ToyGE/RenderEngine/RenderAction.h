@@ -10,6 +10,7 @@ namespace ToyGE
 	class RenderSharedEnviroment;
 	class RenderEffect;
 	class Texture;
+	class RenderBuffer;
 
 	class TOYGE_CORE_API RenderAction
 	{

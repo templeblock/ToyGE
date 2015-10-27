@@ -31,7 +31,8 @@ void _toyge_assert(const CharT * expr, const char * msg, const char * file, long
 	::_assert_log(ss.str());
 #endif
 
-	std::abort();
+	//std::abort();
+	throw std::runtime_error("");
 }
 
 #if defined(DEBUG) || defined(_DEBUG)

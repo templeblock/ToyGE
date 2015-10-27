@@ -72,11 +72,13 @@ void SampleCommon::Startup()
 	//Create Scene
 	auto scene = std::make_shared<Scene>();
 	Global::SetScene(scene);
-	scene->SetAmbientColor(0.1f);
+	scene->SetAmbientColor(0.02f);
 
 	//Create View
 	_renderView = std::make_shared<RenderView>();
 	scene->AddView(_renderView);
+
+	_renderView->SetRenderConfig(std::make_shared<RenderConfig>());
 
 	//Set Resize Events
 	Global::GetRenderEngine()->GetWindow()->OnResizeEvent().connect(

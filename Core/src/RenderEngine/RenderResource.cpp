@@ -23,7 +23,7 @@ namespace ToyGE
 		ResourceView view;
 		view.resource = shared_from_this();
 		view.subDesc.bufferDesc.firstElement = firstElement;
-		view.subDesc.bufferDesc.numElements = numElements;
+		view.subDesc.bufferDesc.numElements = numElements == 0 ? static_cast<RenderBuffer*>(this)->Desc().numElements : numElements;
 		view.subDesc.bufferDesc.uavFlags = uavFlags;
 		view.subDesc.bufferDesc.uavInitalCounts = uavInitalCounts;
 		view.formatHint = format;
@@ -44,6 +44,8 @@ namespace ToyGE
 		auto & texDesc = static_cast<Texture*>(this)->Desc();
 		if (TEXTURE_CUBE == texDesc.type)
 			ToyGE_ASSERT(firstArray + arraySize <= static_cast<Texture*>(this)->Desc().arraySize * 6);
+		else if (TEXTURE_3D == texDesc.type)
+			ToyGE_ASSERT(firstArray + arraySize <= static_cast<Texture*>(this)->Desc().depth);
 		else
 			ToyGE_ASSERT(firstArray + arraySize <= static_cast<Texture*>(this)->Desc().arraySize);
 		ToyGE_ASSERT(RENDER_RESOURCE_TEXTURE == ResourceType());

@@ -16,9 +16,146 @@
 #include "ToyGE\RenderEngine\DeferredRenderFramework.h"
 #include "ToyGE\RenderEngine\RenderInput.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
+#include "ToyGE\RenderEngine\OctreeCuller.h"
 
 namespace ToyGE
 {
+	namespace
+	{
+		static float2 ComputeSplit(
+			const float2 & camNearFar, 
+			int32_t splitIndex,
+			int32_t numSplits)
+		{
+			float splitLogUni_C = 0;
+
+			float camNear = camNearFar.x;
+			float camFar = camNearFar.y;
+
+			float nearZLog = camNear * pow((camFar / camNear), static_cast<float>(splitIndex) / static_cast<float>(numSplits));
+			float nearZUni = camNear + (camFar - camNear) * (static_cast<float>(splitIndex) / static_cast<float>(numSplits));
+			float nearZ = splitLogUni_C * nearZLog + (1.0f - splitLogUni_C) * nearZUni;
+
+			float farZLog = camNear * pow((camFar / camNear), static_cast<float>(splitIndex + 1) / static_cast<float>(numSplits));
+			float farZUni = camNear + (camFar - camNear) * (static_cast<float>(splitIndex + 1) / static_cast<float>(numSplits));
+			float farZ = splitLogUni_C * farZLog + (1.0f - splitLogUni_C) * farZUni;
+
+			return float2(nearZ, farZ);
+		}
+
+		static XMFLOAT4X4 ComputeCropMatrix(const float3 & min, const float3 & max)
+		{
+			float3 scale;
+			float3 offset;
+			scale.x = 2.0f / (max.x - min.x);
+			scale.y = 2.0f / (max.y - min.y);
+			scale.z = 1.0f / (max.z - min.z);
+			offset.x = (max.x + min.x) * -0.5f * scale.x;
+			offset.y = (max.y + min.y) * -0.5f * scale.y;
+			offset.z = -min.z * scale.z;
+
+			auto cropMatXM = XMMatrixSet
+				(
+					scale.x, 0.0f, 0.0f, 0.0f,
+					0.0f, scale.y, 0.0f, 0.0f,
+					0.0f, 0.0f, scale.z, 0.0f,
+					offset.x, offset.y, offset.z, 1.0f
+					);
+			XMFLOAT4X4 cropMat;
+			XMStoreFloat4x4(&cropMat, cropMatXM);
+
+			return cropMat;
+		}
+
+		static XMFLOAT4X4 ComputeCropMatrixSplit(
+			const float2 & split,
+			float tanFovDiv2,
+			float aspectRatio,
+			const float3 & lightPos,
+			const float3 & lightLook,
+			const float3 & lightUp,
+			const float3 & lightRight,
+			float3 & outMin,
+			float3 & outMax)
+		{
+			float nearZ = split.x;
+			float nearY = tanFovDiv2 * nearZ;
+			float nearX = nearY * aspectRatio;
+
+			float farZ = split.y;
+			float farY = tanFovDiv2 * farZ;
+			float farX = farY * aspectRatio;
+
+			float3 pn0 = lightPos + lightLook * nearZ - lightRight * nearX + lightUp * nearY;
+			float3 pn1 = lightPos + lightLook * nearZ + lightRight * nearX + lightUp * nearY;
+			float3 pn2 = lightPos + lightLook * nearZ + lightRight * nearX - lightUp * nearY;
+			float3 pn3 = lightPos + lightLook * nearZ - lightRight * nearX - lightUp * nearY;
+
+			float3 pf0 = lightPos + lightLook * farZ - lightRight * farX + lightUp * farY;
+			float3 pf1 = lightPos + lightLook * farZ + lightRight * farX + lightUp * farY;
+			float3 pf2 = lightPos + lightLook * farZ + lightRight * farX - lightUp * farY;
+			float3 pf3 = lightPos + lightLook * farZ - lightRight * farX - lightUp * farY;
+
+			float3 min = vecMin({ pn0, pn1, pn2, pn3, pf0, pf1, pf2, pf3 });
+			float3 max = vecMax({ pn0, pn1, pn2, pn3, pf0, pf1, pf2, pf3 });
+			max.x += 0.1f;
+			max.y += 0.1f;
+			max.z += 50.0f;
+			min.x -= 0.1f;
+			min.y -= 0.1f;
+			min.z -= 100.0f;
+
+			auto cropMat = ComputeCropMatrix(min, max);
+
+			outMin = min;
+			outMax = max;
+
+			return cropMat;
+		}
+
+		static void CullRenderElements(
+			const float3 & splitMin,
+			const float3 & splitMax,
+			const XMFLOAT4X4 & invLightView,
+			const float3 & lightX,
+			const float3 & lightY,
+			const float3 & lightZ,
+			std::vector<Ptr<RenderComponent>> & outCullElements)
+		{
+			float3 min = FLT_MAX;
+			float3 max = -FLT_MAX;
+
+			XNA::AxisAlignedBox aabbLS;
+			Math::MinMaxToAxisAlignedBox(splitMin, splitMax, aabbLS);
+			float3 center;
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&center), XMVector3TransformCoord(XMLoadFloat3(&aabbLS.Center), XMLoadFloat4x4(&invLightView)));
+
+			/*float3 lightX, lightY, lightZ;
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightX), rightXM);
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightY), upXM);
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightZ), lookXM);*/
+
+			for (int i = 0; i < 8; ++i)
+			{
+				float3 p = center;
+				p += (i & 1) ? lightX * aabbLS.Extents.x : lightX * -aabbLS.Extents.x;
+				p += (i & 2) ? lightY * aabbLS.Extents.y : lightY * -aabbLS.Extents.y;
+				p += (i & 4) ? lightZ * aabbLS.Extents.z : lightZ * -aabbLS.Extents.z;
+				min = vecMin(p, min);
+				max = vecMax(p, max);
+			}
+			XNA::AxisAlignedBox aabb;
+			Math::MinMaxToAxisAlignedBox(min, max, aabb);
+
+			std::vector<Ptr<Cullable>> renderCull;
+			auto renderCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
+			renderCuller->Cull(aabb, renderCull);
+			//std::vector<Ptr<RenderComponent>> renderElements;
+			for (auto & elem : renderCull)
+				outCullElements.push_back(std::static_pointer_cast<RenderComponent>(elem));
+		}
+	}
+
 	int32_t PSSMDepthTechnique::_maxNumSplits = 4;
 	int32_t PSSMDepthTechnique::_defaultNumSplits = 3;
 
@@ -32,9 +169,9 @@ namespace ToyGE
 	void PSSMDepthTechnique::RenderDepth(
 		const Ptr<Texture> & shadowMap,
 		const Ptr<LightComponent> & light,
-		const Ptr<RenderSharedEnviroment> & sharedEnv)
+		const Ptr<RenderSharedEnviroment> & sharedEnv,
+		const std::array<Ptr<Texture>, 3> & rsm)
 	{
-
 		auto camera = sharedEnv->GetView()->GetCamera();
 
 		float2 nearFar = GetNearFar(sharedEnv);
@@ -46,6 +183,11 @@ namespace ToyGE
 		XMVECTOR upXM = abs(look.y) < 0.99f ? XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f) : XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
 		XMVECTOR rightXM = XMVector3Normalize(XMVector3Cross(upXM, lookXM));
 		upXM = XMVector3Cross(lookXM, rightXM);
+
+		float3 lightX, lightY, lightZ;
+		XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightX), rightXM);
+		XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightY), upXM);
+		XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightZ), lookXM);
 
 		auto lightViewMatXM = XMMatrixLookToLH(XMVectorZero(), lookXM, upXM);
 		XMFLOAT4X4 lightView;
@@ -84,7 +226,7 @@ namespace ToyGE
 		const float splitLogUni_C = 0.0f;
 		for (int32_t splitIndex = 0; splitIndex < _numSplits; ++splitIndex)
 		{
-			float nearZLog = camNear * pow((camFar / camNear), static_cast<float>(splitIndex) / static_cast<float>(_numSplits));
+			/*float nearZLog = camNear * pow((camFar / camNear), static_cast<float>(splitIndex) / static_cast<float>(_numSplits));
 			float nearZUni = camNear + (camFar - camNear) * (static_cast<float>(splitIndex) / static_cast<float>(_numSplits));
 			float nearZ = splitLogUni_C * nearZLog + (1.0f - splitLogUni_C) * nearZUni;
 			float nearY = tanFovDiv2 * nearZ;
@@ -132,21 +274,22 @@ namespace ToyGE
 				offset.x, offset.y, offset.z, 1.0f
 				);
 			cropMat.push_back(XMFLOAT4X4());
-			XMStoreFloat4x4(&cropMat[splitIndex], cropMatXM);
+			XMStoreFloat4x4(&cropMat[splitIndex], cropMatXM);*/
 
-			_splitConfig[splitIndex] = nearZ;
-			_splitConfig[splitIndex + 1] = farZ;
+			auto split = ComputeSplit(nearFar, splitIndex, _numSplits);
+			float3 min, max;
+			cropMat.push_back(
+				ComputeCropMatrixSplit(
+					split, 
+					tanFovDiv2, 
+					perspecCamera->AspectRatio(), 
+					camPos_L, camLook_L, camUp_L, camRight_L, 
+					min, max));
+
+			_splitConfig[splitIndex] = split.x;
+			_splitConfig[splitIndex + 1] = split.y;
 			_splitMinMax[splitIndex] = std::make_pair(min, max);
 		}
-
-		//std::vector<Ptr<Cullable>> renderCull;
-		//auto renderCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
-		////renderCuller->GetAllElements(renderCull);
-		//renderCuller->Cull(dirLight->GetBoundsAABB(), renderCull);
-		//std::vector<Ptr<RenderComponent>> renderElements;
-		//for (auto & elem : renderCull)
-		//	renderElements.push_back(std::static_pointer_cast<RenderComponent>(elem));
-
 
 		_lightViewMat = lightView;
 		_lightCropMat = cropMat;
@@ -176,21 +319,21 @@ namespace ToyGE
 		auto orientationXM = XMQuaternionRotationMatrix(invLightViewXM);
 		XMFLOAT4 orientation;
 		XMStoreFloat4(&orientation, orientationXM);
-
-		static bool _b = true;
+		XMFLOAT4X4 invLightView;
+		XMStoreFloat4x4(&invLightView, invLightViewXM);
 
 		int32_t numSplits = _numSplits;
-		_fx->VariableByName("numSplits")->AsScalar()->SetValue(&numSplits, sizeof(numSplits));
+		//_fx->VariableByName("numSplits")->AsScalar()->SetValue(&numSplits, sizeof(numSplits));
 		for (int32_t splitIndex = 0; splitIndex < _numSplits; ++splitIndex)
 		{
 			_fx->VariableByName("lightView")->AsScalar()->SetValue(&lightView);
 			_fx->VariableByName("lightCrop")->AsScalar()->SetValue(&cropMat[splitIndex], sizeof(cropMat[splitIndex]));
-			auto lightMaxDistVar = _fx->VariableByName("lightMaxDist")->AsScalar();
-			float dist = _splitMinMax[splitIndex].second.z - _splitMinMax[splitIndex].first.z;
-			//for (size_t i = 0; i < _splitMinMax.size(); ++i)
-			//{
-				//lightMaxDistVar->SetValue(&dist, sizeof(dist), sizeof(float4) * i);
-			lightMaxDistVar->SetValue(&dist, sizeof(dist));
+			//auto lightMaxDistVar = _fx->VariableByName("lightMaxDist")->AsScalar();
+			//float dist = _splitMinMax[splitIndex].second.z - _splitMinMax[splitIndex].first.z;
+			////for (size_t i = 0; i < _splitMinMax.size(); ++i)
+			////{
+			//	//lightMaxDistVar->SetValue(&dist, sizeof(dist), sizeof(float4) * i);
+			//lightMaxDistVar->SetValue(&dist, sizeof(dist));
 			//}
 			rc->SetDepthStencil(tempDS->CreateTextureView());
 			rc->ClearDepthStencil(1.0f, 0);
@@ -251,37 +394,13 @@ namespace ToyGE
 			//	cubeObj->UpdateTransform();
 			//}
 
-			float3 min = FLT_MAX;
-			float3 max = -FLT_MAX;
-
-			XNA::AxisAlignedBox aabbLS;
-			Math::MinMaxToAxisAlignedBox(_splitMinMax[splitIndex].first, _splitMinMax[splitIndex].second, aabbLS);
-			float3 center;
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&center), XMVector3TransformCoord(XMLoadFloat3(&aabbLS.Center), invLightViewXM));
-
-			float3 lightX, lightY, lightZ;
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightX), rightXM);
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightY), upXM);
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightZ), lookXM);
-
-			for (int i = 0; i < 8; ++i)
-			{
-				float3 p = center;
-				p += (i & 1) ? lightX * aabbLS.Extents.x : lightX * -aabbLS.Extents.x;
-				p += (i & 2) ? lightY * aabbLS.Extents.y : lightY * -aabbLS.Extents.y;
-				p += (i & 4) ? lightZ * aabbLS.Extents.z : lightZ * -aabbLS.Extents.z;
-				min = vecMin(p, min);
-				max = vecMax(p, max);
-			}
-			XNA::AxisAlignedBox aabb;
-			Math::MinMaxToAxisAlignedBox(min, max, aabb);
-
-			std::vector<Ptr<Cullable>> renderCull;
-			auto renderCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
-			renderCuller->Cull(aabb, renderCull);
 			std::vector<Ptr<RenderComponent>> renderElements;
-			for (auto & elem : renderCull)
-				renderElements.push_back(std::static_pointer_cast<RenderComponent>(elem));
+
+			CullRenderElements(
+				_splitMinMax[splitIndex].first, _splitMinMax[splitIndex].second,
+				invLightView,
+				lightX, lightY, lightZ,
+				renderElements);
 
 			//auto technique = _fx->TechniqueByName("PSSM");
 			for (auto & elem : renderElements)
@@ -290,7 +409,7 @@ namespace ToyGE
 				if (elem->GetMaterial()->NumTextures(MATERIAL_TEXTURE_OPACITYMASK) > 0)
 				{
 					//technique = _fx->TechniqueByName("PSSM_OPACITYTEX");
-					_fx->SetExtraMacros({ { "OPACITY_TEX", "" } });
+					_fx->SetExtraMacros({ { "MAT_OPACITY_TEX", "" } });
 					auto opacityTex = elem->GetMaterial()->AcquireRender()->GetTexture(MATERIAL_TEXTURE_OPACITYMASK, 0);
 					_fx->VariableByName("opacityTex")->AsShaderResource()->SetValue(opacityTex->CreateTextureView());
 				}
@@ -311,6 +430,130 @@ namespace ToyGE
 				}
 			}
 		}
+
+
+		//Render RSM for LPV
+		if (light->IsCastLPV())
+		{
+			tempDS->Release();
+			tempDSDesc.width = rsm[0]->Desc().width;
+			tempDSDesc.height = rsm[0]->Desc().height;
+			tempDS = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(tempDSDesc);
+
+			vp.width = static_cast<float>(tempDSDesc.width);
+			vp.height = static_cast<float>(tempDSDesc.height);
+			rc->SetViewport(vp);
+
+			auto sceneAABB = Global::GetRenderEngine()->GetSceneRenderObjsCuller()->GetSceneAABB();
+
+			float3 sceneMin, sceneMax;
+			Math::AxisAlignedBoxToMinMax(sceneAABB, sceneMin, sceneMax);
+			float3 sceneCenter = (sceneMin + sceneMax) * 0.5f;
+			float3 sceneExtents = (sceneMax - sceneMin) * 0.5f;
+
+			float3 lightMin = FLT_MAX;
+			float3 lightMax = -FLT_MAX;
+			for (int i = 0; i < 8; ++i)
+			{
+				float3 p = sceneCenter;
+				p += (i & 1) ? float3(1.0f, 0.0f, 0.0f) * sceneExtents.x : float3(1.0f, 0.0f, 0.0f) * -sceneExtents.x;
+				p += (i & 2) ? float3(0.0f, 1.0f, 0.0f) * sceneExtents.y : float3(0.0f, 1.0f, 0.0f) * -sceneExtents.y;
+				p += (i & 4) ? float3(0.0f, 0.0f, 1.0f) * sceneExtents.z : float3(0.0f, 0.0f, 1.0f) * -sceneExtents.z;
+
+				float3 lightP;
+				XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&lightP),
+					XMVector3TransformCoord(XMLoadFloat3(reinterpret_cast<XMFLOAT3*>(&p)), XMLoadFloat4x4(&lightView)));
+
+				lightMin = vecMin(lightMin, lightP);
+				lightMax = vecMax(lightMax, lightP);
+			}
+
+			auto lpvCrop = ComputeCropMatrix(lightMin, lightMax);
+
+			_fx->VariableByName("lightView")->AsScalar()->SetValue(&lightView);
+			_fx->VariableByName("lightCrop")->AsScalar()->SetValue(&lpvCrop, sizeof(lpvCrop));
+
+			auto lpvCropXM = XMLoadFloat4x4(&lpvCrop);
+			auto worldToCropXM = XMMatrixMultiply(lightViewMatXM, lpvCropXM);
+			auto cropToWorldXM = XMMatrixInverse(&XMMatrixDeterminant(worldToCropXM), worldToCropXM);
+			XMStoreFloat4x4(&_rsmCropToWorldMat, cropToWorldXM);
+
+			/*auto lightMaxDistVar = _fx->VariableByName("lightMaxDist")->AsScalar();
+			float dist = lightMax.z - lightMin.z;
+			lightMaxDistVar->SetValue(&dist, sizeof(dist));*/
+			
+			rc->SetDepthStencil(tempDS->CreateTextureView());
+			rc->ClearDepthStencil(1.0f, 0);
+
+			rc->SetRenderTargets(
+			{	rsm[0]->CreateTextureView(),
+				rsm[1]->CreateTextureView(),
+				rsm[2]->CreateTextureView() }, 0);
+
+			//Cull Objs
+			std::vector<Ptr<RenderComponent>> renderElements;
+
+			CullRenderElements(
+				lightMin, lightMax,
+				invLightView,
+				lightX, lightY, lightZ,
+				renderElements);
+
+			//Sort Objects
+			std::vector<Ptr<RenderComponent>> sortedRenderObjs = renderElements;
+			std::sort(sortedRenderObjs.begin(), sortedRenderObjs.end(),
+				[&](const Ptr<RenderComponent> & obj0, const Ptr<RenderComponent> & obj1) -> bool
+			{
+				return (obj0->GetMaterial()->GetTypeFlags()) < (obj0->GetMaterial()->GetTypeFlags());
+			});
+			std::stable_sort(sortedRenderObjs.begin(), sortedRenderObjs.end(),
+				[](const Ptr<RenderComponent> & obj0, const Ptr<RenderComponent> & obj1) -> bool
+			{
+				return obj0->GetMaterial() < obj0->GetMaterial();
+			});
+
+			//Render Each Obj
+			Ptr<Material> curMat;
+			for (auto & elem : sortedRenderObjs)
+			{
+				if (curMat != elem->GetMaterial())
+				{
+					_fx->SetExtraMacros({ { "RENDER_RSM", "" } });
+
+					curMat = elem->GetMaterial();
+					curMat->BindMacros(_fx);
+
+					light->BindMacros(_fx, true, nullptr);
+
+					_fx->UpdateData();
+					curMat->BindParams(_fx);
+					light->BindParams(_fx, true, nullptr);
+				}
+
+				//if (elem->GetMaterial()->NumTextures(MATERIAL_TEXTURE_OPACITYMASK) > 0)
+				//{
+				//	_fx->SetExtraMacros({ { "OPACITY_TEX", "" }, {"RENDER_RSM", ""} });
+				//	auto opacityTex = elem->GetMaterial()->AcquireRender()->GetTexture(MATERIAL_TEXTURE_OPACITYMASK, 0);
+				//	_fx->VariableByName("opacityTex")->AsShaderResource()->SetValue(opacityTex->CreateTextureView());
+				//}
+				//else
+				//{
+				//	_fx->SetExtraMacros({ { "RENDER_RSM", "" } });
+				//}
+
+				auto technique = _fx->TechniqueByName("PSSM");
+
+				_fx->VariableByName("world")->AsScalar()->SetValue(&elem->GetTransformMatrix());
+				rc->SetRenderInput(elem->GetMesh()->AcquireRender()->GetRenderInput());
+				for (int32_t passIndex = 0; passIndex < technique->NumPasses(); ++passIndex)
+				{
+					technique->PassByIndex(passIndex)->Bind();
+					rc->DrawIndexed();
+					technique->PassByIndex(passIndex)->UnBind();
+				}
+			}
+		}
+
 
 		rc->SetDepthStencil(preDepthStencil);
 		rc->SetRenderTargets(preRTs, 0);
@@ -356,6 +599,11 @@ namespace ToyGE
 
 		int32_t numSplits = NumSplits();
 		fx->VariableByName("pssmNumSplits")->AsScalar()->SetValue(&numSplits, sizeof(numSplits));
+	}
+
+	void PSSMDepthTechnique::BindRSMParams(const Ptr<RenderEffect> & fx)
+	{
+		fx->VariableByName("rsmCropToWorld")->AsScalar()->SetValue(&_rsmCropToWorldMat);
 	}
 
 	void PSSMDepthTechnique::SetNumSplits(int32_t numSplits)

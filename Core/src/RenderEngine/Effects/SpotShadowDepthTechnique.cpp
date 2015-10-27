@@ -21,8 +21,10 @@ namespace ToyGE
 	void SpotShadowDepthTechnique::RenderDepth(
 		const Ptr<Texture> & shadowMap,
 		const Ptr<LightComponent> & light,
-		const Ptr<RenderSharedEnviroment> & sharedEnv)
+		const Ptr<RenderSharedEnviroment> & sharedEnv,
+		const std::array<Ptr<Texture>, 3> & rsm)
 	{
+		UpdateDepthRasterizerState();
 
 		auto spotLight = std::static_pointer_cast<SpotLightComponent>(light);
 
@@ -107,6 +109,7 @@ namespace ToyGE
 			for (int32_t passIndex = 0; passIndex < technique->NumPasses(); ++passIndex)
 			{
 				technique->PassByIndex(passIndex)->Bind();
+				rc->SetRasterizerState(_depthRenderRS);
 				rc->DrawIndexed();
 				technique->PassByIndex(passIndex)->UnBind();
 			}

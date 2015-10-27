@@ -5,12 +5,20 @@
   
   <variable type="cbuffer" name="cb_PCF">
     <variable type="float" name="pcfFilterSize"/>
+    <variable type="float4" name="shadowMapSize"/>
+  </variable>
+
+  <variable type='SamplerComparisonState' name='samplerCmpLinearClamp'>
+    <state name='filter' value='COMPARISON_MIN_MAG_MIP_LINEAR'/>
+    <state name='addressU' value='CLAMP'/>
+    <state name='addressV' value='CLAMP'/>
+    <state name='comparisonFunc' value='LESS'/>
   </variable>
   
   <shader>
     <![CDATA[
     
-#define PCF_NUMSAMPLES 15
+#define PCF_NUMSAMPLES 7
     
 float2 PCFGetSampleOffset(int index)
 {
@@ -50,7 +58,64 @@ float2 PCFGetSampleOffset(int index)
 
   return sampleOffsets[index];
 }
+
+float2 ComputeBias(float3 posDx, float3 posDy)
+{
+    float3 bias = cross(posDy, posDx);
+    bias.xy /= abs(bias.z);
+    return bias.xy;
+}
+
+float2 ComputeReceiverPlaneDepthBias(float3 texCoordDX, float3 texCoordDY)
+{
+    float2 biasUV;
+    biasUV.x = texCoordDY.y * texCoordDX.z - texCoordDX.y * texCoordDY.z;
+    biasUV.y = texCoordDX.x * texCoordDY.z - texCoordDY.x * texCoordDX.z;
+    biasUV *= 1.0f / ((texCoordDX.x * texCoordDY.y) - (texCoordDX.y * texCoordDY.x));
+    return biasUV;
+}
+
+
+float ComputeShadow_PCF(
+    Texture2DArray tex,
+    uint arrayIndex,
+    float2 uv,
+    float reciever,
+    float2 screenPos,
+    float3 shadowPosDx,
+    float3 shadowPosDy)
+{
+    float shadow = 0.0f;
     
+    float noise = InterleavedGradientNoise(screenPos, PI);
+    float2 sinCos = float2(sin(noise), cos(noise));
+    float2x2 rotation = float2x2(
+            sinCos.x, sinCos.y,
+            -sinCos.y, sinCos.x);
+            
+    float2 bias = (ComputeBias(shadowPosDx, shadowPosDy));
+    
+    float fractionalSamplingError = dot(float2(1.0f, 1.0f) * shadowMapSize.zw, abs(bias));
+    reciever -= min(fractionalSamplingError, 1e-2);
+    
+    float filterSize = pcfFilterSize;
+    
+    [unroll] for(int i = 0; i < PCF_NUMSAMPLES; ++i)
+    {
+        float2 sampleOffset = mul(PCFGetSampleOffset(i), rotation) * filterSize * shadowMapSize.zw;
+        
+        float sampleReciever = reciever + dot((sampleOffset), bias);
+        
+        float2 sampleUV = uv + sampleOffset;
+        
+        shadow += tex.SampleCmpLevelZero(samplerCmpLinearClamp, float3(sampleUV, arrayIndex), sampleReciever);
+    }
+    shadow /= PCF_NUMSAMPLES;
+    
+    return shadow;
+}
+
+/*
 float ComputeShadow_PCF(TextureCubeArray tex, uint arrayIndex, float3 pos, float lightFar, float2 screenPos, float3 normal)
 {
     float len = length(pos);
@@ -96,7 +161,8 @@ float ComputeShadow_PCF(TextureCubeArray tex, uint arrayIndex, float3 pos, float
     
     return shadow;
 }
-    
+*/
+
     ]]>
   </shader> 
 </effect>

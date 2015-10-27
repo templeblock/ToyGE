@@ -87,12 +87,15 @@ namespace ToyGE
 		D3D11_SHADER_RESOURCE_VIEW_DESC desc;
 		memset(&desc, 0, sizeof(desc));
 
-		if (_desc.bindFlag & BUFFER_BIND_STRUCTURED)
+		if (_desc.bindFlag & BUFFER_BIND_STRUCTURED || _desc.bindFlag & BUFFER_BIND_RAW)
 		{
 			desc.ViewDimension = D3D11_SRV_DIMENSION_BUFFEREX;
 			desc.BufferEx.FirstElement = firstElement;
 			desc.BufferEx.NumElements = numElements;
-			desc.BufferEx.Flags = 0;
+			if (_desc.bindFlag & BUFFER_BIND_RAW)
+				desc.BufferEx.Flags = D3D11_BUFFEREX_SRV_FLAG_RAW;
+			else
+				desc.BufferEx.Flags = 0;
 		}
 		else
 		{
@@ -268,6 +271,11 @@ namespace ToyGE
 		if (_desc.bindFlag & BUFFER_BIND_INDIRECT_ARGS)
 		{
 			d3dMiscFlags |= D3D11_RESOURCE_MISC_DRAWINDIRECT_ARGS;
+		}
+
+		if (_desc.bindFlag & BUFFER_BIND_RAW)
+		{
+			d3dMiscFlags |= D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
 		}
 
 		if ( (_desc.bindFlag & BUFFER_BIND_IMMUTABLE) 

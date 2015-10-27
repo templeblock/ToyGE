@@ -15,6 +15,7 @@ namespace ToyGE
 	class ShadowDepthTechnique;
 	class ShadowRenderTechnique;
 	class RenderEffect;
+	class RasterizerState;
 
 	class TOYGE_CORE_API ShadowTechnique
 	{
@@ -37,6 +38,9 @@ namespace ToyGE
 			return _shadowMapSize;
 		}
 
+		CLASS_SET(RSMSize, int2, _rsmSize);
+		CLASS_GET(RSMSize, int2, _rsmSize);
+
 		void SetDepthTechnique(const Ptr<ShadowDepthTechnique> & depthTech)
 		{
 			_depthTechnique = depthTech;
@@ -57,6 +61,16 @@ namespace ToyGE
 			return _renderTechnique;
 		}
 
+		void SetRSM(const std::array<Ptr<Texture>, 3> & rsm)
+		{
+			_rsm = rsm;
+		}
+
+		const std::array<Ptr<Texture>, 3> & GetRSM() const
+		{
+			return _rsm;
+		}
+
 	private:
 		Ptr<ShadowDepthTechnique> _depthTechnique;
 		Ptr<ShadowRenderTechnique> _renderTechnique;
@@ -65,6 +79,8 @@ namespace ToyGE
 		std::map<Ptr<Camera>, Ptr<Texture>> _cameraRelevantShadowMap;
 		Ptr<Texture> _rawShadowMap;
 		std::map<Ptr<Camera>, Ptr<Texture>> _cameraRelevantRawShadowMap;
+		int2 _rsmSize;
+		std::array<Ptr<Texture>, 3> _rsm; //Depth, Normal, Flux
 	};
 
 
@@ -82,16 +98,21 @@ namespace ToyGE
 	class ShadowDepthTechnique
 	{
 	public:
+		ShadowDepthTechnique();
+
 		virtual ~ShadowDepthTechnique() = default;
 
 		virtual void RenderDepth(
 			const Ptr<Texture> & shadowMap,
 			const Ptr<LightComponent> & light,
-			const Ptr<RenderSharedEnviroment> & sharedEnv) = 0;
+			const Ptr<RenderSharedEnviroment> & sharedEnv,
+			const std::array<Ptr<Texture>, 3> & rsm) = 0;
 
 		virtual void BindMacros(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light){};
 
 		virtual void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light){};
+
+		virtual void BindRSMParams(const Ptr<RenderEffect> & fx) {};
 
 		virtual TextureType GetShadowMapTextureType() const = 0;
 
@@ -106,6 +127,19 @@ namespace ToyGE
 		{
 			return false;
 		}
+
+		CLASS_SET(DepthBias, int32_t, _depthBias);
+		CLASS_GET(DepthBias, int32_t, _depthBias);
+
+		CLASS_SET(SlopedScaledDepthBias, float, _slopedScaledDepthBias);
+		CLASS_GET(SlopedScaledDepthBias, float, _slopedScaledDepthBias);
+
+	protected:
+		int32_t _depthBias;
+		float _slopedScaledDepthBias;
+		Ptr<RasterizerState> _depthRenderRS;
+
+		void UpdateDepthRasterizerState();
 	};
 
 

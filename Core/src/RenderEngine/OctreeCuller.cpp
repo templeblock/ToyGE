@@ -427,12 +427,12 @@ namespace ToyGE
 
 	void DefaultRenderLightCuller::GetAllElements(std::vector<Ptr<Cullable>> & outElements)
 	{
+		DefaultRenderObjectCuller::GetAllElements(outElements);
 		if (IsRoot())
 		{
 			for (auto & light : _rootDirLights)
 				outElements.push_back(light);
 		}
-		DefaultRenderObjectCuller::GetAllElements(outElements);
 	}
 
 	void DefaultRenderLightCuller::Cull(const XNA::AxisAlignedBox & aabb, std::vector<Ptr<Cullable>> & outElements)

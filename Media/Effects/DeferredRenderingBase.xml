@@ -142,15 +142,18 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
     );
 
     //Gbuffer
+    psOut.gbuffer0 = 0.0f;
     psOut.gbuffer0.xyz = mat.baseColor;
     psOut.gbuffer0.w = mat.metallic;
   
+    psOut.gbuffer1 = 0.0f;
     //CompressNormal(mat.normal);
     //psOut.gbuffer1.xyz = mat.normal;
     psOut.gbuffer1.xyz = EncodeNormal(mat.normal);
     //psOut.gbuffer1.xyz = EncodeNormal(mat.normal, view);
     psOut.gbuffer1.w = mat.roughness;
     
+    psOut.gbuffer2 = 0.0f;
     psOut.gbuffer2 = mat.emissive;
   
     //LinearDepth
@@ -162,6 +165,7 @@ GBufferPSOut GBufferPS(GBufferVSOut vsOut)
   
     //GenVelocityMap
 #ifdef GEN_VELOCITY
+    psOut.velocity = 0.0f;
     float4 prePosH = mul(float4(vsOut.prePosV, 1.0f), proj);
     float2 velStart = prePosH.xy / prePosH.w * float2(0.5f, -0.5f) + 0.5f;
     float4 posH = mul(float4(vsOut.posV, 1.0f), proj);

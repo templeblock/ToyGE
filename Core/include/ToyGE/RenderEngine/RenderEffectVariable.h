@@ -25,6 +25,8 @@ namespace ToyGE
 		RENDER_EFFECT_VARIABLE_RWBUFFER,
 		RENDER_EFFECT_VARIABLE_APPEDSRUCTUREDBUFFER,
 		RENDER_EFFECT_VARIABLE_CONSUMESRUCTUREDBUFFER,
+		RENDER_EFFECT_VARIABLE_BYTEADDRESSBUFFER,
+		RENDER_EFFECT_VARIABLE_RWBYTEADDRESSBUFFER,
 		RENDER_EFFECT_VARIABLE_SAMPLERSTATE,
 		RENDER_EFFECT_VARIABLE_CBUFFER,
 		RENDER_EFFECT_VARIABLE_SCALAR,
@@ -165,11 +167,23 @@ namespace ToyGE
 		String GetCodeString() const override
 		{
 			std::stringstream ss;
-			ss << GetTypeStr() << "<" << FormatStr() << ">" << " " << Name();
+
+			//type
+			ss << GetTypeStr();
+
+			//format
+			if (FormatStr().size() > 0)
+				ss << "<" << FormatStr() << ">";
+
+			//name
+			ss << " " << Name();
+
+			//register
 			if (GetRegister().size() > 0)
 				ss << " : register(" << GetRegister() << ");";
 			else
 				ss << ";";
+
 			return ss.str();
 		}
 

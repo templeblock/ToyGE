@@ -19,14 +19,19 @@ namespace ToyGE
 		{ "Texture3D",			RENDER_EFFECT_VARIABLE_TEXTURE },
 		{ "TextureCube",        RENDER_EFFECT_VARIABLE_TEXTURECUBE },
 		{ "TextureCubeArray",   RENDER_EFFECT_VARIABLE_TEXTURECUBEARRAY },
+		{ "RWTexture1D",        RENDER_EFFECT_VARIABLE_RWTEXTURE },
+		{ "RWTexture1DArray",   RENDER_EFFECT_VARIABLE_RWTEXTUREARRAY },
 		{ "RWTexture2D",        RENDER_EFFECT_VARIABLE_RWTEXTURE },
 		{ "RWTexture2DArray",   RENDER_EFFECT_VARIABLE_RWTEXTUREARRAY },
+		{ "RWTexture3D",        RENDER_EFFECT_VARIABLE_RWTEXTURE },
 		{ "Buffer", RENDER_EFFECT_VARIABLE_BUFFER },
 		{ "StructuredBuffer", RENDER_EFFECT_VARIABLE_SRUCTUREDBUFFER },
 		{ "RWStructuredBuffer", RENDER_EFFECT_VARIABLE_RWSRUCTUREDBUFFER },
 		{ "RWBuffer", RENDER_EFFECT_VARIABLE_RWBUFFER },
 		{ "AppendStructuredBuffer", RENDER_EFFECT_VARIABLE_APPEDSRUCTUREDBUFFER },
 		{ "ConsumeStructuredBuffer", RENDER_EFFECT_VARIABLE_CONSUMESRUCTUREDBUFFER },
+		{ "ByteAddressBuffer", RENDER_EFFECT_VARIABLE_BYTEADDRESSBUFFER},
+		{ "RWByteAddressBuffer", RENDER_EFFECT_VARIABLE_RWBYTEADDRESSBUFFER },
 		{ "SamplerState",       RENDER_EFFECT_VARIABLE_SAMPLERSTATE },
 		{ "SamplerComparisonState", RENDER_EFFECT_VARIABLE_SAMPLERSTATE },
 		{ "cbuffer",            RENDER_EFFECT_VARIABLE_CBUFFER },
@@ -49,6 +54,8 @@ namespace ToyGE
 		{ RENDER_EFFECT_VARIABLE_RWBUFFER, &RenderEffectVariable_UAV::Create },
 		{ RENDER_EFFECT_VARIABLE_APPEDSRUCTUREDBUFFER, &RenderEffectVariable_UAV::Create },
 		{ RENDER_EFFECT_VARIABLE_CONSUMESRUCTUREDBUFFER, &RenderEffectVariable_UAV::Create },
+		{ RENDER_EFFECT_VARIABLE_BYTEADDRESSBUFFER, &RenderEffectVariable_UAV::Create },
+		{ RENDER_EFFECT_VARIABLE_RWBYTEADDRESSBUFFER, &RenderEffectVariable_UAV::Create },
 		{ RENDER_EFFECT_VARIABLE_SAMPLERSTATE,        &RenderEffectVariable_Sampler::Create },
 		{ RENDER_EFFECT_VARIABLE_CBUFFER,             &RenderEffectVariable_ConstantBuffer::Create },
 		{ RENDER_EFFECT_VARIABLE_BLENDSTATE,          &RenderEffectVariable_BlendState::Create },
@@ -118,7 +125,9 @@ namespace ToyGE
 		var->_type = varType;
 		var->_typeStr = typeStr;
 		var->_name = node->first_attribute("name")->value();
-		var->_formatStr = node->first_attribute("format")->value();
+		auto formatAttri = node->first_attribute("format");
+		if(formatAttri)
+			var->_formatStr = formatAttri->value();
 		auto registerAttr = node->first_attribute("register");
 		if (registerAttr)
 			var->_register = registerAttr->value();
