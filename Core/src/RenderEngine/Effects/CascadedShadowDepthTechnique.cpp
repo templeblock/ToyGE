@@ -160,7 +160,7 @@ namespace ToyGE
 	int32_t PSSMDepthTechnique::_defaultNumSplits = 3;
 
 	PSSMDepthTechnique::PSSMDepthTechnique()
-		: _splitMaxDist(50.0f)
+		: _splitMaxDist(30.0f)
 	{
 		SetNumSplits(_defaultNumSplits);
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"PSSMShadowDepth.xml");
