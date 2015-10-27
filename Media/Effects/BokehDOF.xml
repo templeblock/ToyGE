@@ -511,7 +511,7 @@ float4 RecombinePS(PostProcessVSOut vsOut) : SV_TARGET
   float3 FrontLayer = near.rgb / (near.a + 0.001f);
 
 	// Layer 3: on top of that blend the front half res layer	
-	color.rgb = lerp(color.rgb, FrontLayer, saturate(nearMask * 2));
+	color.rgb = lerp(color.rgb, FrontLayer, saturate(nearMask * 1));
   
   float3 bokehColor = bokehLayerTex.SampleLevel(samplerPoint, vsOut.tex, 0).rgb;
   color.rgb += bokehColor;

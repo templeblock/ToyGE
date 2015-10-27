@@ -31,6 +31,7 @@
 #include "ToyGE\RenderEngine\ReflectionMap.h"
 #include "ToyGE\RenderEngine\RenderEffect.h"
 #include "ToyGE\RenderEngine\Texture.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
 
 #include "ToyGE\RenderEngine\Effects\SkyBox.h"
 #include "ToyGE\RenderEngine\Effects\SSAO.h"
@@ -44,4 +45,5 @@
 #include "ToyGE\RenderEngine\Effects\AtmosphereRendering.h"
 #include "ToyGE\RenderEngine\Effects\PostProcessVolumetricLight.h"
 #include "ToyGE\RenderEngine\Effects\ImageBasedLensFlare.h"
+#include "ToyGE\RenderEngine\Effects\LPV.h"
 

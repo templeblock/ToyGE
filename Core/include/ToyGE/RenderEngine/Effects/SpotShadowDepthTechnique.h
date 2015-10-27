@@ -14,7 +14,8 @@ namespace ToyGE
 		void RenderDepth(
 			const Ptr<Texture> & shadowMap,
 			const Ptr<LightComponent> & light,
-			const Ptr<RenderSharedEnviroment> & sharedEnv) override;
+			const Ptr<RenderSharedEnviroment> & sharedEnv,
+			const std::array<Ptr<Texture>, 3> & rsm) override;
 
 		void BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light) override;
 

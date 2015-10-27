@@ -78,7 +78,7 @@ float3 ComputeLigting(Material mat, TranslucencyVSOut vsOut)
 {
   float3 normal = mat.normal;
 
-  float shadow = ComputeShadow(vsOut.posW, vsOut.posV.z);
+  float shadow = ComputeShadow(vsOut.posW, vsOut.posV.z, vsOut.posH.xy);
 
   float3 n = normal;
   float3 l = -GetLightDir(vsOut.posW);

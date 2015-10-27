@@ -17,7 +17,7 @@ namespace ToyGE
 {
 	SSR::SSR()
 		: _ssrMaxRoughness(0.9f),
-		_ssrIntensity(5.0f)
+		_ssrIntensity(2.0f)
 	{
 		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SSR.xml");
 

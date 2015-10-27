@@ -1,0 +1,426 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="Defines.xml"/>
+  
+  <variable type="Texture2D" format="float2" name="srcTex"/>
+  <variable type="RWTexture2D" format="float2" name="dstTex"/>
+
+  <variable type="StructuredBuffer" format="float2" name="srcBuffer"/>
+  <variable type="RWStructuredBuffer" format="float2" name="dstBuffer"/>
+  
+  <variable type="cbuffer" name="cb_fft_const">
+    <variable type="float4" name="dataSize"/>
+  </variable>
+
+  <variable type="cbuffer" name="cb_fft_radix2">
+    <variable type="uint" name="butterflyLength"/>
+  </variable>
+  
+
+  <macro name="FFT_GROUP_SIZE" value="64"/>
+  
+  <shader>
+    <![CDATA[
+
+float2 ComplexMul(float2 c0, float2 c1)
+{
+    return float2(  c0.x * c1.x - c0.y * c1.y,
+                    c0.x * c1.y + c0.y * c1.x   );
+}
+
+float2 ComplexAdd(float2 c0, float2 c1)
+{
+    return float2(  c0.x + c1.x,
+                    c0.y + c1.y   );
+}
+
+void FFTRadix2(
+    uint3 dispatchThreadID,
+    float2 dir)
+{
+    uint2 dtID = dispatchThreadID.xy;
+    
+#ifdef FFT_2D
+    float dataLen = dot(dataSize.xy, dir);
+#else
+    float dataLen = dataSize.x;
+#endif
+    uint numBFs = uint( dataLen / butterflyLength );
+    uint bfLen = butterflyLength;
+    uint halfBFLen = bfLen / 2;
+    
+    uint bfIndex = dtID.x / halfBFLen;
+    uint bfUnitIndex = dtID.x % halfBFLen;
+    
+    float wBase = 2.0f * PI / bfLen;
+#ifdef FFT_INVERSE
+    wBase *= -1.0f;
+#endif
+    float2 w = float2( cos(bfUnitIndex * wBase), -sin(bfUnitIndex * wBase) );
+    
+#ifdef FFT_2D
+    float2 t = ComplexMul(w, srcTex[ ((bfIndex + numBFs) * halfBFLen + bfUnitIndex) * dir + dtID.y * (1.0f - dir) ]);
+    float2 y = srcTex[ (bfIndex * halfBFLen + bfUnitIndex) * dir + (dtID.y) * (1.0f - dir) ];
+    
+    dstTex[ (bfIndex * bfLen + bfUnitIndex) * dir + dtID.y * (1.0f - dir) ] = ComplexAdd(y, t);
+    dstTex[ (bfIndex * bfLen + halfBFLen + bfUnitIndex) * dir + dtID.y * (1.0f - dir) ] = ComplexAdd(y, -t);
+#else
+    float2 t = ComplexMul(w, srcBuffer[ (bfIndex + numBFs) * halfBFLen + bfUnitIndex ]);
+    float2 y = srcBuffer[ bfIndex * halfBFLen + bfUnitIndex ];
+    
+    dstBuffer[ bfIndex * bfLen + bfUnitIndex ] = ComplexAdd(y, t);
+    dstBuffer[ bfIndex * bfLen + halfBFLen + bfUnitIndex ] = ComplexAdd(y, -t);
+#endif
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix2_2D_X(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix2(dispatchThreadID, float2(1.0f, 0.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix2_2D_Y(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix2(dispatchThreadID, float2(0.0f, 1.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix2_1D(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix2(dispatchThreadID, float2(0.0f, 0.0f));
+}
+
+
+    
+    ]]>
+  </shader>
+  
+  <technique name='FFTRadix2_2D_X'>
+    <pass>
+      <cs entry='FFTRadix2_2D_X'/>
+    </pass>
+  </technique>
+  
+  <technique name='FFTRadix2_2D_Y'>
+    <pass>
+      <cs entry='FFTRadix2_2D_Y'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix2_1D'>
+    <pass>
+      <cs entry='FFTRadix2_1D'/>
+    </pass>
+  </technique>
+
+
+  
+  <variable type="cbuffer" name="cb_fft_radix8">
+    <variable type="uint" name="threadCount"/>
+    <variable type="uint" name="istride"/>
+    <variable type="uint" name="ostride"/>
+    <variable type="float" name="phaseBase"/>
+  </variable>
+
+  <shader>
+    <![CDATA[
+    
+#define COS_PI_4_16 0.70710678118654752440084436210485f
+#define TWIDDLE_1_8 COS_PI_4_16, -COS_PI_4_16
+#define TWIDDLE_3_8 -COS_PI_4_16, -COS_PI_4_16
+
+void FT2(inout float2 a, inout float2 b)
+{
+	float t;
+
+	t = a.x;
+	a.x += b.x;
+	b.x = t - b.x;
+
+	t = a.y;
+	a.y += b.y;
+	b.y = t - b.y;
+}
+
+void CMUL_forward(inout float2 a, float bx, float by)
+{
+	float t = a.x;
+  
+#ifdef FFT_INVERSE
+  a.x = t * bx + a.y * by;
+	a.y = -t * by + a.y * bx;
+#else
+	a.x = t * bx - a.y * by;
+	a.y = t * by + a.y * bx;
+#endif
+}
+
+void UPD_forward(inout float2 a, inout float2 b)
+{
+	float A = a.x;
+	float B = b.y;
+  
+#ifdef FFT_INVERSE
+  a.x -= b.y;
+	b.y = a.y - b.x;
+	a.y += b.x;
+	b.x = A + B;
+#else
+	a.x += b.y;
+	b.y = a.y + b.x;
+	a.y -= b.x;
+	b.x = A - B;
+#endif
+}
+
+void FFT_forward_4(inout float2 D[8])
+{
+	FT2(D[0], D[2]);
+	FT2(D[1], D[3]);
+	FT2(D[0], D[1]);
+
+	UPD_forward(D[2], D[3]);
+}
+
+void FFT_forward_8(inout float2 D[8])
+{
+	FT2(D[0], D[4]);
+	FT2(D[1], D[5]);
+	FT2(D[2], D[6]);
+	FT2(D[3], D[7]);
+
+	UPD_forward(D[4], D[6]);
+	UPD_forward(D[5], D[7]);
+
+	CMUL_forward(D[5], TWIDDLE_1_8);
+	CMUL_forward(D[7], TWIDDLE_3_8);
+
+	FFT_forward_4(D);
+	FT2(D[4], D[5]);
+	FT2(D[6], D[7]);
+}
+
+void TWIDDLE(inout float2 d, float phase)
+{
+	float tx, ty;
+
+	sincos(phase, ty, tx);
+	float t = d.x;
+	d.x = t * tx - d.y * ty;
+	d.y = t * ty + d.y * tx;
+}
+
+void TWIDDLE_8(inout float2 D[8], float phase)
+{
+	TWIDDLE(D[4], 1 * phase);
+	TWIDDLE(D[2], 2 * phase);
+	TWIDDLE(D[6], 3 * phase);
+	TWIDDLE(D[1], 4 * phase);
+	TWIDDLE(D[5], 5 * phase);
+	TWIDDLE(D[3], 6 * phase);
+	TWIDDLE(D[7], 7 * phase);
+}
+    
+void FFTRadix8(
+    uint3 dispatchThreadID,
+    float2 dir)
+{
+    uint2 dtID = dispatchThreadID.xy;
+    
+    if (dtID.x >= threadCount)
+        return;
+
+	  // Fetch 8 complex numbers
+	  float2 D[8];
+
+	  uint i;
+	  uint imod = dtID.x & (istride - 1);
+	  uint iaddr = ((dtID.x - imod) << 3) + imod;
+#ifdef FFT_2D
+	  [unroll] for (i = 0; i < 8; i++)
+		    D[i] = srcTex[ (iaddr + i * istride) * dir + dtID.y * (1.0f - dir) ];
+#else
+    [unroll] for (i = 0; i < 8; i++)
+		    D[i] = srcBuffer[iaddr + i * istride];
+#endif
+
+	  // Math
+	  FFT_forward_8(D);
+	  uint p = dtID.x & (istride - 1);
+	  float phase = phaseBase * (float)p;
+	  TWIDDLE_8(D, phase);
+
+	  // Store the result
+	  uint omod = dtID.x & (ostride - 1);
+	  uint oaddr = ((dtID.x - omod) << 3) + omod;
+#ifdef FFT_2D
+    dstTex[ (oaddr + 0 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[0];
+    dstTex[ (oaddr + 1 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[4];
+    dstTex[ (oaddr + 2 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[2];
+    dstTex[ (oaddr + 3 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[6];
+    dstTex[ (oaddr + 4 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[1];
+    dstTex[ (oaddr + 5 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[5];
+    dstTex[ (oaddr + 6 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[3];
+    dstTex[ (oaddr + 7 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[7];
+#else
+    dstBuffer[oaddr + 0 * ostride] = D[0];
+    dstBuffer[oaddr + 1 * ostride] = D[4];
+    dstBuffer[oaddr + 2 * ostride] = D[2];
+    dstBuffer[oaddr + 3 * ostride] = D[6];
+    dstBuffer[oaddr + 4 * ostride] = D[1];
+    dstBuffer[oaddr + 5 * ostride] = D[5];
+    dstBuffer[oaddr + 6 * ostride] = D[3];
+    dstBuffer[oaddr + 7 * ostride] = D[7];
+#endif
+}
+
+void FFTRadix8_Final(
+    uint3 dispatchThreadID,
+    float2 dir)
+{
+    uint2 dtID = dispatchThreadID.xy;
+    
+    if (dtID.x >= threadCount)
+        return;
+
+	  // Fetch 8 complex numbers
+	  float2 D[8];
+
+	  uint i;
+	  uint iaddr = dtID.x << 3;
+#ifdef FFT_2D
+	  [unroll] for (i = 0; i < 8; i++)
+		    D[i] = srcTex[ (iaddr + i) * dir + dtID.y * (1.0f - dir) ];
+#else
+    [unroll] for (i = 0; i < 8; i++)
+		    D[i] = srcBuffer[iaddr + i];
+#endif
+
+	  // Math
+	  FFT_forward_8(D);
+    
+#ifdef FFT_INVERSE
+    
+    #ifdef FFT_2D
+    float dataLen = dot(dataSize.xy, dir);
+    #else
+    float dataLen = dataSize.x;
+    #endif
+    
+    float ifftScale = 1.0f / max(1e-3, dataLen);
+    [unroll] for (i = 0; i < 8; i++)
+		    D[i] *= ifftScale;
+        
+#endif
+
+	  // Store the result
+	  uint omod = dtID.x & (ostride - 1);
+	  uint oaddr = ((dtID.x - omod) << 3) + omod;
+#ifdef FFT_2D
+    dstTex[ (oaddr + 0 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[0];
+    dstTex[ (oaddr + 1 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[4];
+    dstTex[ (oaddr + 2 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[2];
+    dstTex[ (oaddr + 3 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[6];
+    dstTex[ (oaddr + 4 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[1];
+    dstTex[ (oaddr + 5 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[5];
+    dstTex[ (oaddr + 6 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[3];
+    dstTex[ (oaddr + 7 * ostride) * dir + dtID.y * (1.0f - dir) ] = D[7];
+#else
+    dstBuffer[oaddr + 0 * ostride] = D[0];
+    dstBuffer[oaddr + 1 * ostride] = D[4];
+    dstBuffer[oaddr + 2 * ostride] = D[2];
+    dstBuffer[oaddr + 3 * ostride] = D[6];
+    dstBuffer[oaddr + 4 * ostride] = D[1];
+    dstBuffer[oaddr + 5 * ostride] = D[5];
+    dstBuffer[oaddr + 6 * ostride] = D[3];
+    dstBuffer[oaddr + 7 * ostride] = D[7];
+#endif
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_2D_X(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8(dispatchThreadID, float2(1.0f, 0.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_2D_X_Final(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8_Final(dispatchThreadID, float2(1.0f, 0.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_2D_Y(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8(dispatchThreadID, float2(0.0f, 1.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_2D_Y_Final(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8_Final(dispatchThreadID, float2(0.0f, 1.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_1D(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8(dispatchThreadID, float2(0.0f, 0.0f));
+}
+
+[numthreads(FFT_GROUP_SIZE, 1, 1)]
+void FFTRadix8_1D_Final(
+    uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    FFTRadix8_Final(dispatchThreadID, float2(0.0f, 0.0f));
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='FFTRadix8_2D_X'>
+    <pass>
+      <cs entry='FFTRadix8_2D_X'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix8_2D_X_Final'>
+    <pass>
+      <cs entry='FFTRadix8_2D_X_Final'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix8_2D_Y'>
+    <pass>
+      <cs entry='FFTRadix8_2D_Y'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix8_2D_Y_Final'>
+    <pass>
+      <cs entry='FFTRadix8_2D_Y_Final'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix8_1D'>
+    <pass>
+      <cs entry='FFTRadix8_1D'/>
+    </pass>
+  </technique>
+
+  <technique name='FFTRadix8_1D_Final'>
+    <pass>
+      <cs entry='FFTRadix8_1D_Final'/>
+    </pass>
+  </technique>
+
+</effect>

@@ -19,7 +19,8 @@ namespace ToyGE
 		: _type(type),
 		_bCastShadow(false),
 		_bCastCaustics(false),
-		_bCastLightVolume(false)
+		_bCastLightVolume(false),
+		_bCastLPV(false)
 	{
 	}
 
@@ -96,7 +97,7 @@ namespace ToyGE
 		_shadowTechnique = std::make_shared<ShadowTechnique>();
 		_shadowTechnique->SetDepthTechnique(std::make_shared<PointShadowDepthTechnique>());
 		_shadowTechnique->SetRenderTechnique(std::make_shared<ShadowRenderTechniqueEVSM4>());
-		_shadowTechnique->SetShadowMapSize(512);
+		_shadowTechnique->SetShadowMapSize(256);
 	}
 
 	//static float _ComputePointLightMaxDistance(const XMFLOAT3 & radiance)
@@ -161,7 +162,7 @@ namespace ToyGE
 		_shadowTechnique = std::make_shared<ShadowTechnique>();
 		_shadowTechnique->SetDepthTechnique(std::make_shared<SpotShadowDepthTechnique>());
 		_shadowTechnique->SetRenderTechnique(std::make_shared<ShadowRenderTechniqueEVSM4>());
-		_shadowTechnique->SetShadowMapSize(256);
+		_shadowTechnique->SetShadowMapSize(512);
 	}
 
 	float SpotLightComponent::MaxAngle() const
@@ -238,9 +239,10 @@ namespace ToyGE
 		_shadowTechnique = std::make_shared<ShadowTechnique>();
 		_shadowTechnique->SetDepthTechnique(std::make_shared<SDSMDepthTechnique>());
 		auto evsm = std::make_shared<ShadowRenderTechniqueEVSM2>();
-		evsm->SetSoftness(0.08f);
+		//evsm->SetSoftness(0.08f);
 		_shadowTechnique->SetRenderTechnique(evsm);
 		_shadowTechnique->SetShadowMapSize(1024);
+		_shadowTechnique->SetRSMSize(256);
 	}
 
 	void DirectionalLightComponent::SetInfluenceAll(bool bInfluenceAll)

@@ -12,6 +12,9 @@
 #include "ToyGE\Kernel\ResourceManager.h"
 #include "ToyGE\Kernel\Util.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\RenderEngine\RenderCommonDefines.h"
+#include "ToyGE\RenderEngine\RasterizerState.h"
+#include "ToyGE\RenderEngine\LightComponent.h"
 
 namespace ToyGE
 {
@@ -44,6 +47,14 @@ namespace ToyGE
 					sm.second->Release();
 				_cameraRelevantShadowMap.clear();
 			}
+			for (auto & rsm : _rsm)
+			{
+				if (rsm)
+				{
+					rsm->Release();
+					rsm = nullptr;
+				}
+			}
 
 			//Get Shadow Map Texture
 			TextureDesc texDesc;
@@ -60,20 +71,40 @@ namespace ToyGE
 			texDesc.sampleQuality = 0;
 			auto shadowMap = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 
+			if (light->IsCastLPV())
+			{
+				texDesc.width = _rsmSize.x;
+				texDesc.height = _rsmSize.y;
+
+				//For Cascaded Shadow Map
+				if(light->Type() == LIGHT_DIRECTIONAL)
+					_rsm[0] = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+
+				texDesc.format = RENDER_FORMAT_R11G11B10_FLOAT;
+				_rsm[1] = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+				_rsm[2] = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+			}
+
 			//Clear Shadow Map
 			//auto & clearValue = _renderTechnique->GetShadowMapDefaultValue();
 			float4 clearValue = 1.0f;
 			if (texDesc.type == TEXTURE_CUBE)
 			{
 				rc->ClearRenderTargets({ shadowMap->CreateTextureView_Cube(0, 1, 0, texDesc.arraySize) }, 1.0f);
+				for(auto & rsm : _rsm)
+					if(rsm)
+						rc->ClearRenderTargets({ rsm->CreateTextureView_Cube(0, 1, 0, texDesc.arraySize) }, 0.0f);
 			}
 			else
 			{
 				rc->ClearRenderTargets({ shadowMap->CreateTextureView(0, 1, 0, texDesc.arraySize) }, 1.0f);
+				for (auto & rsm : _rsm)
+					if(rsm)
+						rc->ClearRenderTargets({ rsm->CreateTextureView(0, 1, 0, texDesc.arraySize) }, 0.0f);
 			}
 
 			//Render Depth
-			_depthTechnique->RenderDepth(shadowMap, light, sharedEnv);
+			_depthTechnique->RenderDepth(shadowMap, light, sharedEnv, _rsm);
 
 			//Process
 			auto processedSM = _renderTechnique->ProcessShadowTex(shadowMap, light);
@@ -143,6 +174,28 @@ namespace ToyGE
 	}
 
 
+	ShadowDepthTechnique::ShadowDepthTechnique()
+		: _depthBias(0),
+		_slopedScaledDepthBias(0.0f)
+	{
+		RasterizerStateDesc rsDesc;
+		rsDesc.depthBias = _depthBias;
+		rsDesc.slopeScaledDepthBias = _slopedScaledDepthBias;
+
+		_depthRenderRS = Global::GetRenderEngine()->GetRenderFactory()->CreateRasterizerState(rsDesc);
+	}
+
+	void ShadowDepthTechnique::UpdateDepthRasterizerState()
+	{
+		if (_depthRenderRS->Desc().depthBias != _depthBias
+			|| _depthRenderRS->Desc().slopeScaledDepthBias != _slopedScaledDepthBias)
+		{
+			RasterizerStateDesc rsDesc;
+			rsDesc.depthBias = _depthBias;
+			rsDesc.slopeScaledDepthBias = _slopedScaledDepthBias;
+			_depthRenderRS = Global::GetRenderEngine()->GetRenderFactory()->CreateRasterizerState(rsDesc);
+		}
+	}
 
 	void ShadowRenderTechnique::BindParams(const Ptr<RenderEffect> & fx, const Ptr<LightComponent> & light, const Ptr<Texture> & shadowMap)
 	{

@@ -85,6 +85,16 @@ namespace ToyGE
 			return _bCastLightVolume;
 		}
 
+		void SetCastLPV(bool bCastLPV)
+		{
+			_bCastLPV = bCastLPV;
+		}
+
+		bool IsCastLPV() const
+		{
+			return _bCastLPV;
+		}
+
 		virtual void BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera);
 
 		virtual void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera);
@@ -96,6 +106,7 @@ namespace ToyGE
 		Ptr<ShadowTechnique> _shadowTechnique;
 		bool _bCastCaustics;
 		bool _bCastLightVolume;
+		bool _bCastLPV;
 
 		void UpdateLightCuller();
 

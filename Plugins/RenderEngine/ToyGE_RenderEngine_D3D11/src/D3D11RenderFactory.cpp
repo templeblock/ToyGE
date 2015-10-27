@@ -321,6 +321,7 @@ namespace ToyGE
 
 			case D3D_SIT_TEXTURE:
 			case D3D_SIT_STRUCTURED:
+			case D3D_SIT_BYTEADDRESS:
 				reflectInfo.shaderResources.push_back(resDesc);
 				break;
 

@@ -4,8 +4,9 @@
   <include name="ESMDefines.xml"/>
   <include name="Util.xml"/>
   <include name="CSMConfig.xml"/>
-  <include name="VSMUtil.xml"/>
   <include name="CommonState.xml"/>
+  <include name="Material.xml"/>
+  <include name="Lighting.xml"/>
   
   <variable type='cbuffer' name='cb_vs_perObj'>
     <variable type='float4x4' name='world'/>
@@ -17,9 +18,9 @@
   </variable>
 
   <variable type='cbuffer' name='cb_pssm_gs_perFrame'>
-    <variable type='uint4' name='numSplits'/>
     <variable type='float4x4' name='lightCrop'/>
-    <variable type='float4' name='lightMaxDist'/>
+    <!--<variable type='uint4' name='numSplits'/>
+    <variable type='float4' name='lightMaxDist'/>-->
   </variable>
   
   <variable type='Texture2D' name='opacityTex' />
@@ -28,16 +29,26 @@
     <![CDATA[
 struct PSSMVSIn
 {
-	float3 pos : POSITION;
-#ifdef OPACITY_TEX
-  float3 tex : TEXCOORD;
+	  float3 pos : POSITION;
+    
+#ifdef RENDER_RSM
+    float3 normal : NORMAL;
+#endif
+
+#ifdef MAT_UV_COORD
+    float3 tex : TEXCOORD;
 #endif
 };
 
 struct PSSMVSOut
 {
 	float4 posH : SV_POSITION;
-#ifdef OPACITY_TEX
+  float3 posW : POSITION_W;
+#ifdef RENDER_RSM
+    float3 normal : NORMAL;
+#endif
+  
+#ifdef MAT_UV_COORD
   float3 tex : TEXCOORD;
 #endif
 };
@@ -45,13 +56,18 @@ struct PSSMVSOut
 PSSMVSOut PSSM_VS(PSSMVSIn vsIn)
 {
 	PSSMVSOut vsOut;
+  
+  vsOut.posW = mul(float4(vsIn.pos, 1.0f), world).xyz;
 
-	float4x4 worldView = mul( world, lightView );
-	//vsOut.posLi = mul(float4(vsIn.pos.xyz, 1.0f), worldView);
-  vsOut.posH = mul(float4(vsIn.pos.xyz, 1.0f), worldView);
+	//float4x4 worldView = mul( world, lightView );
+  vsOut.posH = mul(float4(vsOut.posW, 1.0f), lightView);
   vsOut.posH = mul(vsOut.posH, lightCrop);
   
-#ifdef OPACITY_TEX
+#ifdef RENDER_RSM
+  vsOut.normal = mul(float4(vsIn.normal, 0.0f), world).xyz;
+#endif
+  
+#ifdef MAT_UV_COORD
   vsOut.tex = vsIn.tex;
 #endif
 
@@ -85,16 +101,41 @@ void PSSM_GS(
 }
 */
 
-float PSSM_PS(PSSMVSOut vsOut) : SV_TARGET
-{
-#ifdef OPACITY_TEX
-  float opacity = opacityTex.Sample(samplerLinear, vsOut.tex.xy).x;
-  clip(opacity - 0.1f);
+void PSSM_PS(
+    PSSMVSOut vsOut,
+    out float outDepth : SV_TARGET0
+#ifdef RENDER_RSM
+    ,
+    out float3 outNormal : SV_TARGET1,
+    out float3 outDiffuseColor : SV_TARGET2
 #endif
-  float z = vsOut.posH.z;
-	return z;
+    )
+{
+#ifdef MAT_OPACITYMASK_TEX
+    float opacity = opacityTex.Sample(samplerLinear, vsOut.tex.xy).x;
+    clip(opacity - 0.1f);
+#endif
+  
+#ifdef RENDER_RSM
+    float3 normal = normalize(vsOut.normal);
+    outNormal = normal * 0.5f + 0.5f;
+    
+    float3 inRadiance = ComputeInLightRadiance(vsOut.posW, normal);
+    
+    float3 baseColor = GetBaseColor
+    (
+    #ifdef MAT_UV_COORD
+        vsOut.tex
+    #endif
+    );
+    float metallic = GetMetallic();
+    outDiffuseColor = GetDiffuseColor(baseColor, metallic) * inRadiance;
+#endif
+
+    outDepth = vsOut.posH.z;
 }
 
+/*
 float2 PSSM_PS_VSM(PSSMVSOut gsOut) : SV_TARGET
 {
   float z = gsOut.posH.z;
@@ -133,6 +174,7 @@ float4 PSSM_PS_SAVSM(PSSMVSOut gsOut) : SV_TARGET
   float2 moments = float2(z, z * z) - 0.5f;
 	return DistributePrecision(moments, 1 << 8);
 }
+*/
 
     ]]>
   </shader>

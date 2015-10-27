@@ -32,6 +32,14 @@ namespace ToyGE
 			return _depth;
 		}
 
+		XNA::AxisAlignedBox GetSceneAABB() override
+		{
+			if (IsRoot())
+				return _nodeAABB;
+			else
+				return _parent.lock()->GetSceneAABB();
+		}
+
 		//void SetDepth(int32_t depth)
 		//{
 		//	_depth = depth;

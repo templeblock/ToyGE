@@ -21,7 +21,8 @@ namespace ToyGE
 	void PointShadowDepthTechnique::RenderDepth(
 		const Ptr<Texture> & shadowMap,
 		const Ptr<LightComponent> & light,
-		const Ptr<RenderSharedEnviroment> & sharedEnv)
+		const Ptr<RenderSharedEnviroment> & sharedEnv,
+		const std::array<Ptr<Texture>, 3> & rsm)
 	{
 		auto pointLight = std::static_pointer_cast<PointLightComponent>(light);
 
@@ -79,10 +80,12 @@ namespace ToyGE
 
 		PerspectiveCamera camera = PerspectiveCamera(XM_PIDIV2, 1.0f, 0.1f, pointLight->MaxDistance());
 		auto projXM = XMLoadFloat4x4(&camera.ProjMatrix());
+		_pointLightProj = camera.ProjMatrix();
 		for (int32_t i = 0; i < 6; ++i)
 		{
 			//Compute ViewProjMatrix
 			camera.LookTo(pointLight->GetPos(), viewDir[i], upDir[i]);
+			_pointLightViews[i] = camera.ViewMatrix();
 
 			//Cull
 			std::vector<Ptr<Cullable>> renderCull;
@@ -137,5 +140,7 @@ namespace ToyGE
 		auto pointLight = std::static_pointer_cast<PointLightComponent>(light);
 		float pointMaxDist = pointLight->MaxDistance();
 		fx->VariableByName("pointMaxDist")->AsScalar()->SetValue(&pointMaxDist, sizeof(pointMaxDist));
+		fx->VariableByName("pointLightViews")->AsScalar()->SetValue(&_pointLightViews[0]);
+		fx->VariableByName("pointLightProj")->AsScalar()->SetValue(&_pointLightProj);
 	}
 }

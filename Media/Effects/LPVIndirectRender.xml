@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<effect>
+  <include name="PostProcess.xml"/>
+  <include name="CommonState.xml"/>
+  <include name="LPVCommon.xml"/>
+  <include name="Material.xml"/>
+  <include name="Util.xml"/>
+  <include name="View.xml"/>
+
+  <variable type='Texture2D' format='float' name='linearDepthTex'/>
+  <variable type='Texture2D' name='gbuffer0'/>
+  <variable type='Texture2D' name='gbuffer1'/>
+  <variable type='Texture2D' name='gbuffer2'/>
+
+  <variable type='cbuffer' name='cb_renderLPVIndirect'>
+    <variable type='float' name='lpvStrength'/>
+  </variable>
+  
+  <shader>
+    <![CDATA[
+    
+float3 RenderLPVIndirectPS(PostProcessVSOut vsOut) : SV_TARGET
+{
+    float4 gbuf0 = gbuffer0.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+    float4 gbuf1 = gbuffer1.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+    float4 gbuf2 = gbuffer2.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+    Material mat = GbufferToMaterial(gbuf0, gbuf1, gbuf2);
+  
+    float linearDepth = linearDepthTex.SampleLevel(samplerPoint, vsOut.tex, 0.0f);
+  
+    float2 screenSize = gbuffer0.Length.xy;
+    float3 posV = LinearDepthToViewPos(linearDepth, cameraNearFar, vsOut.pos.xy, screenSize, proj);
+    float3 posW = mul(float4(posV, 1.0f), invView).xyz;
+    
+    float3 samplePos = WorldToGrid(posW);
+    
+    LPVCell cell = ReadLPVCellFilter(samplePos);
+    
+    float3 lpvSampleColor = SynSHCoeffs9(-mat.normal, cell.coeffs);
+    
+    float3 diffColor = lpvSampleColor * lpvStrength * GetDiffuseColor(mat.baseColor, mat.metallic);
+    
+    return diffColor;
+}
+    
+    ]]>
+  </shader>
+
+  <technique name='RenderLPVIndirect'>
+    <pass>
+      <state value='disableDepth'/>
+      <state value='bs_srcOne_dstOne_add'/>
+      <vs entry='PostProcessVS'/>
+      <ps entry='RenderLPVIndirectPS'/>
+    </pass>
+  </technique>
+  
+</effect>

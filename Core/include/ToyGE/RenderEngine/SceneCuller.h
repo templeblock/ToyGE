@@ -100,6 +100,8 @@ namespace ToyGE
 	class TOYGE_CORE_API SceneCuller
 	{
 	public:
+		virtual XNA::AxisAlignedBox GetSceneAABB() = 0;
+
 		virtual void AddElement(const Ptr<Cullable> & element) = 0;
 
 		virtual void RemoveElement(const Ptr<Cullable> & emelent) = 0;

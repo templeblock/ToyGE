@@ -331,7 +331,7 @@ float4 ScreenSpaceReflectionPS(PostProcessVSOut vsOut) : SV_TARGET
   float3 F = Fresnel_Schlick(v, n, specColor);
   float n_dot_v = max(1e-5, dot(n, v));
   
-  float3 reflectColor = traceColor * (F + diffColor) * max(0.0f, ssrIntensity);
+  float3 reflectColor = traceColor * (F + diffColor / PI) * max(0.0f, ssrIntensity);
   
   return float4(reflectColor, 1.0f);
 }

@@ -73,6 +73,38 @@ float3 GetNormal
 }
 
 
+float3 GetBaseColor
+(
+#ifdef MAT_UV_COORD
+    float3 uvCoord
+#endif
+)
+{
+#ifdef MAT_BASECOLOR_TEX
+    float3 _baseColor = baseColorTex.Sample(samplerLinear, uvCoord.xy).rgb;
+    _baseColor = GammaCorrectIn(_baseColor);
+#else
+    float3 _baseColor = baseColor;
+#endif
+    return _baseColor;
+}
+
+float GetMetallic()
+{
+    return metallic;
+}
+
+float3 GetDiffuseColor(float3 baseColor, float metallic)
+{
+    return baseColor - baseColor * metallic;
+}
+
+float3 GetSpecularColor(float3 baseColor, float metallic)
+{
+    return lerp(0.03f, baseColor, metallic);
+}
+
+
 Material GetMeterial
   (
 #ifdef MAT_UV_COORD
@@ -85,13 +117,22 @@ Material GetMeterial
   )
 {
     Material mat;
-
+    
+    mat.baseColor = GetBaseColor
+    (
+    #ifdef MAT_UV_COORD
+        uvCoord
+    #endif
+    );
+    
+/*
 #ifdef MAT_BASECOLOR_TEX
     mat.baseColor = baseColorTex.Sample(samplerLinear, uvCoord.xy).rgb;
     mat.baseColor = GammaCorrectIn(mat.baseColor);
 #else
     mat.baseColor = baseColor;
 #endif
+*/
     
 #ifdef MAT_ROUGHNESS_TEX
     mat.roughness = roughnessTex.Sample(samplerLinear, uvCoord.xy).r;

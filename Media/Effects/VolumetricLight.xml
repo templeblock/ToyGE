@@ -132,7 +132,7 @@ void RenderLightVolumePointPS(
     stepIndex < NUM_SAMPLES;
     ++stepIndex, p += step, viewDist -= stepLen)
   {
-    float shadow = ComputeShadow(p, 0.0f);
+    float shadow = ComputeShadow(p, 0.0f, posH.xy);
     float3 l_vec = lightPos - p;
     float l_d = length(l_vec);
     float3 l_in = lightRadiance / (l_d * l_d) * exp(-l_d * attenuation) * shadow;
@@ -293,7 +293,7 @@ void RenderLightVolumeSpotPS(
     stepIndex < NUM_SAMPLES;
     ++stepIndex, p += step, viewDist -= stepLen)
   {
-    float shadow = ComputeShadow(p, 0.0f);
+    float shadow = ComputeShadow(p, 0.0f, posH.xy);
     float3 l_vec = lightPos - p;
     float l_d = length(l_vec);
     float3 l_in = lightRadiance * CalcSpotLight(p, lightPos, lightDir, spotLightDecrease) * exp(-l_d * attenuation) * shadow;
@@ -345,7 +345,7 @@ void RenderLightVolumeDirectionalPS(
     stepIndex < NUM_SAMPLES;
     ++stepIndex, p += step, viewDist -= stepLen, viewDepth += viewDepthStep)
   {
-    float shadow = ComputeShadow(p, viewDepth);
+    float shadow = ComputeShadow(p, viewDepth, vsOut.pos.xy);
     if(viewDepth < cameraNearFar.x)
       shadow = 0.0f;
     float l_d = dirLightDist;
