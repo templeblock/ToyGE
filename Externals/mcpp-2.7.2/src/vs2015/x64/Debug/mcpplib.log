@@ -1,0 +1,39 @@
+﻿C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V140\Microsoft.CppBuild.targets(368,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+  directive.c
+  eval.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(1529): warning C4146: unary minus operator applied to unsigned type, result still unsigned
+  expand.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(713): warning C4133: '=': incompatible types - from 'LOCATION *' to 'char *'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1751): warning C4101: 'arg': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1976): warning C4090: '=': different 'const' qualifiers
+  main.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(475): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(477): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _strdup. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(552): note: see declaration of 'strdup'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(780): warning C4244: '=': conversion from '__int64' to 'int', possible loss of data
+  mbchar.c
+  preproc.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\preproc.c(3): warning C4068: unknown pragma
+f:\workspace\toyge\externals\mcpp-2.7.2\src\preproc.c(8): warning C4068: unknown pragma
+  support.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1590): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1596): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1600): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1687): warning C4102: 'com_start': unreferenced label
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1963): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1991): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2092): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2319): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2418): warning C4244: '=': conversion from '__int64' to 'long', possible loss of data
+  system.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(427): warning C4101: 'defp': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2466): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2530): warning C4267: '=': conversion from 'size_t' to 'int', possible loss of data
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2475): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _strdup. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(552): note: see declaration of 'strdup'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3431): warning C4102: 'search': unreferenced label
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4254): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4765): warning C4101: 'i': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(5050): warning C4244: 'return': conversion from '__int64' to 'int', possible loss of data
+  Generating Code...
+  mcpplib.vcxproj -> F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2015\\..\..\lib\Win64\VS2015\mcpp_64d.lib

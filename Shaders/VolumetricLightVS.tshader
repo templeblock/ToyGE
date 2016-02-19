@@ -1,0 +1,7 @@
+#include "Common.tshader"
+#include "MeshVertexInput.tshader"
+
+MeshVertexVSOutputs RenderLightVolumeVS(MeshVertexVSInputs inputs)
+{
+	  return GetMeshVSOutputs(inputs);
+}

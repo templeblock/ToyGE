@@ -1,0 +1,13 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D shininessTex;
+
+SamplerState pointSampler;
+
+float ShininessToRoughnessPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float shininess = shininessTex.SampleLevel(samplerPoint, vsOut.tex, 0).x;
+    shininess *= 255.0;
+    return pow(2.0 / (shininess + 2.0), 0.25);
+}

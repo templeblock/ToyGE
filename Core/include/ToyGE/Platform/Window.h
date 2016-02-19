@@ -2,15 +2,17 @@
 #ifndef WINDOW_H
 #define WINDOW_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
-#include "boost\signals2.hpp"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
+
+#include <boost\signals2.hpp>
 
 namespace ToyGE
 {
 	struct WindowCreateParams
 	{
-		WString name;
+		String name;
+		String title;
 		int32_t x;
 		int32_t y;
 		int32_t width;
@@ -76,12 +78,16 @@ namespace ToyGE
 
 		virtual HWINDOW WindowHandle() const = 0;
 
-		virtual void SetTitle(const WString & tile) = 0;
+		virtual void SetTitle(const String & title)
+		{
+			_title = title;
+		}
 
 		virtual void Show() = 0;
 
 	protected:
-		WString _name;
+		String _name;
+		String _title;
 		int32_t _x;
 		int32_t _y;
 		int32_t _width;

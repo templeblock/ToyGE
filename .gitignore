@@ -44,12 +44,12 @@ Temporary Items
 
 # ToyGE
 bin
-lib
-Build/vc
-Externals
-Media/Effects/pcfx
-Media/Textures
-Media/Fonts
-Media/Models
+Build/vs2015
+Externals/AntTweakBar
+Externals/assimp-3.1.1
+Externals/boost_1_60_0
+Externals/DirectXTex
+Externals/FreeImage
+Externals/freetype-2.5.3
 ToyGE_Test
-ToyGE.log
+Shaders/Cache

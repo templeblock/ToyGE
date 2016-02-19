@@ -1,35 +1,58 @@
 #include "ToyGE\RenderEngine\TransientBuffer.h"
-#include "ToyGE\Kernel\Global.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
 #include "ToyGE\Platform\Looper.h"
-#include "ToyGE\Kernel\Util.h"
 
 namespace ToyGE
 {
-	TransientBuffer::TransientBuffer(int32_t elementSize, int32_t initNumElements, uint32_t bufferBindFlags)
+	SubAlloc::~SubAlloc()
+	{
+		Free();
+	}
+
+	void SubAlloc::Free()
+	{
+		if (!bFree)
+		{
+			if(!transientBuffer.expired())
+				transientBuffer.lock()->Free(bytesOffset, bytesSize);
+			bFree = true;
+		}
+	}
+
+
+	TransientBuffer::~TransientBuffer()
+	{
+		_frameEventConnection.disconnect();
+	}
+
+	void TransientBuffer::Init(int32_t elementSize, int32_t initNumElements, uint32_t bufferBindFlags)
 	{
 		RenderBufferDesc bufDesc;
-		bufDesc.elementSize = static_cast<size_t>(elementSize);
+		bufDesc.elementSize = elementSize;
 		bufDesc.numElements = initNumElements;
 		bufDesc.bindFlag = bufferBindFlags;
 		bufDesc.cpuAccess = CPU_ACCESS_WRITE;
-		bufDesc.structedByteStride = 0;
-		_buffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(bufDesc, nullptr);
+		bufDesc.bStructured = false;
+		if(bufferBindFlags & BUFFER_BIND_VERTEX)
+			_buffer = Global::GetRenderEngine()->GetRenderFactory()->CreateVertexBuffer();
+		else
+			_buffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+		_buffer->SetDesc(bufDesc);
+		_buffer->Init(nullptr);
 
 		_bufferData = MakeBufferedDataShared(static_cast<size_t>(bufDesc.elementSize * bufDesc.numElements));
 
 		auto subAlloc = std::make_shared<SubAlloc>();
 		subAlloc->bytesOffset = 0;
 		subAlloc->bytesSize = elementSize * initNumElements;
+		subAlloc->bFree = true;
+		subAlloc->transientBuffer = shared_from_this();
 		_freeList.push_back(subAlloc);
-	}
 
-	TransientBuffer::~TransientBuffer()
-	{
-		//Global::GetLooper()->FrameEvent().disconnect(std::bind(&TransientBuffer::OnFrame, this));
-		_frameEventConnection.disconnect();
+		_retiredFrames.push_back(CreateRetiredFrame());
 	}
 
 	Ptr<SubAlloc> TransientBuffer::Alloc(int32_t bytesSize)
@@ -44,6 +67,8 @@ namespace ToyGE
 				allocFind = std::make_shared<SubAlloc>();
 				allocFind->bytesOffset = (*itr)->bytesOffset;
 				allocFind->bytesSize = bytesSize;
+				allocFind->bFree = false;
+				allocFind->transientBuffer = shared_from_this();
 
 				(*itr)->bytesOffset += bytesSize;
 				(*itr)->bytesSize -= bytesSize;
@@ -59,17 +84,25 @@ namespace ToyGE
 		//Not Find
 		if (!allocFind)
 		{
-			auto bufDesc = _buffer->Desc();
+			auto bufDesc = _buffer->GetDesc();
 			bufDesc.numElements *= 2;
-			auto newBuf = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(bufDesc, nullptr);
-			_buffer->CopyTo(newBuf, 0, 0, static_cast<int32_t>(_buffer->Desc().elementSize) * _buffer->Desc().numElements);
+			Ptr<RenderBuffer> newBuf;
+			if(bufDesc.bindFlag & BUFFER_BIND_VERTEX)
+				newBuf = Global::GetRenderEngine()->GetRenderFactory()->CreateVertexBuffer();
+			else
+				newBuf = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+			newBuf->SetDesc(bufDesc);
+			newBuf->Init(nullptr);
+			_buffer->CopyTo(newBuf, 0, 0, static_cast<int32_t>(_buffer->GetDesc().elementSize) * _buffer->GetDesc().numElements);
 
 			auto newBufData = MakeBufferedDataShared(static_cast<size_t>(bufDesc.elementSize * bufDesc.numElements));
-			memcpy(newBufData.get(), _bufferData.get(), static_cast<size_t>(_buffer->Desc().elementSize * _buffer->Desc().numElements));
+			memcpy(newBufData.get(), _bufferData.get(), static_cast<size_t>(_buffer->GetDesc().elementSize * _buffer->GetDesc().numElements));
 
 			auto subAlloc = std::make_shared<SubAlloc>();
-			subAlloc->bytesOffset = static_cast<int32_t>(_buffer->Desc().elementSize) * _buffer->Desc().numElements;
+			subAlloc->bytesOffset = static_cast<int32_t>(_buffer->GetDesc().elementSize) * _buffer->GetDesc().numElements;
 			subAlloc->bytesSize = subAlloc->bytesOffset;
+			subAlloc->bFree = true;
+			subAlloc->transientBuffer = shared_from_this();
 			_freeList.push_back(subAlloc);
 
 			_buffer = newBuf;
@@ -81,12 +114,19 @@ namespace ToyGE
 		return allocFind;
 	}
 
-	void TransientBuffer::Free(const Ptr<SubAlloc> & subAlloc)
+	void TransientBuffer::Free(int32_t bytesOffset, int32_t bytesSize)
 	{
-		if (!subAlloc)
-			return;
+		ToyGE_ASSERT(bytesOffset >= 0);
+		ToyGE_ASSERT(bytesSize > 0);
+		ToyGE_ASSERT(bytesOffset + bytesSize <= _buffer->GetDataSize());
+		ToyGE_ASSERT(_retiredFrames.size() > 0);
 
-		_retiredFrames.back()->pendingFrees.push_back(subAlloc);
+		auto allocToFree = std::make_shared<SubAlloc>();
+		allocToFree->bytesOffset = bytesOffset;
+		allocToFree->bytesSize = bytesSize;
+		allocToFree->bFree = true;
+		allocToFree->transientBuffer = shared_from_this();
+		_retiredFrames.back()->pendingFrees.push_back(allocToFree);
 	}
 
 	void TransientBuffer::Update(const Ptr<SubAlloc> & subAlloc, const void * pData, int32_t dataSize, int32_t dstBytesOffset)
@@ -104,7 +144,7 @@ namespace ToyGE
 		_bufferUpdate.push_back(updateDesc);
 	}
 
-	void TransientBuffer::UpdateFinish()
+	void TransientBuffer::FlushUpdate()
 	{
 		auto mappedData = _buffer->Map(MAP_WRITE_NO_OVERWRITE);
 		for (auto & update : _bufferUpdate)
@@ -159,6 +199,7 @@ namespace ToyGE
 				else
 				{
 					_freeList.insert(itr, subAlloc);
+					subAlloc->bFree = true;
 				}
 				return;
 			}

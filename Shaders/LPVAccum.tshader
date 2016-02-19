@@ -1,0 +1,11 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture3D lpvAccumInTex;
+
+int depthSlice;
+
+float4 LPVAccumPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return lpvAccumInTex.Load(int4(int2(vsOut.pos.xy), depthSlice, 0));
+}

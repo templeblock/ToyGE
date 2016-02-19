@@ -1,0 +1,273 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "AtmosphereRenderingCommon.tshader"
+
+#define OPTICALDEPTH_LUT_NUM_STEPS 256
+
+float4 texSize;
+    
+float2 InitOpticalDepthLUTPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float heightScale = (vsOut.pos.x - 0.5f) / (texSize.x - 1.0f);
+    float startHeight = lerp(0.0f, atmosphereTopHeight, heightScale);
+    startHeight = clamp(startHeight, 10.0f, atmosphereTopHeight - 10.0f);
+    
+    float3 startPos = float3(0.0f, startHeight, 0.0f);
+    float cosTheta = (vsOut.pos.y - 0.5f) / (texSize.y - 1.0f) * 2.0f - 1.0f;
+    float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
+    float3 rayDir = float3(0.0f, cosTheta, sinTheta);
+    
+    float3 earthCenter = float3(0.0f, -earthRadius, 0.0f);
+
+    //Check earth intersecton
+    float2 earthIntersection;
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius, earthIntersection);
+    if( earthIntersection.x > 0 )
+        return 1e+20;
+    
+    float2 atmosphereTopIntersection;
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius + atmosphereTopHeight, atmosphereTopIntersection);
+    float3 endPos = startPos + rayDir * atmosphereTopIntersection.y;
+    
+    //Intergration
+    float3 step = (endPos - startPos) / OPTICALDEPTH_LUT_NUM_STEPS;
+    float stepLen = length(step);
+    float2 preDensity = exp(-startHeight / particleScaleHeight);
+    
+    float2 densityAccum = 0.0f;
+    float3 curPos = startPos + step;
+    for(int i = 1; i <= OPTICALDEPTH_LUT_NUM_STEPS; ++i, curPos += step)
+    {
+        float height = length(earthCenter - curPos) - earthRadius;
+        float2 density = exp(-height / particleScaleHeight);
+        density = 0.5f * (preDensity + density);
+        densityAccum += density * stepLen;
+        preDensity = density;
+    }
+    
+    return densityAccum;
+}
+
+#define SCATTERING_LUT_NUM_STEPS 256
+    
+void PreComputeSingleScatteringPS(
+    DrawQuadVSOut vsOut,
+    out float3 outColor0 : SV_TARGET0,
+    out float3 outColor1 : SV_TARGET1)
+{
+    float4 coord = float4(vsOut.uv, wqCoord);
+    float height, cosViewZenith, cosSunZenith, cosViewSun;
+    GetScatteringComputeParams(coord, height, cosViewZenith, cosSunZenith, cosViewSun);
+    
+    float3 startPos = float3(0.0f, height, 0.0f);
+    float3 rayDir = float3(0.0f, cosViewZenith, sqrt(1.0f - cosViewZenith * cosViewZenith));
+    float3 earthCenter = float3(0.0f, -earthRadius, 0.0f);
+    float3 lightDir = ComputeLightDir(cosSunZenith, cosViewSun, rayDir);
+    //lightDir.y = cosSunZenith;
+    //lightDir.z = rayDir.z > 0 ? (cosViewSun - rayDir.y * cosSunZenith) / rayDir.z : 0.0f;
+    //lightDir.x = sqrt( 1.0 - dot(lightDir.yz, lightDir.yz) );
+    
+    float2 atmIntersection, earthIntersection;
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius + atmosphereTopHeight, atmIntersection);
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius - 1e2, earthIntersection);
+    
+    float endDist = atmIntersection.y;
+    if(earthIntersection.x > 0)
+        endDist = min(earthIntersection.x, endDist);
+    
+    float3 endPos = startPos + rayDir * endDist;
+    
+    float3 step = (endPos - startPos) / SCATTERING_LUT_NUM_STEPS;
+    float stepLen = length(step);
+    
+    float phaseR = PhaseFunction_R(cosViewSun);
+    float phaseM = PhaseFunction_M(phaseG_M, cosViewSun);
+    
+    float2 densityToCameraAccum = 0.0f;
+    
+    float3 inScatteingR = 0.0f;
+    float3 inScatteingM = 0.0f;
+    
+    float3 p = startPos;
+    for(int i = 0; i < SCATTERING_LUT_NUM_STEPS; ++i, p += step)
+    {
+        float3 earthToSampleDir = p - earthCenter;
+        float r = length(earthToSampleDir);
+        earthToSampleDir /= r;
+        
+        float sampleHeight = clamp(r - earthRadius, 10.0f, atmosphereTopHeight - 10.0f);
+        float3 attenuationToSample = ComputeAttenuation(sampleHeight, dot(earthToSampleDir, lightDir));
+        
+        float2 densitySample = exp( -sampleHeight / particleScaleHeight );
+        densityToCameraAccum += densitySample * stepLen;
+        
+        float3 attenuationToCamera = exp(- (attenuationR * densityToCameraAccum.x + attenuationM * densityToCameraAccum.y) );
+        
+        float3 attenuation = attenuationToSample * attenuationToCamera * stepLen;
+        
+        inScatteingR += attenuation * scatteringR * densitySample.x;
+        inScatteingM += attenuation * scatteringM * densitySample.y;
+    }
+    
+    //return inScatteingR * phaseR + inScatteingM * phaseM);
+    //return 1.0f;
+    outColor0 = inScatteingR;// * phaseR + inScatteingM * phaseM;
+    outColor1 = inScatteingM;
+    
+    //if( any(isnan(outColor0)) )
+    //  outColor0 = float3(1.0f, 0.0f, 0.0f);
+    //if( any(isnan(outColor1)) )
+    //  outColor1 = float3(1.0f, 0.0f, 0.0f);
+}
+
+#define NUM_SPHERICAL_SAMPLES 256
+  
+void ComputeOutRadiancePS(
+    DrawQuadVSOut vsOut,
+    out float3 outColor0 : SV_TARGET0,
+    out float3 outColor1 : SV_TARGET1)
+{
+    float4 coord = float4(vsOut.uv, wqCoord);
+    float height, cosViewZenith, cosSunZenith, cosViewSun;
+    GetScatteringComputeParams(coord, height, cosViewZenith, cosSunZenith, cosViewSun);
+    
+    float3 pos = float3(0.0f, height, 0.0f);
+    float3 viewDir = float3( 0.0f, cosViewZenith, sqrt(1.0 - cosViewZenith * cosViewZenith) );
+    float3 lightDir = ComputeLightDir(cosSunZenith, cosViewSun, viewDir);
+
+    float3 outRadianceR = 0.0f;
+    float3 outRadianceM = 0.0f;
+    for(int i = 0; i < NUM_SPHERICAL_SAMPLES; ++i)
+    {
+        float2 sample2D = Hammersley2d(uint(i), NUM_SPHERICAL_SAMPLES);
+        float cosTheta = sample2D.x * 2.0 - 1.0;
+        float sinTheta = sqrt(1 - cosTheta * cosTheta);
+        float phi = 2 * PI * sample2D.y;
+        
+        float3 sampleDir = float3(sinTheta * sin(phi), cosTheta, sinTheta * cos(phi));
+        float3 inScattering = ComputeInScattering(pos, sampleDir, lightDir);
+        if(any(isnan(inScattering)))
+        inScattering = float3(0.0f, 1.0f, 0.0f);
+        
+        float phaseR = PhaseFunction_R(dot(sampleDir, viewDir));
+        float phaseM = PhaseFunction_M(phaseG_M, dot(sampleDir, viewDir));
+        
+        outRadianceR += inScattering * phaseR;
+        outRadianceM += inScattering * phaseM;
+    }
+    
+    outColor0 = outRadianceR * scatteringR * 4 * PI / NUM_SPHERICAL_SAMPLES;
+    outColor1 = outRadianceM * scatteringM * 4 * PI / NUM_SPHERICAL_SAMPLES;
+}
+
+void PreComputeScatteringOrderPS(
+    DrawQuadVSOut vsOut,
+    out float3 outColor0 : SV_TARGET0,
+    out float3 outColor1 : SV_TARGET1)
+{
+    float4 coord = float4(vsOut.uv, wqCoord);
+    float height, cosViewZenith, cosSunZenith, cosViewSun;
+    GetScatteringComputeParams(coord, height, cosViewZenith, cosSunZenith, cosViewSun);
+    
+    float3 startPos = float3(0.0f, height, 0.0f);
+    float3 rayDir = float3(0.0f, cosViewZenith, sqrt(1.0f - cosViewZenith * cosViewZenith));
+    float3 earthCenter = float3(0.0f, -earthRadius, 0.0f);
+    float3 lightDir = ComputeLightDir(cosSunZenith, cosViewSun, rayDir);
+    //lightDir.y = cosSunZenith;
+    //lightDir.z = rayDir.z > 0 ? (cosViewSun - rayDir.y * cosSunZenith) / rayDir.z : 0.0f;
+    //lightDir.x = sqrt( saturate(1.0 - dot(lightDir.yz, lightDir.yz)) );
+    
+    float2 atmIntersection, earthIntersection;
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius + atmosphereTopHeight, atmIntersection);
+    GetRaySphereIntersection(startPos, rayDir, earthCenter, earthRadius - 1e2, earthIntersection);
+    
+    float endDist = atmIntersection.y;
+    if(earthIntersection.x > 0)
+        endDist = min(earthIntersection.x, endDist);
+    
+    float3 endPos = startPos + rayDir * endDist;
+    
+    float3 step = (endPos - startPos) / SCATTERING_LUT_NUM_STEPS;
+    float stepLen = length(step);
+    
+    float phaseR = PhaseFunction_R(cosViewSun);
+    float phaseM = PhaseFunction_M(phaseG_M, cosViewSun);
+    
+    float2 densityToCameraAccum = 0.0f;
+    
+    float3 inScatteingR = 0.0f;
+    float3 inScatteingM = 0.0f;
+    
+    float3 p = startPos;
+    for(int i = 0; i < SCATTERING_LUT_NUM_STEPS; ++i, p += step)
+    {
+        float3 earthToSampleDir = p - earthCenter;
+        float r = length(earthToSampleDir);
+        earthToSampleDir /= r;
+        
+        float sampleHeight = clamp(r - earthRadius, 10.0f, atmosphereTopHeight - 10.0f);
+        float3 attenuationToSample = ComputeAttenuation(sampleHeight, dot(earthToSampleDir, lightDir));
+        
+        float cosViewSample = dot(earthToSampleDir, -rayDir);
+        float cosSunSample = dot(earthToSampleDir, lightDir);
+        float cosViewSunSample = dot(-rayDir, lightDir);
+        
+        float4 lutCoord = GetScatteringLUTCoord(sampleHeight, cosViewSample, cosSunSample, cosViewSunSample);
+
+        float3 texCoord0, texCoord1;
+        float weight;
+        LUTCoordToTexCoord(lutCoord, texCoord0, texCoord1, weight);
+    
+        float3 inScatteringR0 = inScatteringLUTR.SampleLevel(linearSampler, texCoord0, 0).xyz;
+        float3 inScatteringR1 = inScatteringLUTR.SampleLevel(linearSampler, texCoord1, 0).xyz;
+    
+        float3 inScatteringR = lerp(inScatteringR0, inScatteringR1, weight);
+    
+        float3 inScatteringM0 = inScatteringLUTM.SampleLevel(linearSampler, texCoord0, 0).xyz;
+        float3 inScatteringM1 = inScatteringLUTM.SampleLevel(linearSampler, texCoord1, 0).xyz;
+    
+        float3 inScatteringM = lerp(inScatteringM0, inScatteringM1, weight);
+        
+        float3 radiance = inScatteringR + inScatteringM;
+        //float3 radiance = ComputeInScattering(sampleHeight, cosViewSample, cosSunSample, cosViewSun);
+        
+        float2 densitySample = exp( -sampleHeight / particleScaleHeight );
+        densityToCameraAccum += densitySample * stepLen;
+        
+        float3 attenuationToCamera = exp(- (attenuationR * densityToCameraAccum.x + attenuationM * densityToCameraAccum.y) );
+        
+        float3 attenuation = attenuationToSample * attenuationToCamera * stepLen;
+        
+        inScatteingR += radiance * stepLen * attenuationToCamera * densitySample.x;
+        inScatteingM += radiance * stepLen * attenuationToCamera * densitySample.y;
+    }
+    
+    outColor0 = inScatteingR;
+    outColor1 = inScatteingM;
+}
+
+void AccumScatteringPS(
+    DrawQuadVSOut vsOut,
+    out float3 outColor0 : SV_TARGET0,
+    out float3 outColor1 : SV_TARGET1)
+{
+    outColor0 = inScatteringLUTR.Load(uint4(vsOut.pos.xy, depthSlice, 0)).xyz;
+    outColor1 = inScatteringLUTM.Load(uint4(vsOut.pos.xy, depthSlice, 0)).xyz;
+}
+
+void AccumSingleScatteringPS(
+    DrawQuadVSOut vsOut,
+    out float3 outColor0 : SV_TARGET0,
+    out float3 outColor1 : SV_TARGET1)
+{
+    float4 coord = float4(vsOut.uv, wqCoord);
+    float height, cosViewZenith, cosSunZenith, cosViewSun;
+    GetScatteringComputeParams(coord, height, cosViewZenith, cosSunZenith, cosViewSun);
+    
+    float phaseR = PhaseFunction_R(cosViewSun);
+
+    float3 multiScatteringR = inScatteringLUTR.Load(uint4(vsOut.pos.xy, depthSlice, 0)).xyz;
+    float3 multiScatteringM = inScatteringLUTM.Load(uint4(vsOut.pos.xy, depthSlice, 0)).xyz;
+    
+    outColor0 = (multiScatteringR + multiScatteringM) / phaseR;
+}

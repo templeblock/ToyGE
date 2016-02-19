@@ -51,6 +51,11 @@ namespace ToyGE
 
 		const XMFLOAT4X4 & GetTransformMatrix() const
 		{
+			return _relativetransformMatrix;
+		}
+
+		const XMFLOAT4X4 & GetWorldTransformMatrix() const
+		{
 			return _transformMatrix;
 		}
 
@@ -59,11 +64,17 @@ namespace ToyGE
 		CLASS_GET(TransformMatrixCache, XMFLOAT4X4, _transformMatrixCache);
 		CLASS_SET(TransformMatrixCache, XMFLOAT4X4, _transformMatrixCache);
 
+		void BindShaderParams(const Ptr<class Shader> & shader);
+
+		void AttachTo(const Ptr<TransformComponent> & parent);
+
 	protected:
+		Ptr<TransformComponent> _parent;
 		XMFLOAT3 _pos;
 		XMFLOAT3 _scale;
 		XMFLOAT4 _orientation;
 		XMFLOAT4X4 _transformMatrix;
+		XMFLOAT4X4 _relativetransformMatrix;
 		bool _bDirty;
 		XMFLOAT4X4 _transformMatrixCache;
 

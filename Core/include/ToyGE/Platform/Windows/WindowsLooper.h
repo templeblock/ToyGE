@@ -2,7 +2,7 @@
 #ifndef WINDOWSLOOPER_H
 #define WINDOWSLOOPER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
+#include "ToyGE\Kernel\PreInclude.h"
 #include "ToyGE\Platform\Looper.h"
 
 namespace ToyGE

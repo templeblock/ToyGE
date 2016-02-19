@@ -2,8 +2,8 @@
 #ifndef DLLLOADER_H
 #define DLLLOADER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {

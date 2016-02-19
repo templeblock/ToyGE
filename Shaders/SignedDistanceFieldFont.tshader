@@ -1,0 +1,127 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "SignedDistanceFontCommon.tshader"
+
+Texture2D coverageTex;
+Texture2D gradientTex;
+Texture2D<uint2> distanceTex;
+Texture2D distanceOffsetTex;
+// Texture2DArray coverageTexArray;
+// Texture2DArray gradientTexArray;
+// Texture2DArray<uint2> distanceTexArray;
+// Texture2DArray distanceOffsetTexArray;
+
+SamplerState bilinearSampler;
+SamplerState pointSampler;
+
+float4 coverageTexSize;
+float2 glyphSize;
+
+float2 ComputeGradientPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+  float samples[3][3];
+  
+  float2 leftTopPos = floor( (vsOut.pos.xy - 0.5) / float2(glyphSize) ) * float2(glyphSize) + 0.5;
+  float2 rightBorttomPos = leftTopPos + glyphSize - 1.0;
+  
+  float4 uvBound = float4(leftTopPos, rightBorttomPos) * coverageTexSize.zwzw;
+  
+  [unroll] for(int x = -1; x <= 1; ++x)
+  {
+    [unroll] for(int y = -1; y <= 1; ++y)
+    {
+      float2 uv = vsOut.uv.xy + float2(x, y) * coverageTexSize.zw;
+      
+      if(any(uv < uvBound.xy) || any(uv > uvBound.zw))
+        samples[y + 1][x + 1] = 0.0f;
+      else
+        samples[y + 1][x + 1] = coverageTex.SampleLevel(pointSampler, uv, 0).x;
+    }
+  }
+  
+  float dadx = 0.0f;
+  [unroll] for(int i = 0; i < 3; ++i)
+  {
+    float w = 1.0f;
+    if(i == 0)
+      w = 1.414f;
+    dadx += (samples[i][2] - samples[i][0]) * w;
+  }
+  
+  float dady = 0.0f;
+  [unroll] for(int j = 0; j < 3; ++j)
+  {
+    float w = 1.0f;
+    if(j == 0)
+      w = 1.414f;
+    dady += (samples[2][j] - samples[0][j]) * w;
+  }
+  
+  float2 g = float2(dadx, dady);
+  
+  if(length(g) < 1e-4)
+  {
+    g.x = 1.0;
+    g.y = 0.0;
+  }
+  else
+    g /= max(1e-5, length(g));
+  
+  return g;
+}
+
+
+float ComputeSignedDistanceOffsetPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+  uint2 pixelPos = uint2(vsOut.pos.xy);
+  
+  float coverage0 = coverageTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+
+  float a = coverage0;
+  
+  float2 g = gradientTex.SampleLevel(pointSampler, vsOut.uv, 0).xy;
+  
+  g = abs(g);
+  if(g.x < g.y)
+    g.xy = g.yx;
+  
+  float a1 = g.y / g.x;
+  
+  float d;
+  if(a >= 0 && a <= a1)
+  {
+    d = dot(g, 0.5) - sqrt(2.0 * g.x * g.y * a);
+  }
+  else if(a >= a1 && a <= 1- a1)
+  {
+    d = (0.5 - a) * g.x;
+  }
+  else
+  {
+    d = -dot(g, 0.5) + sqrt(2.0 * g.x * g.y * (1.0 - a));
+  }
+  
+  return d;
+}
+
+float ComputeSignedDistancePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 pixelPos = floor(vsOut.pos.xy); 
+    float2 glyphPos = floor(pixelPos / glyphSize);
+    float2 pixelPosStart = glyphPos * glyphSize;
+    float2 pixelPosInGlyph = pixelPos - pixelPosStart;
+  
+    uint2 nearest = distanceTex.Load(uint3((uint2)pixelPos, 0));
+    float2 nearestOffset = (float2)nearest - (float2)pixelPosInGlyph;
+    float di = sqrt( max(1e-4, dot(nearestOffset * nearestOffset, 1.0)) );
+    
+    float coverage = coverageTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    if(coverage < 0.5)
+        di *= -1.0f;
+    
+    float df = distanceOffsetTex.SampleLevel(pointSampler, (pixelPosStart + (float2)nearest + 0.5f) * coverageTexSize.zw, 0).x;
+    
+    float d = di - df;
+    
+    return EncodeDistance(d);
+}

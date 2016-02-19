@@ -6,15 +6,17 @@
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, FXAASetupPS, SHADER_PS, "FXAA", "FXAASetupPS", SM_4);
+	DECLARE_SHADER(, FXAAPS, SHADER_PS, "FXAA", "FXAAPS", SM_4);
+
 	class TOYGE_CORE_API FXAA : public RenderAction
 	{
 	public:
 		FXAA();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 	private:
-		Ptr<RenderEffect> _fx;
 		float _fxaaConsoleRcpFrameOpt_N;
 		float _fxaaQualitySubpix;
 		float _fxaaQualityEdgeThreshold;
@@ -23,7 +25,7 @@ namespace ToyGE
 		float _fxaaConsoleEdgeThreshold;
 		float _fxaaConsoleEdgeThresholdMin;
 
-		Ptr<Texture> SetupFXAAInTex(const Ptr<Texture> & inTex);
+		PooledTextureRef SetupFXAAInTex(const Ptr<Texture> & inTex);
 	};
 }
 

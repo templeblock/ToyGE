@@ -9,40 +9,33 @@ namespace ToyGE
 	class D3D11Texture1D : public D3D11Texture
 	{
 	public:
-		D3D11Texture1D(const TextureDesc & desc);
-		D3D11Texture1D(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList);
+		D3D11Texture1D() : D3D11Texture(TEXTURE_1D) {}
 
-		static Ptr<D3D11Texture1D>
-			CreateFromRawD3D(
-			const Ptr<ID3D11Device> & rawDevice, const Ptr<ID3D11Texture1D> & rawTexture1D);
+		virtual void Init(const std::vector<RenderDataDesc> & initDataList) override;
 
-		Ptr<ID3D11Resource> RawD3DTexture() const override
+		virtual void InitFromHardware(const Ptr<ID3D11Resource> & hardwareResource) override;
+
+		virtual void Release() override
 		{
-			return _rawD3DTexture1D;
+			D3D11Texture::Release();
+			_hardwareTexture1D = nullptr;
 		}
 
-		const Ptr<ID3D11ShaderResourceView>& 
-			AcquireRawD3DShaderResourceView
-			(int32_t firstMipLevel, int32_t numMipLevels, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
+		Ptr<ID3D11Resource> GetHardwareTexture() const override
+		{
+			return _hardwareTexture1D;
+		}
 
-		const Ptr<ID3D11RenderTargetView>& 
-			AcquireRawD3DRenderTargetView
-			(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
+	protected:
+		Ptr<ID3D11Texture1D> _hardwareTexture1D;
 
-		const Ptr<ID3D11DepthStencilView>& 
-			AcquireRawD3DDepthStencilView
-			(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
+		virtual Ptr<TextureShaderResourceView> CreateShaderResourceView(int32_t firstMip, int32_t numMips, int32_t firstArray, int32_t numArrays, bool bCube, RenderFormat viewFormat) override;
 
-		const Ptr<ID3D11UnorderedAccessView>& 
-			AcquireRawD3DUnorderedAccessView
-			(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
+		virtual Ptr<TextureUnorderedAccessView> CreateUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat) override;
 
-	private:
-		Ptr<ID3D11Texture1D> _rawD3DTexture1D;
+		virtual Ptr<TextureRenderTargetView> CreateRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat) override;
 
-		D3D11Texture1D() = default;
-		void InitFromRawD3DTexture();
-		void CreateRawD3DTexture1D_Desc(bool hasInitData, D3D11_TEXTURE1D_DESC & outDesc);
+		virtual Ptr<TextureDepthStencilView> CreateDepthStencilView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat) override;
 	};
 }
 

@@ -1,0 +1,138 @@
+#define MVO_WORLD_POSITION 1
+#define MVO_VIEW_POSITION 1
+
+#ifdef GEN_VELOCITY
+#define MVO_PRE_VIEW_POSITION 1
+#endif
+
+#include "MeshVertexInput.tshader"
+#include "Lighting.tshader"
+#include "BRDF.tshader"
+#include "View.tshader"
+#include "Shadow.tshader"
+
+Texture2D<float3>           lightingTex;
+RWStructuredBuffer<float>   oitCounter;
+RWTexture2D<int>            oitListHead;
+RWBuffer<int>               oitListLink;
+RWBuffer<float3>            oitTransmittanceList;
+RWBuffer<float3>            oitLightingList;
+RWBuffer<float>             oitDepthList;
+
+cbuffer cb_ambient
+{
+    float3 ambientColor;
+};
+
+MeshVertexVSOutputs OITRenderingVS(MeshVertexVSInputs inputs)
+{
+	  return GetMeshVSOutputs(inputs);
+}
+
+void OITLightingPS(
+    MeshVertexVSOutputs inputs,
+    out float3 color : SV_TARGET0)
+{
+    NormalizeMeshVertexVSOutputs(inputs);
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+    float3 n = mat.normal;
+    float3 l = GetPosToLightDir(inputs.worldPosition);
+    float3 v = normalize(viewWorldPosition - inputs.worldPosition);
+    
+    float3 irradiance = GetIrradiance(inputs.worldPosition, n);
+    
+#if ENABLE_SHADOW == 1
+    float shadowNoise = InterleavedGradientNoise(inputs.svPosition.xy, 0.5) + 0.5;
+    float shadow = ComputeShadow(inputs.worldPosition, inputs.viewPosition.z, shadowNoise);
+    irradiance *= shadow;
+#endif
+    
+#ifdef INIT
+    float3 lighting = 0.0;
+#else
+    float3 lighting = 0.0;//lightingTex[int2(inputs.svPosition.xy)];
+#endif
+
+#ifdef AMBIENT
+    float3 diffuse = (irradiance / PI + ambientColor) * mat.diffuseColor * mat.opacity;
+#else
+    float3 diffuse = (irradiance / PI) * mat.diffuseColor * mat.opacity;
+#endif
+    float3 specular = irradiance * BRDF(n, l, v, mat.specularColor, mat.roughness);
+    
+    color = specular + diffuse + lighting;
+}
+
+void OITAmbientPS(
+    MeshVertexVSOutputs inputs,
+    out float3 color : SV_TARGET0)
+{
+    NormalizeMeshVertexVSOutputs(inputs);
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+    float3 diffuse = (ambientColor) * mat.diffuseColor * mat.opacity;
+    
+    color = diffuse;
+}
+
+void OITRenderingPS(
+    MeshVertexVSOutputs inputs
+#ifdef GEN_VELOCITY
+    , out float2  velocity : SV_TARGET0
+#endif
+)
+{
+    NormalizeMeshVertexVSOutputs(inputs);
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+    float3 transmittance = mat.diffuseColor * (1.0 - mat.opacity);
+    
+    // Lighting
+    //float3 lighting = lightingTex[int2(inputs.svPosition.xy)];
+    
+    float3 n = mat.normal;
+    float3 l = GetPosToLightDir(inputs.worldPosition);
+    float3 v = normalize(viewWorldPosition - inputs.worldPosition);
+    
+    float3 irradiance = GetIrradiance(inputs.worldPosition, n);
+    
+#if ENABLE_SHADOW == 1
+    float shadowNoise = InterleavedGradientNoise(inputs.svPosition.xy, 0.5) + 0.5;
+    float shadow = ComputeShadow(inputs.worldPosition, inputs.viewPosition.z, shadowNoise);
+    irradiance *= shadow;
+#endif
+
+    float3 diffuse = (irradiance / PI + ambientColor) * mat.diffuseColor * mat.opacity;
+    float3 specular = irradiance * BRDF(n, l, v, mat.specularColor, mat.roughness);
+    
+    float3 lighting = diffuse + specular;
+    
+    int newNodeIndex = oitCounter.IncrementCounter();
+   
+    int oldNodeIndex;
+    InterlockedExchange(oitListHead[int2(inputs.svPosition.xy)], newNodeIndex, oldNodeIndex);
+    
+    oitListLink[newNodeIndex]           = oldNodeIndex;
+    oitTransmittanceList[newNodeIndex]  = transmittance;
+    oitLightingList[newNodeIndex]       = lighting;
+    oitDepthList[newNodeIndex]          = inputs.svPosition.z;
+    
+#ifdef GEN_VELOCITY
+    velocity = 0.0f;
+    
+    float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), viewToClipMatrix);
+    preClipPos /= preClipPos.w;
+    
+    float2 velStart = preClipPos.xy * float2(0.5f, -0.5f) + 0.5f;
+    float2 velEnd   = inputs.svPosition.xy * invViewSize;
+    
+    velocity = (velEnd - velStart);
+#endif
+}

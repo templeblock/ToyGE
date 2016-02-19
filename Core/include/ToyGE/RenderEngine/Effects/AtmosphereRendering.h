@@ -8,17 +8,38 @@
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, InitOpticalDepthLUTPS, SHADER_PS, "AtmosphereRenderingPrecompute", "InitOpticalDepthLUTPS", SM_4);
+	DECLARE_SHADER(, PreComputeSingleScatteringPS, SHADER_PS, "AtmosphereRenderingPrecompute", "PreComputeSingleScatteringPS", SM_4);
+	DECLARE_SHADER(, ComputeOutRadiancePS, SHADER_PS, "AtmosphereRenderingPrecompute", "ComputeOutRadiancePS", SM_4);
+	DECLARE_SHADER(, PreComputeScatteringOrderPS, SHADER_PS, "AtmosphereRenderingPrecompute", "PreComputeScatteringOrderPS", SM_4);
+	DECLARE_SHADER(, AccumScatteringPS, SHADER_PS, "AtmosphereRenderingPrecompute", "AccumScatteringPS", SM_4);
+	DECLARE_SHADER(, AccumSingleScatteringPS, SHADER_PS, "AtmosphereRenderingPrecompute", "AccumSingleScatteringPS", SM_4);
+
+	DECLARE_SHADER(, InitSampleLinesPS, SHADER_PS, "AtmosphereRendering", "InitSampleLinesPS", SM_4);
+	DECLARE_SHADER(, InitSampleCoordsPS, SHADER_PS, "AtmosphereRendering", "InitSampleCoordsPS", SM_4);
+	DECLARE_SHADER(, RefineSamplesCS, SHADER_CS, "AtmosphereRefineSamples", "RefineSamplesCS", SM_5);
+	DECLARE_SHADER(, MarkRayMarchingSamplesPS, SHADER_PS, "AtmosphereRendering", "MarkRayMarchingSamplesPS", SM_4);
+	DECLARE_SHADER(, RayMarchingPS, SHADER_PS, "AtmosphereRendering", "RayMarchingPS", SM_4);
+	DECLARE_SHADER(, InterpolateRestSamplesPS, SHADER_PS, "AtmosphereRendering", "InterpolateRestSamplesPS", SM_4);
+	DECLARE_SHADER(, UnWarpSamplesPS, SHADER_PS, "AtmosphereRendering", "UnWarpSamplesPS", SM_4);
+	DECLARE_SHADER(, AccumRayMarchingPS, SHADER_PS, "AtmosphereRendering", "AccumRayMarchingPS", SM_4);
+
+	DECLARE_SHADER(, RenderSunVS, SHADER_VS, "AtmosphereRenderingRenderSun", "RenderSunVS", SM_4);
+	DECLARE_SHADER(, RenderSunPS, SHADER_PS, "AtmosphereRenderingRenderSun", "RenderSunPS", SM_4);
+
+	DECLARE_SHADER(, ComputeSunRadiancePS, SHADER_PS, "AtmosphereRenderingComputeSunRadiance", "ComputeSunRadiancePS", SM_4);
+
 	class Texture;
 	class Camera;
 
 	class TOYGE_CORE_API AtmosphereRendering : public RenderAction
 	{
 	public:
+		bool bEpipolarSampling = false;
+
 		AtmosphereRendering();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
-
-		//CLASS_SET(SunLight, Ptr<DirectionalLightComponent>, _sun);
+		void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_SET(SunDirection, XMFLOAT3, _sunDirection);
 
@@ -31,17 +52,11 @@ namespace ToyGE
 		void RecomputeSunRenderColor();
 
 	private:
-		Ptr<RenderEffect> _fx;
-		Ptr<RenderEffect> _refineFX;
 		int32_t _numSampleLines;
 		int32_t _maxSamplesPerLine;
 		int32_t _initalSampleStep;
-		//Ptr<DirectionalLightComponent> _sun;
-		XMFLOAT3 _sunDirection;
-		XMFLOAT3 _sunRadiance;
-		Ptr<Texture> _opticalDepthLUT;
-		Ptr<Texture> _inScatteringLUTR;
-		Ptr<Texture> _inScatteringLUTM;
+		int4 _lutSize;
+
 		float _earthRadius;
 		float _atmosphereTopHeight;
 		float _particleScaleHeightR;
@@ -51,57 +66,80 @@ namespace ToyGE
 		float3 _attenuationR;
 		float3 _attenuationM;
 		float _phaseG_M;
-		float _sunRenderRadius;
+
+		Ptr<Texture> _opticalDepthLUT;
+		Ptr<Texture> _inScatteringLUTR;
+		Ptr<Texture> _inScatteringLUTM;
+
+		XMFLOAT3 _sunDirection;
+		XMFLOAT3 _sunRadiance;
+		float	 _sunRenderRadius;
 		XMFLOAT3 _sunRenderColor;
 
 		void InitOpticalDepthLUT();
 
 		void InitInScatteringLUT();
 
-		Ptr<Texture> InitSampleLines(const float2 & renderTargetSize, const Ptr<Camera> & camera, const float2 & lightPosH);
+		PooledTextureRef InitSampleLines(
+			const float4 & viewSize,
+			const float2 & lightClipPos);
 
 		void InitSampleCoordsTex(
+			const float4 & viewSize,
 			const Ptr<Texture> & sampleLinesTex,
-			const Ptr<Texture> & linearDepthTex,
-			Ptr<Texture> & outSampleCoordTex,
-			Ptr<Texture> & outCameraDepthTex,
-			Ptr<Texture> & outDepthStencilTex);
+			const Ptr<Texture> & sceneLinearDepthTex,
+			PooledTextureRef & outSampleCoordTex,
+			PooledTextureRef & outSampleDepthTex,
+			PooledTextureRef & outSampleMaskDS);
 
-		Ptr<Texture> RefineSamples(
+		PooledTextureRef RefineSamples(
+			const float4 & viewSize,
+			float depthBreakThreshold,
 			const Ptr<Texture> & sampleCoordsTex,
-			const Ptr<Texture> & cameraDepthTex,
-			const Ptr<Camera> & camera,
-			const float2 & lightPosH);
+			const Ptr<Texture> & sampleDepthTex);
 
-		void MarkRayMarchingSamples(const Ptr<Texture> & interpolationSourceTex, const Ptr<Texture> & depthStencilTex);
+		void MarkRayMarchingSamples(
+			const Ptr<Texture> & interpolationSourceTex, 
+			const Ptr<Texture> & sampleMaskDS);
 
 		void DoRayMarching(
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & sampleCoordsTex,
-			const Ptr<Texture> & cameraDepthTex,
-			const Ptr<Texture> & depthStencilTex,
-			const Ptr<Camera> & camera,
-			Ptr<Texture> & outLightAccumTex,
-			Ptr<Texture> & outAttenuationTex);
+			const Ptr<Texture> & depthTex,
+			const Ptr<Texture> & sampleMaskDS,
+			PooledTextureRef & outLightAccumTex,
+			PooledTextureRef & outAttenuationTex);
 
 		void InterpolateRestSamples(
+			const float4 & viewSize,
 			const Ptr<Texture> & interpolationSourceTex,
-			const Ptr<Texture> & cameraDepthTex,
+			const Ptr<Texture> & sampleDepthTex,
 			const Ptr<Texture> & lightAccumTex,
 			const Ptr<Texture> & attenuationTex,
-			Ptr<Texture> & outLightAccumTex,
-			Ptr<Texture> & outAttenuationTex);
+			const Ptr<Texture> & sampleMaskDS,
+			PooledTextureRef & outLightAccumTex,
+			PooledTextureRef & outAttenuationTex);
 
 		void UnWarpSamples(
+			const float2 & lightClipPos,
 			const Ptr<Texture> & lightAccumTex,
 			const Ptr<Texture> & attenuationTex,
+			const Ptr<Texture> & sampleLinesTex,
+			const Ptr<Texture> & sampleDepthTex,
 			const Ptr<Texture> & sceneTex,
-			const ResourceView & target);
+			const Ptr<Texture> & sceneLinearDepthTex,
+			const Ptr<RenderTargetView> & target);
+
+		void AccumRayMarching(
+			const Ptr<Texture> & lightAccumTex,
+			const Ptr<Texture> & attenuationTex,
+			const Ptr<RenderTargetView> & target);
 
 		void RenderSun(
-			const float2 & lightPosH,
-			const Ptr<Camera> & camera,
-			const ResourceView & target,
-			const Ptr<Texture> & cullDepthStencil);
+			const float2 & lightClipPos,
+			const Ptr<RenderView> & view,
+			const Ptr<RenderTargetView> & target,
+			const Ptr<DepthStencilView> & sceneDepthTex);
 	};
 }
 

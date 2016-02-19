@@ -1,0 +1,107 @@
+#ifndef POISSONSAMPLING_TSHADER
+#define POISSONSAMPLING_TSHADER
+
+#if POISSON_NUM_SAMPLES == 1
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{
+    float2(0.000, 0.000)
+};
+#elif POISSON_NUM_SAMPLES == 3
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{
+    float2(-0.07786302f, 0.3959388f),
+    float2(-0.7714453f, -0.4060814f),
+    float2(0.7882019f, -0.1695635f)
+};
+#elif POISSON_NUM_SAMPLES == 5
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{
+    float2(-0.2508993f, 0.9319741f),
+    float2(0.7003985f, 0.3339666f),
+    float2(-0.3411747f, -0.09487349f),
+    float2(0.06802022f, -0.8017899f),
+    float2(0.8249263f, -0.48802f)
+};
+#elif POISSON_NUM_SAMPLES == 7
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{
+    float2(0.000, 0.000),
+    float2(0.000, 0.200), 
+    float2(0.325, 0.101), 
+    float2(0.272, -0.396), 
+    float2(-0.385, -0.488), 
+    float2(-0.711, 0.274), 
+    float2(0.060, 0.900) 
+};
+#elif POISSON_NUM_SAMPLES == 9
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{ 
+    float2(0.004403403f, -0.2050173f),
+    float2(-0.6218839f, -0.4826278f),
+    float2(0.2221038f, -0.9726392f),
+    float2(-0.8808069f, 0.1546926f),
+    float2(0.3316866f, 0.1732522f),
+    float2(-0.4136907f, 0.3861697f),
+    float2(0.8409745f, -0.2848135f),
+    float2(0.816089f, 0.5286033f),
+    float2(0.05971f, 0.662788f)
+};
+#elif POISSON_NUM_SAMPLES == 11
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{    
+    float2(0.8467034f, 0.005694491f),
+    float2(0.5986494f, -0.4429919f),
+    float2(0.181194f, 0.3425184f),
+    float2(0.4420741f, 0.8063821f),
+    float2(-0.3722367f, 0.07663784f),
+    float2(-0.5610393f, 0.5902629f),
+    float2(0.06594459f, -0.1842696f),
+    float2(-0.09410216f, -0.9807848f),
+    float2(-0.5537213f, -0.6541628f),
+    float2(-0.984691f, -0.1506143f),
+    float2(-0.1223629f, 0.9062837f)
+};
+#elif POISSON_NUM_SAMPLES == 13
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{    
+    float2(0.1505347f, -0.5197572f),
+    float2(-0.3086691f, -0.8310054f),
+    float2(-0.30005f, -0.2705553f),
+    float2(0.003137972f, 0.2606616f),
+    float2(0.7810665f, -0.1232958f),
+    float2(0.5987501f, -0.7392633f),
+    float2(0.4615202f, 0.2117631f),
+    float2(0.850203f, 0.4152781f),
+    float2(-0.8684125f, -0.3923373f),
+    float2(-0.732917f, 0.2317166f),
+    float2(-0.2350768f, 0.7109489f),
+    float2(0.1752102f, 0.964411f),
+    float2(-0.6570888f, 0.6831767f)
+};
+#elif POISSON_NUM_SAMPLES == 15
+static const float2 poissonSampleOffsets[POISSON_NUM_SAMPLES] = 
+{
+    float2(-0.5272434f, 0.4635472f),
+    float2(-0.532829f, -0.1315444f),
+    float2(0.02950153f, 0.07607762f),
+    float2(-0.4308882f, 0.8937178f),
+    float2(0.1684846f, 0.4528822f),
+    float2(-0.846667f, 0.2227635f),
+    float2(0.4612895f, 0.1793739f),
+    float2(0.3341698f, -0.279819f),
+    float2(0.1780205f, 0.9605636f),
+    float2(0.7160961f, 0.5807444f),
+    float2(0.8909534f, 0.1301298f),
+    float2(-0.2277821f, -0.6578089f),
+    float2(-0.7325121f, -0.4811087f),
+    float2(0.6519442f, -0.6258116f),
+    float2(0.1452987f, -0.9162549f)
+};
+#endif
+
+float2 GetPoissonSample(int index)
+{
+    return poissonSampleOffsets[index];
+}
+
+#endif

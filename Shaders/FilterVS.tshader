@@ -1,0 +1,29 @@
+#include "Common.tshader"
+
+float4 samplesOffsets[(NUM_SAMPLES + 1) / 2];
+
+void FilterVS(
+  float2 pos : POSITION,
+  out float4 posH : SV_POSITION,
+  out float4 uvs[(NUM_SAMPLES + 1) / 2] : UVS)
+{
+	posH = float4(pos, 0.0f, 1.0f);
+	float2 uv = float2(pos.x * 0.5f + 0.5f, pos.y * -0.5f + 0.5f);
+  
+    float2 offsets[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) samplesOffsets;
+    
+    //float2 uvsCast[(NUM_SAMPLES + 1) / 2 * 2] = (float2[(NUM_SAMPLES + 1) / 2 * 2]) uvs;
+    
+    for(uint i0 = 0; i0 < (NUM_SAMPLES + 1) / 2; ++i0)
+        uvs[i0] = 0.0f;
+    
+    [unroll] for(uint i = 0; i < NUM_SAMPLES; ++i)
+    {
+        //float2 offset = (i & 1) ? samplesOffsets[i/2].zw : samplesOffsets[i/2].xy;
+        float2 offset = offsets[i];
+        if( i & 1)
+        uvs[i / 2].zw = uv + offset;
+        else
+        uvs[i / 2].xy = uv + offset;
+    }
+}

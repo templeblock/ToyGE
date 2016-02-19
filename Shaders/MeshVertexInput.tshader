@@ -1,0 +1,322 @@
+#include "Material.tshader"
+#include "View.tshader"
+
+#ifndef MVI_POSITION
+#define MVI_POSITION 0
+#endif
+#ifndef MVI_TEXCOORD
+#define MVI_TEXCOORD 0
+#endif
+#ifndef MVI_NORMAL
+#define MVI_NORMAL 0
+#endif
+#ifndef MVI_TANGENT
+#define MVI_TANGENT 0
+#endif
+#ifndef MVI_BITANGENT
+#define MVI_BITANGENT 0
+#endif
+#ifndef MVI_COLOR
+#define MVI_COLOR 0
+#endif
+#ifndef MVI_WEIGHT
+#define MVI_WEIGHT 0
+#endif
+
+#ifndef MVO_LOCAL_POSITION
+#define MVO_LOCAL_POSITION 0
+#endif
+#ifndef MVO_WORLD_POSITION
+#define MVO_WORLD_POSITION 0
+#endif
+#ifndef MVO_VIEW_POSITION
+#define MVO_VIEW_POSITION 0
+#endif
+#ifndef MVO_SV_POSITION
+#define MVO_SV_POSITION 1
+#endif
+#ifndef MVO_TEXCOORD
+#define MVO_TEXCOORD MVI_TEXCOORD
+#endif
+#ifndef MVO_LOCAL_NORMAL
+#define MVO_LOCAL_NORMAL 0
+#endif
+#ifndef MVO_WORLD_NORMAL
+#define MVO_WORLD_NORMAL MVI_NORMAL
+#endif
+#ifndef MVO_VIEW_NORMAL
+#define MVO_VIEW_NORMAL 0
+#endif
+#ifndef MVO_LOCAL_TANGENT
+#define MVO_LOCAL_TANGENT 0
+#endif
+#ifndef MVO_WORLD_TANGENT
+#define MVO_WORLD_TANGENT MVI_TANGENT
+#endif
+#ifndef MVO_VIEW_TANGENT
+#define MVO_VIEW_TANGENT 0
+#endif
+#ifndef MVO_LOCAL_BITANGENT
+#define MVO_LOCAL_BITANGENT 0
+#endif
+#ifndef MVO_WORLD_BITANGENT
+#define MVO_WORLD_BITANGENT MVI_BITANGENT
+#endif
+#ifndef MVO_VIEW_BITANGENT
+#define MVO_VIEW_BITANGENT 0
+#endif
+#ifndef MVO_COLOR
+#define MVO_COLOR MVI_COLOR
+#endif
+#ifndef MVO_PRE_VIEW_POSITION
+#define MVO_PRE_VIEW_POSITION 0
+#endif
+#ifndef MVO_WEIGHT
+#define MVO_WEIGHT MVI_WEIGHT
+#endif
+
+cbuffer cb_mesh
+{
+    float4x4 localToWorldMatrix;
+    float4x4 preLocalToWorldMatrix;
+};
+
+struct MeshVertexVSInputs
+{
+    #if MVI_POSITION == 1
+    float3 position : POSITION;
+    #endif
+    #if MVI_TEXCOORD == 1
+    float3 texCoord[NUM_TEXCOORDS] : TEXCOORD;
+    #endif
+    #if MVI_NORMAL == 1
+    float3 normal : NORMAL;
+    #endif
+    #if MVI_TANGENT == 1
+    float3 tangent : TANGENT;
+    #endif
+    #if MVI_BITANGENT == 1
+    float3 bitangent : BITANGENT;
+    #endif
+    #if MVI_COLOR == 1
+    float3 color : COLOR;
+    #endif
+    #if MVI_WEIGHT == 1
+    float  weight : WEIGHT;
+    #endif
+};
+
+struct MeshVertexVSOutputs
+{
+    // Position
+    #if MVO_LOCAL_POSITION == 1
+    float3 localPosition : LOCAL_POSITION;
+    #endif
+    #if MVO_WORLD_POSITION == 1
+    float3 worldPosition : WORLD_POSITION;
+    #endif
+    #if MVO_VIEW_POSITION == 1
+    float3 viewPosition : VIEW_POSITION;
+    #endif
+    #if MVO_SV_POSITION == 1
+    float4 svPosition : SV_POSITION;
+    #endif
+    #if MVO_PRE_VIEW_POSITION == 1
+    float3 preViewPosition : PRE_VIEW_POSITION;
+    #endif
+    
+    // Texcoord
+    #if MVO_TEXCOORD == 1
+    float3 texCoord[NUM_TEXCOORDS] : TEXCOORD;
+    #endif
+    
+    // Normal
+    #if MVO_LOCAL_NORMAL == 1
+    float3 localNormal : LOCAL_NORMAL;
+    #endif
+    #if MVO_WORLD_NORMAL == 1
+    float3 worldNormal : WORLD_NORMAL;
+    #endif
+    #if MVO_VIEW_NORMAL == 1
+    float3 viewNormal : VIEW_NORMAL;
+    #endif
+    
+    // Tangent
+    #if MVO_LOCAL_TANGENT == 1
+    float3 localTangent : LOCAL_TANGENT;
+    #endif
+    #if MVO_WORLD_TANGENT == 1
+    float3 worldTangent : WORLD_TANGENT;
+    #endif
+    #if MVO_VIEW_TANGENT == 1
+    float3 viewTangent : VIEW_TANGENT;
+    #endif
+    
+    // Bitangent
+    #if MVO_LOCAL_BITANGENT == 1
+    float3 localBitangent : LOCAL_BITANGENT;
+    #endif
+    #if MVO_WORLD_BITANGENT == 1
+    float3 worldBitangent : WORLD_BITANGENT;
+    #endif
+    #if MVO_VIEW_BITANGENT == 1
+    float3 viewBitangent : VIEW_BITANGENT;
+    #endif
+    
+    // Color
+    #if MVO_COLOR == 1
+    float3 color : COLOR;
+    #endif
+    
+    // Weight
+    #if MVO_WEIGHT == 1
+    float  weight : WEIGHT;
+    #endif
+};
+
+MeshVertexVSOutputs GetMeshVSOutputs(MeshVertexVSInputs inputs)
+{
+    MeshVertexVSOutputs outputs;
+    
+    // Position
+    #if MVO_LOCAL_POSITION == 1
+    outputs.localPosition = inputs.position;
+    #endif
+    #if MVO_WORLD_POSITION == 1
+    outputs.worldPosition = mul(float4(inputs.position, 1.0f), localToWorldMatrix).xyz;
+    #endif
+    #if MVO_VIEW_POSITION == 1
+    #if MVO_WORLD_POSITION == 1
+    outputs.viewPosition = mul(float4(outputs.worldPosition, 1.0f), worldToViewMatrix).xyz;
+    #else
+    outputs.viewPosition = mul(mul(float4(inputs.position, 1.0f), localToWorldMatrix), worldToViewMatrix).xyz;
+    #endif
+    #endif
+    #if MVO_SV_POSITION == 1
+    #if MVO_WORLD_POSITION == 1
+    outputs.svPosition = mul(float4(outputs.worldPosition, 1.0f), worldToClipMatrix);
+    #elif MVO_VIEW_POSITION == 1
+    outputs.svPosition = mul(float4(outputs.viewPosition, 1.0f), viewToClipMatrix);
+    #else
+    outputs.svPosition = mul(mul(float4(inputs.position, 1.0f), localToWorldMatrix), worldToClipMatrix);
+    #endif
+    #endif
+    #if MVO_PRE_VIEW_POSITION == 1
+    outputs.preViewPosition = mul(mul(float4(inputs.position, 1.0f), preLocalToWorldMatrix), preWorldToViewMatrix).xyz;
+    #endif
+    
+    // Texcoord
+    #if MVO_TEXCOORD == 1
+    outputs.texCoord = inputs.texCoord;
+    #endif
+    
+    // Normal
+    #if MVO_LOCAL_NORMAL == 1
+    outputs.localNormal = inputs.normal;
+    #endif
+    #if MVO_WORLD_NORMAL == 1
+    outputs.worldNormal = mul(inputs.normal, (float3x3)(localToWorldMatrix));
+    #endif
+    #if MVO_VIEW_NORMAL == 1
+    #if MVO_WORLD_NORMAL == 1
+    outputs.viewNormal = mul(inputs.worldNormal, (float3x3)(worldToViewMatrix));
+    #else
+    outputs.viewNormal = mul(mul(inputs.normal, (float3x3)(localToWorldMatrix)), (float3x3)(worldToViewMatrix));
+    #endif
+    #endif
+    
+    // Tangent
+    #if MVO_LOCAL_TANGENT == 1
+    outputs.localTangent = inputs.tangent;
+    #endif
+    #if MVO_WORLD_TANGENT == 1
+    outputs.worldTangent = mul(inputs.tangent, (float3x3)(localToWorldMatrix));
+    #endif
+    #if MVO_VIEW_TANGENT == 1
+    #if MVO_WORLD_TANGENT == 1
+    outputs.viewTangent = mul(inputs.worldTangent, (float3x3)(worldToViewMatrix));
+    #else
+    outputs.viewTangent = mul(mul(inputs.tangent, (float3x3)(localToWorldMatrix)), (float3x3)(worldToViewMatrix));
+    #endif
+    #endif
+    
+    // Bitangent
+    #if MVO_LOCAL_BITANGENT == 1
+    outputs.localBitangent = inputs.bitangent;
+    #endif
+    #if MVO_WORLD_BITANGENT == 1
+    outputs.worldBitangent = mul(inputs.bitangent, (float3x3)(localToWorldMatrix));
+    #endif
+    #if MVO_VIEW_BITANGENT == 1
+    #if MVO_WORLD_BITANGENT == 1
+    outputs.viewBitangent = mul(inputs.worldBitangent, (float3x3)(worldToViewMatrix));
+    #else
+    outputs.viewBitangent = mul(mul(inputs.bitangent, (float3x3)(localToWorldMatrix)), (float3x3)(worldToViewMatrix));
+    #endif
+    #endif
+    
+    // Color
+    #if MVO_COLOR == 1
+    outputs.color = inputs.color;
+    #endif
+    
+    // Weight
+    #if MVO_WEIGHT == 1
+    outputs.weight = inputs.weight;
+    #endif
+    
+    return outputs;
+}
+
+void NormalizeMeshVertexVSOutputs(inout MeshVertexVSOutputs mvOutputs)
+{
+    #if MVO_LOCAL_NORMAL == 1
+    mvOutputs.localNormal = normalize(mvOutputs.localNormal);
+    #endif
+    #if MVO_WORLD_NORMAL == 1
+    mvOutputs.worldNormal = normalize(mvOutputs.worldNormal);
+    #endif
+    #if MVO_LOCAL_TANGENT == 1
+    mvOutputs.localTangent = normalize(mvOutputs.localTangent);
+    #endif
+    #if MVO_WORLD_TANGENT == 1
+    mvOutputs.worldTangent = normalize(mvOutputs.worldTangent);
+    #endif
+    #if MVO_LOCAL_BITANGENT == 1
+    mvOutputs.localBitangent = normalize(mvOutputs.localBitangent);
+    #endif
+    #if MVO_WORLD_BITANGENT == 1
+    mvOutputs.worldBitangent = normalize(mvOutputs.worldBitangent);
+    #endif
+}
+
+MaterialInputs GetMaterialInputs(MeshVertexVSOutputs mvOutputs)
+{
+    MaterialInputs matInputs;
+    
+    #if MVO_TEXCOORD == 1
+    matInputs.texCoord = mvOutputs.texCoord;
+    #endif
+    
+    #if MVO_WORLD_NORMAL == 1
+    matInputs.normal = mvOutputs.worldNormal;
+    #else
+    matInputs.normal = float3(0.0, 1.0, 0.0);
+    #endif
+    
+    #if MVO_WORLD_TANGENT == 1
+    matInputs.tangent = mvOutputs.worldTangent;
+    #else
+    matInputs.tangent = float3(1.0, 0.0, 0.0);
+    #endif
+    
+    #if MVO_WORLD_BITANGENT == 1
+    matInputs.bitangent = mvOutputs.worldBitangent;
+    #elif MVO_WORLD_NORMAL && MVO_WORLD_TANGENT == 1
+    matInputs.bitangent = cross(matInputs.normal, matInputs.tangent);
+    #else
+    matInputs.bitangent = float3(0.0, 0.0, -1.0);
+    #endif
+    
+    return matInputs;
+}

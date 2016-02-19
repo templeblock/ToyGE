@@ -3,20 +3,21 @@
 #define VOLUMETRICLIGHT_H
 
 #include "ToyGE\RenderEngine\RenderAction.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
 
 namespace ToyGE
 {
-	class RenderComponent;
-	class Camera;
+	DECLARE_SHADER(, RenderLightVolumeVS, SHADER_VS, "VolumetricLightVS", "RenderLightVolumeVS", SM_4);
+	DECLARE_SHADER(, RenderPointLightVolumePS, SHADER_PS, "VolumetricLight", "RenderPointLightVolumePS", SM_4);
+	DECLARE_SHADER(, RenderSpotLightVolumePS, SHADER_PS, "VolumetricLight", "RenderSpotLightVolumePS", SM_4);
+	DECLARE_SHADER(, RenderDirectionalLightVolumePS, SHADER_PS, "VolumetricLight", "RenderDirectionalLightVolumePS", SM_4);
 
 	class TOYGE_CORE_API VolumetricLight : public RenderAction
 	{
 	public:
 		VolumetricLight();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_GET(Attenuation, float, _attenuation);
 		CLASS_SET(Attenuation, float, _attenuation);
@@ -28,9 +29,9 @@ namespace ToyGE
 		CLASS_SET(PhaseFunctionParam, float, _phaseFunctionParam);
 
 	private:
-		Ptr<RenderEffect> _fx;
-		Ptr<RenderComponent> _pointLightVolumeGeo;
-		Ptr<RenderComponent> _spotLightVolumeGeo;
+		Ptr<class RenderMeshComponent> _pointLightVolumeGeo;
+		Ptr<class RenderMeshComponent> _spotLightVolumeGeo;
+		Ptr<RenderBuffer> _ditherBuffer;
 		float _attenuation;
 		float _scattering;
 		float _phaseFunctionParam;
@@ -39,29 +40,21 @@ namespace ToyGE
 
 		void RenderPointLightVolume(
 			const Ptr<PointLightComponent> & light,
-			const Ptr<Camera> & camera,
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & linearDepthTex,
 			const Ptr<Texture> & lightVolumeTex);
 
 		void RenderSpotLightVolume(
 			const Ptr<SpotLightComponent> & light,
-			const Ptr<Camera> & camera,
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & linearDepthTex,
 			const Ptr<Texture> & lightVolumeTex);
 
 		void RenderDirectionalLightVolume(
 			const Ptr<DirectionalLightComponent> & light,
-			const Ptr<Camera> & camera,
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & linearDepthTex,
 			const Ptr<Texture> & lightVolumeTex);
-
-		Ptr<Texture> BilateralGaussBlur(const Ptr<Texture> & lightVolumeTex, const Ptr<Texture> & linearDepthTex);
-
-		void BilateralUpSampling(
-			const Ptr<Texture> & lightVolumeTex,
-			const Ptr<Texture> & highResLinearDepthTex,
-			const Ptr<Texture> & lowResLinearDepthTex,
-			const ResourceView & target);
 	};
 }
 

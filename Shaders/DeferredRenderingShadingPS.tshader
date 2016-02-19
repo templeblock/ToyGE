@@ -1,0 +1,29 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "GBuffer.tshader"
+
+Texture2D gbuffer0;
+Texture2D<float3> lighting0;
+Texture2D<float3> lighting1;
+
+SamplerState pointSampler;
+
+cbuffer cb_ambient
+{
+    float3 ambientColor;
+};
+
+float3 DeferredRenderingShadingPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+  GBuffer gbuf;
+  
+  float3 light0 = lighting0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+  float3 light1 = lighting1.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+  gbuf.gbuf0  = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+  
+  Material mat = GBufferToMaterial(gbuf);
+    
+  float3 color = mat.diffuseColor * (ambientColor + light0) + light1;
+  
+  return color;
+}

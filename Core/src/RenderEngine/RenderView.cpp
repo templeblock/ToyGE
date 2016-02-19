@@ -1,169 +1,189 @@
 #include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\Kernel\Global.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
 #include "ToyGE\RenderEngine\Camera.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderConfig.h"
-#include "ToyGE\RenderEngine\RenderAction.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\Kernel\Util.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
+#include "ToyGE\RenderEngine\PostProcessing.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\Texture.h"
+#include "ToyGE\RenderEngine\Mesh.h"
+#include "ToyGE\RenderEngine\RenderComponent.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\RenderEngine\Material.h"
 
 namespace ToyGE
 {
+	uint32_t MatCmp::GetMatKey(const Ptr<Material> & mat) const
+	{
+		if (!mat)
+			return 0;
+
+		uint32_t key = 2;
+		for (int i = 0; i < MaterialTextureTypeNum::NUM; ++i)
+		{
+			if (mat->GetTexture(static_cast<MaterialTextureType>(i)).size() > 0)
+				key |= 1 << (31 - i);
+		}
+
+		return key;
+	}
+
+	bool MatCmp::operator()(const Ptr<Material> & mat0, const Ptr<Material> & mat1) const
+	{
+		auto key0 = GetMatKey(mat0);
+		auto key1 = GetMatKey(mat1);
+
+		if (key0 == key1)
+			return mat0 < mat1;
+		else
+			return key0 < key1;
+	}
+
+	void PrimitiveDrawList::AddRenderComponent(const Ptr<RenderComponent> & component)
+	{
+		int32_t index = 0;
+		/*for (auto & meshElement : component->GetMesh()->GetRenderData()->GetMeshElements())
+		{*/
+
+		auto mat = component->GetMeshElement()->GetMaterial();
+		if (component->GetMaterial())
+			mat = component->GetMaterial();
+
+		//auto pair = std::make_pair(std::static_pointer_cast<TransformComponent>(component), component->GetMeshElement());
+		drawBatches[mat].push_back(component);
+		//}
+	}
+
 	RenderView::RenderView()
 	{
-		_renderSharedEnv = std::make_shared<RenderSharedEnviroment>();
+		_viewRenderContext = std::make_shared<ViewRenderContext>();
+		_viewRenderContext->primitiveDrawList = std::make_shared<PrimitiveDrawList>();
 
+		_paramsBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
 		RenderBufferDesc bufDesc;
 		bufDesc.bindFlag = BUFFER_BIND_CONSTANT;
 		bufDesc.cpuAccess = CPU_ACCESS_WRITE;
 		bufDesc.elementSize = sizeof(ViewParams);
 		bufDesc.numElements = 1;
-		bufDesc.structedByteStride = 0;
-		_paramsBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(bufDesc, nullptr);
+		bufDesc.bStructured = false;
+		_paramsBuffer->SetDesc(bufDesc);
+		_paramsBuffer->Init(nullptr);
 	}
 
-	void RenderView::InitRenderTarget(int32_t width, int32_t height)
+	//void RenderView::PreRender(int32_t width, int32_t height)
+	//{
+	//	if (_renderTarget)
+	//		_renderTarget->Release();
+	//	if (_renderResult)
+	//		_renderResult->Release();
+
+	//	TextureDesc texDesc;
+	//	texDesc.width = width;
+	//	texDesc.height = height;
+	//	texDesc.mipLevels = 0;
+	//	texDesc.arraySize = 1;
+	//	texDesc.bindFlag = TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_UNORDERED_ACCESS;
+	//	texDesc.cpuAccess = 0;
+	//	texDesc.depth = 1;
+	//	texDesc.format = RENDER_FORMAT_R11G11B10_FLOAT;
+	//	texDesc.sampleCount = 1;
+	//	texDesc.sampleQuality = 0;
+	//	texDesc.type = TEXTURE_2D;
+
+	//	_renderTarget = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+	//	_renderResult = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+	//}
+
+	void RenderView::PreRender()
 	{
-		if (_renderTarget)
-			_renderTarget->Release();
-		if (_renderResult)
-			_renderResult->Release();
-
-		TextureDesc texDesc;
-		texDesc.width = width;
-		texDesc.height = height;
-		texDesc.mipLevels = 0;
-		texDesc.arraySize = 1;
-		texDesc.bindFlag = TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_UNORDERED_ACCESS;
-		texDesc.cpuAccess = 0;
-		texDesc.depth = 1;
-		texDesc.format = RENDER_FORMAT_R11G11B10_FLOAT;
-		texDesc.sampleCount = 1;
-		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
-
-		_renderTarget = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		_renderResult = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-	}
-
-	void RenderView::InitForRender()
-	{
-		_renderObjects.clear();
 		auto objsCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
 		std::vector<Ptr<Cullable>> objsCulled;
 		objsCuller->Cull(_camera->GetFrustum(), objsCulled);
-		//objsCuller->GetAllElements(objsCulled);
 		for (auto & obj : objsCulled)
 		{
 			auto renderObj = std::static_pointer_cast<RenderComponent>(obj);
-			//renderObj->UpdateTransform();
-			_renderObjects.push_back(renderObj);
+			_viewRenderContext->primitiveDrawList->AddRenderComponent(renderObj);
 		}
 
-		_renderLights.clear();
 		auto lightsCuller = Global::GetRenderEngine()->GetSceneRenderLightsCuller();
 		std::vector<Ptr<Cullable>> lightsCulled;
 		lightsCuller->Cull(_camera->GetFrustum(), lightsCulled);
 		for (auto & light : lightsCulled)
 		{
 			auto renderLight = std::static_pointer_cast<LightComponent>(light);
-			//renderLight->UpdateTransform();
-			_renderLights.push_back(renderLight);
-		}
-
-		_renderSharedEnv->SetView(shared_from_this());
-		_renderSharedEnv->Clear();
-		if (_renderConfig)
-		{
-			for (auto & i : _renderConfig->configMap)
-				_renderSharedEnv->SetParam(i.first, std::make_shared<SharedParam<String>>(i.second));
+			_viewRenderContext->lights.push_back(renderLight);
 		}
 
 		UpdateParamsBuffer();
-
-		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTargets(
-		{ _renderTarget->CreateTextureView(), _renderResult->CreateTextureView() },
-		0.0f);
 	}
 
-	void RenderView::RenderPostProcess()
+	void RenderView::PostRender()
 	{
-		for (auto & render : _postProcessRenders)
+		if(_postProcessing)
+			_postProcessing->Render(shared_from_this());
+
+		auto renderResult = GetViewRenderContext()->GetSharedTexture("RenderResult");
+		if (renderResult)
 		{
-			if(render->GetEnable())
-				render->Render(_renderSharedEnv);
+			Transform(
+				renderResult->GetShaderResourceView(),
+				GetRenderTarget(),
+				Vector<ColorWriteMask, 4>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
+				0.0f,
+				float4(_viewport.topLeftX, _viewport.topLeftY, _viewport.width, _viewport.height));
 		}
+
+		_viewRenderContext->primitiveDrawList->drawBatches.clear();
+		_viewRenderContext->lights.clear();
+		_viewRenderContext->sharedResources.clear();
+
+		if (GetCamera())
+			GetCamera()->SetViewMatrixCache(GetCamera()->GetViewMatrix());
 	}
 
-	void RenderView::BindParams(const Ptr<RenderEffect> & effect) const
+	void RenderView::BindShaderParams(const Ptr<Shader> & shader) const
 	{
-		effect->VariableByName("cb_View")->AsConstantBuffer()->SetValue(_paramsBuffer);
+		shader->SetCB("cb_view_shared", _paramsBuffer);
 	}
 
 	void RenderView::UpdateParamsBuffer()
 	{
-		//ViewParams viewParams;
+		if (GetCamera())
+		{
+			_viewParams.worldToViewMatrix = GetCamera()->GetViewMatrix();
+			_viewParams.viewToClipMatrix = GetCamera()->GetProjMatrix();
 
-		_viewParams.view = GetCamera()->ViewMatrix();
-		_viewParams.proj = GetCamera()->ProjMatrix();
+			auto viewXM = XMLoadFloat4x4(&GetCamera()->GetViewMatrix());
+			auto projXM = XMLoadFloat4x4(&GetCamera()->GetProjMatrix());
+			auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
+			XMStoreFloat4x4(&_viewParams.worldToClipMatrix, viewProjXM);
 
-		auto viewXM = XMLoadFloat4x4(&GetCamera()->ViewMatrix());
-		auto projXM = XMLoadFloat4x4(&GetCamera()->ProjMatrix());
-		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-		XMStoreFloat4x4(&_viewParams.viewProj, viewProjXM);
+			auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
+			XMStoreFloat4x4(&_viewParams.viewToWorldMatrix, invViewXM);
 
-		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
-		XMStoreFloat4x4(&_viewParams.invView, invViewXM);
+			_viewParams.preWorldToViewMatrix = GetCamera()->GetViewMatrixCache();
+			_viewParams.viewPos = *(reinterpret_cast<const float3*>(&GetCamera()->GetPos()));
+			_viewParams.viewNear = GetCamera()->GetNear();
+			_viewParams.viewFar = GetCamera()->GetFar();
+			_viewParams.viewLength = _viewParams.viewFar - _viewParams.viewNear;
+			_viewParams.viewWorldDir = *reinterpret_cast<const float3*>( &GetCamera()->GetZAxis() );
+		}
 
-		_viewParams.preView = GetCamera()->GetViewMatrixCache();
-		_viewParams.cameraPos = *(reinterpret_cast<const float3*>(&GetCamera()->Pos()));
-		_viewParams.cameraNearFar = float2(GetCamera()->Near(), GetCamera()->Far());
-
-		//auto targetTex = std::static_pointer_cast<Texture>(GetRenderTarget().resource);
-		float viewWidth = static_cast<float>(GetRenderTarget()->Desc().width);
-		float viewHeight = static_cast<float>(GetRenderTarget()->Desc().height);
-		_viewParams.viewSize = float4(viewWidth, viewHeight, 1.0f / viewWidth, 1.0f / viewHeight);
+		if (GetRenderTarget())
+		{
+			auto targetTex = GetRenderTarget()->GetResource()->Cast<Texture>();
+			float viewWidth = static_cast<float>(targetTex->GetDesc().width);
+			float viewHeight = static_cast<float>(targetTex->GetDesc().height);
+			_viewParams.viewSize = float2(viewWidth, viewHeight);
+			_viewParams.invViewSize = float2(1.0f / viewWidth, 1.0f / viewHeight);
+		}
 
 		auto mappedData = _paramsBuffer->Map(MAP_WRITE_DISCARD);
 		memcpy(mappedData.pData, &_viewParams, sizeof(ViewParams));
 		_paramsBuffer->UnMap();
 	}
-
-	//void RenderView::InitRenderObjects()
-	//{
-	//	
-	//}
-
-	//void RenderView::InitRenderLights()
-	//{
-	//	
-	//}
-
-	//void RenderView::RenderStart()
-	//{
-	//	//_renderQueue->ClearSharedEnviroment();
-	//	_renderQueue->InitSharedEnviroment();
-	//	_renderQueue->SetRenderTarget(_renderTarget);
-	//	_renderQueue->SetRenderObjects(_renderObjects);
-	//	_renderQueue->SetRenderLights(_renderLights);
-	//	_renderQueue->SetCamera(_camera);
-	//	_renderQueue->SetViewport(_viewport);
-	//}
-
-	//void RenderView::RenderSpecific(uint32_t stepID)
-	//{
-	//	_renderQueue->RenderSpecific(stepID);
-	//}
-
-	//void RenderView::RenderExtra()
-	//{
-	//	_renderQueue->RenderExtra();
-	//}
 }

@@ -1,0 +1,36 @@
+#ifndef DRAWQUADVS_TSHADER
+#define DRAWQUADVS_TSHADER
+ 
+struct DrawQuadVSIn
+{
+  float2 pos : POSITION;
+  float2 uv : TEXCOORD;
+};
+
+struct DrawQuadVSOut
+{
+	float4 pos : SV_POSITION;
+	float2 uv : TEXCOORD;
+};
+
+DrawQuadVSOut DrawQuadVS(DrawQuadVSIn vsIn)
+{
+	DrawQuadVSOut vsOut;
+    
+    // float4 posMap[4] = 
+    // {
+    //   float4(-1.0f,  1.0f, 0.0f, 1.0f),
+    //   float4( 1.0f,  1.0f, 0.0f, 1.0f),
+    //   float4(-1.0f, -1.0f, 0.0f, 1.0f),
+    //   float4( 1.0f, -1.0f, 0.0f, 1.0f)
+    // };
+    // 
+    // float2 uvMap[4] = (float2 [4])ppUV;
+    
+    vsOut.pos = float4(vsIn.pos, 0.0f, 1.0f);
+    vsOut.uv = vsIn.uv;
+
+	return vsOut;
+}
+
+#endif

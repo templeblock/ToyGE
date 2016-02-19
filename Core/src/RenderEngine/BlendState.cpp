@@ -2,9 +2,157 @@
 
 namespace ToyGE
 {
-	BlendState::BlendState(const BlendStateDesc & desc)
-		: _desc(desc)
-	{
+	/*template <
+		bool alphaToCoverageEnable,
+		bool independentBlendEnable,
 
-	}
+		bool			rt0_BlendEnable,
+		BlendParam		rt0_SrcBlend,
+		BlendParam		rt0_DstBlend,
+		BlendOperation	rt0_BlendOP,
+		BlendParam		rt0_SrcBlendAlpha,
+		BlendParam		rt0_DstBlendAlpha,
+		BlendOperation	rt0_BlendOPAlpha,
+		uint8_t			rt0_RenderTargetWriteMask,
+
+		bool			rt1_BlendEnable,
+		BlendParam		rt1_SrcBlend,
+		BlendParam		rt1_DstBlend,
+		BlendOperation	rt1_BlendOP,
+		BlendParam		rt1_SrcBlendAlpha,
+		BlendParam		rt1_DstBlendAlpha,
+		BlendOperation	rt1_BlendOPAlpha,
+		uint8_t			rt1_RenderTargetWriteMask,
+
+		bool			rt2_BlendEnable,
+		BlendParam		rt2_SrcBlend,
+		BlendParam		rt2_DstBlend,
+		BlendOperation	rt2_BlendOP,
+		BlendParam		rt2_SrcBlendAlpha,
+		BlendParam		rt2_DstBlendAlpha,
+		BlendOperation	rt2_BlendOPAlpha,
+		uint8_t			rt2_RenderTargetWriteMask,
+
+		bool			rt3_BlendEnable,
+		BlendParam		rt3_SrcBlend,
+		BlendParam		rt3_DstBlend,
+		BlendOperation	rt3_BlendOP,
+		BlendParam		rt3_SrcBlendAlpha,
+		BlendParam		rt3_DstBlendAlpha,
+		BlendOperation	rt3_BlendOPAlpha,
+		uint8_t			rt3_RenderTargetWriteMask,
+
+		bool			rt4_BlendEnable,
+		BlendParam		rt4_SrcBlend,
+		BlendParam		rt4_DstBlend,
+		BlendOperation	rt4_BlendOP,
+		BlendParam		rt4_SrcBlendAlpha,
+		BlendParam		rt4_DstBlendAlpha,
+		BlendOperation	rt4_BlendOPAlpha,
+		uint8_t			rt4_RenderTargetWriteMask,
+
+		bool			rt5_BlendEnable,
+		BlendParam		rt5_SrcBlend,
+		BlendParam		rt5_DstBlend,
+		BlendOperation	rt5_BlendOP,
+		BlendParam		rt5_SrcBlendAlpha,
+		BlendParam		rt5_DstBlendAlpha,
+		BlendOperation	rt5_BlendOPAlpha,
+		uint8_t			rt5_RenderTargetWriteMask,
+
+		bool			rt6_BlendEnable,
+		BlendParam		rt6_SrcBlend,
+		BlendParam		rt6_DstBlend,
+		BlendOperation	rt6_BlendOP,
+		BlendParam		rt6_SrcBlendAlpha,
+		BlendParam		rt6_DstBlendAlpha,
+		BlendOperation	rt6_BlendOPAlpha,
+		uint8_t			rt6_RenderTargetWriteMask,
+
+		bool			rt7_BlendEnable,
+		BlendParam		rt7_SrcBlend,
+		BlendParam		rt7_DstBlend,
+		BlendOperation	rt7_BlendOP,
+		BlendParam		rt7_SrcBlendAlpha,
+		BlendParam		rt7_DstBlendAlpha,
+		BlendOperation	rt7_BlendOPAlpha,
+		uint8_t			rt7_RenderTargetWriteMask
+	>
+		Ptr<BlendState> BlendStateTemplate
+		<
+		alphaToCoverageEnable,
+		independentBlendEnable,
+
+		rt0_BlendEnable,
+		rt0_SrcBlend,
+		rt0_DstBlend,
+		rt0_BlendOP,
+		rt0_SrcBlendAlpha,
+		rt0_DstBlendAlpha,
+		rt0_BlendOPAlpha,
+		rt0_RenderTargetWriteMask,
+
+		rt1_BlendEnable,
+		rt1_SrcBlend,
+		rt1_DstBlend,
+		rt1_BlendOP,
+		rt1_SrcBlendAlpha,
+		rt1_DstBlendAlpha,
+		rt1_BlendOPAlpha,
+		rt1_RenderTargetWriteMask,
+
+		rt2_BlendEnable,
+		rt2_SrcBlend,
+		rt2_DstBlend,
+		rt2_BlendOP,
+		rt2_SrcBlendAlpha,
+		rt2_DstBlendAlpha,
+		rt2_BlendOPAlpha,
+		rt2_RenderTargetWriteMask,
+
+		rt3_BlendEnable,
+		rt3_SrcBlend,
+		rt3_DstBlend,
+		rt3_BlendOP,
+		rt3_SrcBlendAlpha,
+		rt3_DstBlendAlpha,
+		rt3_BlendOPAlpha,
+		rt3_RenderTargetWriteMask,
+
+		rt4_BlendEnable,
+		rt4_SrcBlend,
+		rt4_DstBlend,
+		rt4_BlendOP,
+		rt4_SrcBlendAlpha,
+		rt4_DstBlendAlpha,
+		rt4_BlendOPAlpha,
+		rt4_RenderTargetWriteMask,
+
+		rt5_BlendEnable,
+		rt5_SrcBlend,
+		rt5_DstBlend,
+		rt5_BlendOP,
+		rt5_SrcBlendAlpha,
+		rt5_DstBlendAlpha,
+		rt5_BlendOPAlpha,
+		rt5_RenderTargetWriteMask,
+
+		rt6_BlendEnable,
+		rt6_SrcBlend,
+		rt6_DstBlend,
+		rt6_BlendOP,
+		rt6_SrcBlendAlpha,
+		rt6_DstBlendAlpha,
+		rt6_BlendOPAlpha,
+		rt6_RenderTargetWriteMask,
+
+		rt7_BlendEnable,
+		rt7_SrcBlend,
+		rt7_DstBlend,
+		rt7_BlendOP,
+		rt7_SrcBlendAlpha,
+		rt7_DstBlendAlpha,
+		rt7_BlendOPAlpha,
+		rt7_RenderTargetWriteMask
+		> ::_state;*/
 }

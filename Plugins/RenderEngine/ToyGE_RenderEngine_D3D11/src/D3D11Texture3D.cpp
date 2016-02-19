@@ -7,21 +7,33 @@
 
 namespace ToyGE
 {
-	D3D11Texture3D::D3D11Texture3D(const TextureDesc & desc)
-		: D3D11Texture3D(desc, std::vector<RenderDataDesc>())
+	void D3D11Texture3D::Init(const std::vector<RenderDataDesc> & initDataList)
 	{
+		D3D11Texture::Init(initDataList);
 
-	}
+		bool bWithData = initDataList.size() > 0;
 
-	D3D11Texture3D::D3D11Texture3D(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList)
-		: D3D11Texture(desc, initDataList)
-	{
+		// Init desc
 		D3D11_TEXTURE3D_DESC d3dTexDesc;
-		CreateRawD3DTexture3D_Desc(initDataList.size() > 0, d3dTexDesc);
+		d3dTexDesc.Format = GetD3DFormat(_desc.format);
+		d3dTexDesc.Width = _desc.width;
+		d3dTexDesc.Height = _desc.height;
+		d3dTexDesc.Depth = _desc.depth;
+		d3dTexDesc.MipLevels = _desc.mipLevels;
+		GetD3DTextureCreateFlags(bWithData, d3dTexDesc.BindFlags, d3dTexDesc.CPUAccessFlags, d3dTexDesc.MiscFlags, d3dTexDesc.Usage);
+
+		if (IsCompress(_desc.format))
+		{
+			if (d3dTexDesc.Width > 1)
+				d3dTexDesc.Width = (d3dTexDesc.Width + 3) / 4 * 4;
+			if (d3dTexDesc.Height > 1)
+				d3dTexDesc.Height = (d3dTexDesc.Height + 3) / 4 * 4;
+		}
 
 		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
 		ID3D11Texture3D *pTexture3D = nullptr;
 
+		// Init with data
 		if (initDataList.size() > 0)
 		{
 			D3D11_SUBRESOURCE_DATA *pInitDataDesc = nullptr;
@@ -40,110 +52,112 @@ namespace ToyGE
 				}
 			}
 			pInitDataDesc = &initDataDescList[0];
-			re->RawD3DDevice()->CreateTexture3D(&d3dTexDesc, pInitDataDesc, &pTexture3D);
+			D3D11RenderEngine::d3d11Device->CreateTexture3D(&d3dTexDesc, pInitDataDesc, &pTexture3D);
 		}
 		else
-			re->RawD3DDevice()->CreateTexture3D(&d3dTexDesc, nullptr, &pTexture3D);
+			D3D11RenderEngine::d3d11Device->CreateTexture3D(&d3dTexDesc, nullptr, &pTexture3D);
 
-		_rawD3DTexture3D = MakeComShared(pTexture3D);
+		_hardwareTexture3D = MakeComShared(pTexture3D);
 	}
 
-	Ptr<D3D11Texture3D>
-		D3D11Texture3D::CreateFromRawD3D(
-		const Ptr<ID3D11Device> & rawDevice,
-		const Ptr<ID3D11Texture3D> & rawTexture3D)
+	void D3D11Texture3D::InitFromHardware(const Ptr<ID3D11Resource> & hardwareResource)
 	{
-		auto texture = Ptr<D3D11Texture3D>(new D3D11Texture3D());
-		texture->_rawD3DTexture3D = rawTexture3D;
-		texture->InitFromRawD3DTexture();
-		return texture;
-	}
+		_hardwareTexture3D = std::static_pointer_cast<ID3D11Texture3D>(hardwareResource);
 
-	const Ptr<ID3D11ShaderResourceView>&
-		D3D11Texture3D::AcquireRawD3DShaderResourceView(int32_t firstMipLevel, int32_t numMipLevels, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
-	{
-		D3D11_SHADER_RESOURCE_VIEW_DESC desc;
-		memset(&desc, 0, sizeof(desc));
-		desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
-		desc.Texture3D.MostDetailedMip = firstMipLevel;
-		desc.Texture3D.MipLevels = numMipLevels;
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
-			desc.Format = GetD3DFormat(_desc.format);
-		else
-			desc.Format = GetD3DFormat(formatHint);
-
-		return InitShaderResourceView(desc);
-	}
-
-	const Ptr<ID3D11RenderTargetView>&
-		D3D11Texture3D::AcquireRawD3DRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
-	{
-		D3D11_RENDER_TARGET_VIEW_DESC desc;
-		memset(&desc, 0, sizeof(desc));
-		desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
-		desc.Texture3D.MipSlice = mipLevel;
-		desc.Texture3D.FirstWSlice = firstArray;
-		desc.Texture3D.WSize = arraySize;
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
-			desc.Format = GetD3DFormat(_desc.format);
-		else
-			desc.Format = GetD3DFormat(formatHint);
-
-		return InitRenderTargetView(desc);
-	}
-
-	const Ptr<ID3D11UnorderedAccessView>&
-		D3D11Texture3D::AcquireRawD3DUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
-	{
-		D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
-		memset(&desc, 0, sizeof(desc));
-		desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
-		desc.Texture3D.MipSlice = mipLevel;
-		desc.Texture3D.FirstWSlice = firstArray;
-		desc.Texture3D.WSize = arraySize;
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
-			desc.Format = GetD3DFormat(_desc.format);
-		else
-			desc.Format = GetD3DFormat(formatHint);
-
-		return InitUnorderedAccessView(desc);
-	}
-
-
-	void D3D11Texture3D::InitFromRawD3DTexture()
-	{
 		D3D11_TEXTURE3D_DESC desc;
 		memset(&desc, 0, sizeof(desc));
-		_rawD3DTexture3D->GetDesc(&desc);
-		_desc.type = TEXTURE_3D;
+		_hardwareTexture3D->GetDesc(&desc);
+		//_desc.type = TEXTURE_3D;
 		_desc.format = GetRenderFormat(desc.Format);
 		_desc.width = desc.Width;
-		_desc.height = 0;
-		_desc.depth = 0;
+		_desc.height = desc.Height;
+		_desc.depth = desc.Depth;
 		_desc.arraySize = 1;
 		_desc.mipLevels = desc.MipLevels;
 		_desc.sampleCount = 1;
 		_desc.sampleQuality = 0;
+		GetFlagsFromD3D(desc.BindFlags, desc.CPUAccessFlags, desc.MiscFlags, _desc.bindFlag, _desc.cpuAccess, _desc.bCube);
 
-		_desc.mipLevels = ComputeMipLevels(_desc.mipLevels, _desc.width, _desc.height, _desc.depth, _mipSizeMap);
+		InitMipsSize();
 	}
 
-	void D3D11Texture3D::CreateRawD3DTexture3D_Desc(bool hasInitData, D3D11_TEXTURE3D_DESC & texture3D_Desc)
+	Ptr<TextureShaderResourceView> D3D11Texture3D::CreateShaderResourceView(int32_t firstMip, int32_t numMips, int32_t firstArray, int32_t numArrays, bool bCube, RenderFormat viewFormat)
 	{
-		texture3D_Desc.Format = GetD3DFormat(_desc.format);
-		texture3D_Desc.Width = _desc.width;
-		texture3D_Desc.Height = _desc.height;
-		texture3D_Desc.Depth = _desc.depth;
-		texture3D_Desc.MipLevels = _desc.mipLevels;
+		// Init d3d11 srv desc
+		D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+		memset(&desc, 0, sizeof(desc));
 
-		if (IsCompress(_desc.format))
-		{
-			if (texture3D_Desc.Width > 1)
-				texture3D_Desc.Width = (texture3D_Desc.Width + 3) / 4 * 4;
-			if (texture3D_Desc.Height > 1)
-				texture3D_Desc.Height = (texture3D_Desc.Height + 3) / 4 * 4;
-		}
+		desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE3D;
+		desc.Texture3D.MostDetailedMip = firstMip;
+		desc.Texture3D.MipLevels = numMips;
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
+			desc.Format = GetD3DFormat(_desc.format);
+		else
+			desc.Format = GetD3DFormat(viewFormat);
 
-		ExtractD3DBindFlags(hasInitData, texture3D_Desc.BindFlags, texture3D_Desc.CPUAccessFlags, texture3D_Desc.Usage, texture3D_Desc.MiscFlags);
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 srv
+		ID3D11ShaderResourceView *pSRV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateShaderResourceView(_hardwareTexture3D.get(), &desc, &pSRV);
+
+		auto resultSRV = std::make_shared<D3D11TextureShaderResourceView>();
+		resultSRV->hardwareSRV = MakeComShared(pSRV);
+
+		return resultSRV;
+	}
+
+	Ptr<TextureUnorderedAccessView> D3D11Texture3D::CreateUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat)
+	{
+		// Init d3d11 uav desc
+		D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
+		memset(&desc, 0, sizeof(desc));
+
+		desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE3D;
+		desc.Texture3D.MipSlice = mipLevel;
+		desc.Texture3D.FirstWSlice = firstArray;
+		desc.Texture3D.WSize = numArrays;
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
+			desc.Format = GetD3DFormat(_desc.format);
+		else
+			desc.Format = GetD3DFormat(viewFormat);
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 uav
+		ID3D11UnorderedAccessView *pUAV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateUnorderedAccessView(_hardwareTexture3D.get(), &desc, &pUAV);
+
+		auto resultUAV = std::make_shared<D3D11TextureUnorderedAccessView>();
+		resultUAV->hardwareUAV = MakeComShared(pUAV);
+
+		return resultUAV;
+	}
+
+	Ptr<TextureRenderTargetView> D3D11Texture3D::CreateRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat)
+	{
+		// Init d3d11 rtv desc
+		D3D11_RENDER_TARGET_VIEW_DESC desc;
+		memset(&desc, 0, sizeof(desc));
+
+		desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE3D;
+		desc.Texture3D.MipSlice = mipLevel;
+		desc.Texture3D.FirstWSlice = firstArray;
+		desc.Texture3D.WSize = numArrays;
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
+			desc.Format = GetD3DFormat(_desc.format);
+		else
+			desc.Format = GetD3DFormat(viewFormat);
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 rtv
+		ID3D11RenderTargetView *pRTV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateRenderTargetView(_hardwareTexture3D.get(), &desc, &pRTV);
+
+		auto resultRTV = std::make_shared<D3D11TextureRenderTargetView>();
+		resultRTV->hardwareRTV = MakeComShared(pRTV);
+
+		return resultRTV;
 	}
 }

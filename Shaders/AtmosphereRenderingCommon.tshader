@@ -1,0 +1,460 @@
+#ifndef ATMOSPHERERENDERINGCOMMON_TSHADER
+#define ATMOSPHERERENDERINGCOMMON_TSHADER
+
+#define NUM_SAMPLELINES 1024
+#define MAX_SAMPLES_PERLINE 1024
+
+#include "Common.tshader"
+
+Texture2D opticalDepthLUT;
+Texture3D inScatteringLUTR;
+Texture3D inScatteringLUTM;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float  earthRadius;
+float  atmosphereTopHeight;
+float2 particleScaleHeight;
+
+float2 wqCoord;
+float3 earthCenter;
+float3 scatteringR;
+float3 scatteringM;
+float3 attenuationR;
+float3 attenuationM;
+float  phaseG_M;
+
+float4 lutSize;
+int    depthSlice;
+
+void GetRaySphereIntersection(
+    float3 rayOrigin,
+    float3 rayDir,
+    float3 sphereCenter,
+    float  sphereRadius,
+    out float2 intersection)
+{
+    // http://wiki.cgsociety.org/index.php/Ray_Sphere_Intersection
+    rayOrigin -= sphereCenter;
+    float A = dot(rayDir, rayDir);
+    float B = 2 * dot(rayOrigin, rayDir);
+    float C = dot(rayOrigin, rayOrigin) - sphereRadius * sphereRadius;
+    float D = B*B - 4*A*C;
+    // If discriminant is negative, there are no real roots hence the ray misses the
+    // sphere
+    if( D<0 )
+    {
+        intersection = -1;
+    }
+    else
+    {
+        D = sqrt(D);
+        intersection = float2(-B - D, -B + D) / (2*A); // A must be positive here!!
+    }
+}
+
+float PhaseFunction_R(float cosTheta)
+{
+    return 3.0 / (16.0 * PI) * (1 + cosTheta * cosTheta);
+}
+
+float PhaseFunction_M(float g, float cosTheta)
+{
+  float g2 = g * g;
+  
+    return 3.0 / (8.0 * PI) * (1-g2)/(2+g2) * (1 + cosTheta*cosTheta)/pow(1+g2-(g+g)*cosTheta, 3.0/2.0);
+}
+
+float3 ComputeAttenuation(float height, float cosZenith)
+{
+    height = clamp(height, 10.0, atmosphereTopHeight - 10.0);
+    float2 lutCoord = float2((height - 10.0) / (atmosphereTopHeight - 20.0), cosZenith * 0.5f + 0.5f);
+    float2 densityToSampleAccum = opticalDepthLUT.SampleLevel(linearSampler, lutCoord, 0).xy;
+        
+    float3 attenuation = exp(- (attenuationR * densityToSampleAccum.x + attenuationM * densityToSampleAccum.y) );
+    return attenuation;
+}
+
+float3 ComputeAttenuationPoints(float3 p0, float3 p1, float3 earthCenter, float earthRadius)
+{
+    float h0 = length(p0 - earthCenter) - earthRadius;
+    float h1 = length(p1 - earthCenter) - earthRadius;
+    
+    float ha = h0;
+    float hb = h1;
+    float3 pa = p0;
+    float3 pb = p1;
+    if(ha > hb)
+    {
+        ha = h1;
+        hb = h0;
+        pa = p1;
+        pb = p0;
+    }
+    
+    float3 dir = normalize(pb - pa);
+    
+    float3 attenuation;
+    
+    if( hb - ha < 1.0 )
+    {
+        attenuation = 1.0;
+    }
+    else
+    {
+        float3 zenithDir = normalize(pa - earthCenter);
+        float cosZenith = dot(dir, zenithDir);
+        float3 Ta = ComputeAttenuation(ha, cosZenith);
+        float3 Tb = ComputeAttenuation(hb, cosZenith);
+        attenuation = Ta / (Tb < 1e-8 ? 1 : Tb);
+    }
+    return attenuation;
+}
+
+#define HEIGHT_POWER 0.5
+#define HEIGHT_MARGIN 16.0
+#define VIEW_ZENITH_POWER 0.2
+#define VIEW_SUN_POWER 1.5
+
+void GetScatteringComputeParams1(
+    float4 coord,
+    out float height,
+    out float cosViewZenith,
+    out float cosSunZenith,
+    out float cosViewSun)
+{
+    coord.xzw = (coord.xzw - 0.5 / lutSize.xzw) / (1.0 - 1.0/lutSize.xzw);
+    
+    coord.x = pow(coord.x, 1.0 / HEIGHT_POWER);
+    height = lerp(HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN, coord.x);
+    
+    //cosViewZenith = coord.y * 2.0 - 1.0;
+    
+    
+    float r = earthRadius + height;
+    float cosHorizon = -sqrt(r * r - earthRadius * earthRadius) / r;
+    if(coord.y > 0.5)
+    {
+        coord.y = (coord.y - (0.5 + 0.5 / lutSize.y)) / (0.5 - 1.0 / lutSize.y);
+        coord.y = pow(coord.y, 1.0 / VIEW_ZENITH_POWER);
+        cosViewZenith = max(cosHorizon + 1e-4, lerp(cosHorizon, 1.0, coord.y));
+    }
+    else
+    {
+        coord.y = (coord.y - 0.5/lutSize.y) / (0.5 - 1.0 / lutSize.y);
+        coord.y = pow(coord.y, 1.0 / VIEW_ZENITH_POWER);
+        cosViewZenith = min(cosHorizon - 1e-4, lerp(cosHorizon, -1.0, coord.y));
+    }
+    
+    cosSunZenith = tan((2.0 * coord.z - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1);
+    cosSunZenith = clamp(cosSunZenith, -1, 1);
+      
+    cosViewSun = sign(coord.w - 0.5) * pow( abs(coord.w - 0.5) * 2.0, 1.0/VIEW_SUN_POWER ) * 0.5 + 0.5;
+    cosViewSun = cos(cosViewSun * PI);
+        
+    cosViewZenith = clamp(cosViewZenith, -1, 1);
+    cosSunZenith = clamp(cosSunZenith, -1, 1);
+    cosViewSun = clamp(cosViewSun, -1, 1);
+    
+    float D = (1.0 - cosViewZenith * cosViewZenith) * (1.0 - cosSunZenith  * cosSunZenith);
+
+    D = sqrt( max(D, 1e-20) );
+
+    float2 f2MinMaxCosSunViewAngle = cosViewZenith*cosSunZenith + float2(-D, +D);
+
+    cosViewSun    = clamp(cosViewSun, f2MinMaxCosSunViewAngle.x, f2MinMaxCosSunViewAngle.y);
+}
+
+void GetScatteringComputeParams2(
+  float4 coord,
+  out float height,
+  out float cosViewZenith,
+  out float cosSunZenith,
+  out float cosViewSun)
+{
+    coord.xyzw = (coord - 0.5 / lutSize) / (1.0 - 1.0 / lutSize);
+    
+    height = lerp(HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN, coord.x);
+    
+    cosViewZenith = coord.y * 2.0 - 1.0;
+    
+    cosSunZenith = coord.z * 2.0 - 1.0;
+    
+    cosViewSun = coord.w * 2.0 - 1.0;
+    
+    cosViewZenith = clamp(cosViewZenith, -1, 1);
+    cosSunZenith = clamp(cosSunZenith, -1, 1);
+    cosViewSun = clamp(cosViewSun, -1, 1);
+    
+    float D = (1.0 - cosViewZenith * cosViewZenith) * (1.0 - cosSunZenith  * cosSunZenith);
+    
+    // !!!!  IMPORTANT NOTE regarding NVIDIA hardware !!!!
+
+    // There is a very weird issue on NVIDIA hardware with clamp(), saturate() and min()/max() 
+    // functions. No matter what function is used, fCosViewZenithAngle and fCosSunZenithAngle
+    // can slightly fall outside [-1,+1] range causing D to be negative
+    // Using saturate(D), max(D, 0) and even D>0?D:0 does not work!
+    // The only way to avoid taking the square root of negative value and obtaining NaN is 
+    // to use max() with small positive value:
+    D = sqrt( max(D, 1e-20) );
+    
+    // The issue was reproduceable on NV GTX 680, driver version 9.18.13.2723 (9/12/2013).
+    // The problem does not arise on Intel hardware
+
+    float2 f2MinMaxCosSunViewAngle = cosViewZenith*cosSunZenith + float2(-D, +D);
+    // Clamp to allowable range
+    cosViewSun    = clamp(cosViewSun, f2MinMaxCosSunViewAngle.x, f2MinMaxCosSunViewAngle.y);
+  
+}
+
+void GetScatteringComputeParams3(
+    float4 coord,
+    out float height,
+    out float cosViewZenith,
+    out float cosSunZenith,
+    out float cosViewSun)
+{
+    coord.xzw = (coord.xzw - 0.5 / lutSize.xzw) / (1.0 - 1.0/lutSize.xzw);
+    
+    coord.x = pow(coord.x, 1.0 / HEIGHT_POWER);
+    height = lerp(HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN, coord.x);
+    
+    float Rg = earthRadius;
+    float Rt = earthRadius + atmosphereTopHeight;
+    float r = height + Rg;
+    if(coord.y < 0.5)
+    {
+        coord.y = ((0.5 - 0.5/lutSize.y) - coord.y) / (0.5 - 1.0 / lutSize.y);
+        float dMin = height;
+        float dMax = sqrt(r * r - Rg * Rg);
+        float d = clamp(coord.y * dMax, dMin * 1.001, dMax * 0.999);
+        cosViewZenith = (Rg * Rg - r * r - d * d) / (2.0 * r * d);
+        cosViewZenith = min(cosViewZenith, -sqrt(1.0 - (Rg / r) * (Rg / r)) - 0.001);
+    }
+    else
+    {
+        coord.y = (coord.y - (0.5 + 0.5 / lutSize.y)) / (0.5 - 1.0 / lutSize.y);
+        float dMin = Rt - r;
+        float dMax = sqrt(r * r - Rg * Rg) + sqrt(Rt * Rt - Rg * Rg);
+        float d = clamp(coord.y * dMax, dMin * 1.001, dMax * 0.999);
+        cosViewZenith = (Rt * Rt - r * r - d * d) / (2.0 * r * d);
+    }
+    cosViewZenith = clamp(cosViewZenith, -1, 1);
+    
+    cosSunZenith = tan((2.0 * coord.z - 1.0 + 0.26) * 1.1) / tan(1.26 * 1.1);
+    
+    cosSunZenith = clamp(cosSunZenith, -1, 1);
+    
+    cosViewSun = 2.0 * coord.w - 1.0;
+    
+    cosViewSun = clamp(cosViewSun, -1, 1);
+    
+    
+    float D = (1.0 - cosViewZenith * cosViewZenith) * (1.0 - cosSunZenith  * cosSunZenith);
+    
+    // !!!!  IMPORTANT NOTE regarding NVIDIA hardware !!!!
+
+    // There is a very weird issue on NVIDIA hardware with clamp(), saturate() and min()/max() 
+    // functions. No matter what function is used, fCosViewZenithAngle and fCosSunZenithAngle
+    // can slightly fall outside [-1,+1] range causing D to be negative
+    // Using saturate(D), max(D, 0) and even D>0?D:0 does not work!
+    // The only way to avoid taking the square root of negative value and obtaining NaN is 
+    // to use max() with small positive value:
+    D = sqrt( max(D, 1e-20) );
+    
+    // The issue was reproduceable on NV GTX 680, driver version 9.18.13.2723 (9/12/2013).
+    // The problem does not arise on Intel hardware
+
+    float2 f2MinMaxCosSunViewAngle = cosViewZenith*cosSunZenith + float2(-D, +D);
+    // Clamp to allowable range
+    cosViewSun    = clamp(cosViewSun, f2MinMaxCosSunViewAngle.x, f2MinMaxCosSunViewAngle.y);
+}
+
+
+
+float4 GetScatteringLUTCoord1(
+  float height,
+  float cosViewZenith,
+  float cosSunZenith,
+  float cosViewSun)
+{
+  float4 coord;
+  
+  height = clamp(height, HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN);
+  coord.x = saturate( (height - HEIGHT_MARGIN) / (atmosphereTopHeight - HEIGHT_MARGIN * 2) );
+  coord.x = pow(coord.x, HEIGHT_POWER);
+  coord.x = lerp(0.5/lutSize.x, 1.0 - 0.5/lutSize.x, coord.x);
+  
+  //coord.y = cosViewZenith * 0.5 + 0.5;
+  
+  
+  float r = earthRadius + height;
+  float cosHorizon = -sqrt(r * r - earthRadius * earthRadius) / r;
+  if(cosViewZenith > cosHorizon)
+  {
+    coord.y = saturate( (cosViewZenith - cosHorizon) / (1.0 - cosHorizon) );
+    coord.y = pow(coord.y, VIEW_ZENITH_POWER);
+    coord.y = 0.5 + 0.5/lutSize.y + coord.y * (0.5 - 1.0/lutSize.y);
+  }
+  else
+  {
+    coord.y = saturate( (cosHorizon - cosViewZenith) / (cosHorizon + 1.0) );
+    coord.y = pow(coord.y, VIEW_ZENITH_POWER);
+    coord.y = 0.5/lutSize.y + coord.y * (0.5 - 1.0/lutSize.y);
+  }
+  
+  
+  //coord.z = cosSunZenith * 0.5 + 0.5;
+  
+  coord.z = (atan(max(cosSunZenith, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5;
+  coord.z = lerp(0.5/lutSize.z, 1.0 - 0.5/lutSize.z, coord.z);
+  
+  
+  coord.w = acos(clamp(cosViewSun, -1.0, 1.0)) / PI;
+  coord.w = sign(coord.w - 0.5) * pow( abs(coord.w - 0.5) * 2.0, VIEW_SUN_POWER ) * 0.5 + 0.5;
+  coord.w = lerp(0.5/lutSize.w, 1.0 - 0.5/lutSize.w, coord.w);
+  
+  return coord;
+}
+
+float4 GetScatteringLUTCoord2(
+  float height,
+  float cosViewZenith,
+  float cosSunZenith,
+  float cosViewSun)
+{
+  float4 coord;
+  
+  height = clamp(height, HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN);
+  coord.x = saturate( (height - HEIGHT_MARGIN) / (atmosphereTopHeight - HEIGHT_MARGIN * 2) );
+  
+  coord.y = cosViewZenith * 0.5 + 0.5;
+  
+  coord.z = cosSunZenith * 0.5 + 0.5;
+  
+  coord.w = cosViewSun * 0.5 + 0.5;
+  
+  coord = lerp(0.5/lutSize, 1.0 - 0.5/lutSize, coord);
+  
+  return coord;
+}
+
+float4 GetScatteringLUTCoord3(
+  float height,
+  float cosViewZenith,
+  float cosSunZenith,
+  float cosViewSun)
+{
+  float4 coord;
+  
+  height = clamp(height, HEIGHT_MARGIN, atmosphereTopHeight - HEIGHT_MARGIN);
+  coord.x = saturate( (height - HEIGHT_MARGIN) / (atmosphereTopHeight - HEIGHT_MARGIN * 2) );
+  coord.x = pow(coord.x, HEIGHT_POWER);
+  coord.x = lerp(0.5/lutSize.x, 1.0 - 0.5/lutSize.x, coord.x);
+  
+  float Rg = earthRadius;
+  float Rt = earthRadius + atmosphereTopHeight;
+  float r = height + Rg;
+  float H = sqrt(Rt * Rt - Rg * Rg);
+  float rho = sqrt(r * r - Rg * Rg);
+  float rmu = r * cosViewZenith;
+  float delta = rmu * rmu - r * r + Rg * Rg;
+  float4 cst;
+  if(rmu < 0.0 && delta > 0.0)
+    cst = float4(1.0, 0.0, 0.0, 0.5 - 0.5 / float(lutSize.y));
+  else
+    cst = float4(-1.0, H * H, H, 0.5 + 0.5 / float(lutSize.y));
+	//float uR = 0.5 / float(RES_R) + rho / H * (1.0 - 1.0 / float(RES_R));
+  coord.y = cst.w + (rmu * cst.x + sqrt(delta + cst.y)) / (rho + cst.z) * (0.5 - 1.0 / float(lutSize.y));
+  
+  coord.z = 0.5 / float(lutSize.z) + (atan(max(cosSunZenith, -0.1975) * tan(1.26 * 1.1)) / 1.1 + (1.0 - 0.26)) * 0.5 * (1.0 - 1.0 / float(lutSize.z));
+  
+  coord.w = cosViewSun * 0.5 + 0.5;
+  coord.w = lerp(0.5/lutSize.w, 1.0 - 0.5/lutSize.w, coord.w);
+  
+  return coord;
+}
+
+#define GetScatteringComputeParams GetScatteringComputeParams1
+#define GetScatteringLUTCoord GetScatteringLUTCoord1
+
+void LUTCoordToTexCoord(
+  float4 lutCoord,
+  out float3 texCoord0,
+  out float3 texCoord1,
+  out float weight)
+{
+  float wSlice0 = floor(lutCoord.w * lutSize.w - 0.5);
+  wSlice0 = clamp(wSlice0, 0, lutSize.w - 1);
+  weight = lutCoord.w * lutSize.w - 0.5 - wSlice0;
+  weight = clamp(weight, 0, 1);
+  
+  float2 wSlice0MinMaxZ = float2(wSlice0, wSlice0 + 1) / lutSize.w + float2(0.5, -0.5) / (lutSize.z * lutSize.w);
+  float zCoord0 = clamp( (wSlice0 + lutCoord.z) / lutSize.w, wSlice0MinMaxZ.x, wSlice0MinMaxZ.y );
+  
+  //float depthSlice1 = (min(wSlice0 + 1, lutSize.w - 1) + lutCoord.z) / lutSize.w;
+  float zCoordOffset = (min(wSlice0 + 1, lutSize.w - 1) - wSlice0) / lutSize.w;
+  
+  texCoord0 = float3(lutCoord.xy, zCoord0);
+  texCoord1 = float3(lutCoord.xy, zCoord0 + zCoordOffset);
+}
+
+float3 ComputeLightDir(float cosSunZenith, float cosViewSun, float3 viewDir)
+{
+    float3 lightDir;
+    if( abs(cosSunZenith) > 1-1e-6)
+    {
+        lightDir = float3(0.0f, sign(cosSunZenith), 0.0f);
+    }
+    else
+    {
+        lightDir.y = cosSunZenith;
+        lightDir.z = viewDir.z > 0 ? (cosViewSun - viewDir.y * cosSunZenith) / viewDir.z : 0.0f;
+        lightDir.x = sqrt( saturate(1.0 - dot(lightDir.yz, lightDir.yz)) );
+        //if( abs(cosViewSun) > 1-1e-7)
+        //  lightDir = viewDir * sign(cosViewSun);
+    }
+    
+    return lightDir;
+}
+
+float3 ComputeInScattering(float height, float cosViewZenith, float cosSunZenith, float cosViewSun)
+{
+    float4 lutCoord = GetScatteringLUTCoord(height, cosViewZenith, cosSunZenith, cosViewSun);
+
+    float3 texCoord0, texCoord1;
+    float weight;
+    LUTCoordToTexCoord(lutCoord, texCoord0, texCoord1, weight);
+    
+    float3 inScatteringR0 = inScatteringLUTR.SampleLevel(linearSampler, texCoord0, 0).xyz;
+    float3 inScatteringR1 = inScatteringLUTR.SampleLevel(linearSampler, texCoord1, 0).xyz;
+    
+    float3 inScatteringR = lerp(inScatteringR0, inScatteringR1, weight);
+    
+    float3 inScatteringM0 = inScatteringLUTM.SampleLevel(linearSampler, texCoord0, 0).xyz;
+    float3 inScatteringM1 = inScatteringLUTM.SampleLevel(linearSampler, texCoord1, 0).xyz;
+    
+    float3 inScatteringM = lerp(inScatteringM0, inScatteringM1, weight);
+    
+    float phaseR = PhaseFunction_R(cosViewSun);
+    float phaseM = PhaseFunction_M(phaseG_M, cosViewSun);
+    
+    return inScatteringR * phaseR + inScatteringM * phaseM;
+}
+
+float3 ComputeInScattering(float3 pos, float3 viewDir, float3 lightDir)
+{
+    float3 earthToSampleDir = pos - earthCenter;
+    float earthToSampleLen = length(earthToSampleDir);
+    earthToSampleDir /= earthToSampleLen;
+    
+    float height = (earthToSampleLen - earthRadius);
+    float cosViewZenith = dot(earthToSampleDir, viewDir);
+    float cosSunZenith = dot(earthToSampleDir, lightDir);
+    float cosViewSun = dot(lightDir, viewDir);
+    
+    return ComputeInScattering(height, cosViewZenith, cosSunZenith, cosViewSun);
+}
+
+#endif

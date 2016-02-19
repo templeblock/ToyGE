@@ -1,0 +1,130 @@
+
+#define MVO_WORLD_POSITION 1
+#define MVO_SV_POSITION 0
+#define MVO_WORLD_NORMAL 1
+
+#include "MeshVertexInput.tshader"
+#include "Lighting.tshader"
+
+Texture2D viewPosMap;
+Texture2D pointTex;
+
+SamplerState pointSampler;
+
+float pointSize;
+
+float4x4 lightWorldToViewMatrix;
+float4x4 lightViewToClipMatrix;
+float4x4 lightViewToWorldMatrix;
+
+MeshVertexVSOutputs CausticsVS(MeshVertexVSInputs inputs)
+{
+    return GetMeshVSOutputs(inputs);
+}
+
+struct CausticsGSOut
+{
+    float3 worldPosition    : WORLD_POSITION;
+    float3 worldNormal      : WORLD_NORMAL;
+    float4 svPosition       : SV_POSITION;
+    float2 texCoord         : TEXCOORD;
+    float  weight           : WEIGHT;
+};
+
+[maxvertexcount(3 * 2)]
+void CausticsGS(
+    point MeshVertexVSOutputs vsOut[1],
+    inout TriangleStream<CausticsGSOut> outStream)
+{
+    NormalizeMeshVertexVSOutputs(vsOut[0]);
+    
+    MaterialInputs matInputs = GetMaterialInputs(vsOut[0]);
+    
+    // Adjust Pos
+    float3 n = mul(vsOut[0].worldNormal, (float3x3)lightWorldToViewMatrix);
+    float3 lightViewPos = mul(float4(vsOut[0].worldPosition, 1.0), lightWorldToViewMatrix).xyz;
+    float3 l = normalize(-lightViewPos);
+    
+    float refractIndex = GetRefractionIndex(matInputs);
+    
+    if(dot(n, l) > 0)
+    {
+        float3 rf = refract(-l, n, 1.0f / refractIndex);
+    
+        float d = 1.0f;
+        float3 lightViewPosAdjust = 0.0f;
+        uint numItrs = 2;
+        for(uint i = 0; i < numItrs; ++i)
+        {
+            float3 p = lightViewPos + d * rf;
+            float4 p_clip = mul(float4(p, 1.0), lightViewToClipMatrix);
+            p_clip /= p_clip.w;
+            float2 uv = p_clip.xy * float2(0.5, -0.5) + 0.5;
+            
+            lightViewPosAdjust = viewPosMap.SampleLevel(bilinearSampler, uv, 0).xyz;
+            d = length(lightViewPos - lightViewPosAdjust);
+        }
+        lightViewPosAdjust -= rf * 0.1f;
+        
+        float3 worldPosAdjust = mul(float4(lightViewPosAdjust, 1.0), lightViewToWorldMatrix).xyz;
+        
+        float3 Z = viewWorldDir;
+        float3 X = abs(Z.x) < 0.99 ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+        float3 Y = normalize(cross(Z, X));
+        X = cross(Y, Z);
+        
+        float extend = 0.5f * pointSize;
+        float3 pos[4] = 
+        {
+            worldPosAdjust - extend * X + extend * Y,
+            worldPosAdjust + extend * X + extend * Y,
+            worldPosAdjust + extend * X - extend * Y,
+            worldPosAdjust - extend * X - extend * Y
+        };
+        float2 uv[4] = 
+        {
+            float2(0.0f, 0.0f),
+            float2(1.0f, 0.0f),
+            float2(1.0f, 1.0f),
+            float2(0.0f, 1.0f)
+        };
+
+        CausticsGSOut gsOut;
+        gsOut.worldPosition = vsOut[0].worldPosition;
+        gsOut.worldNormal   = vsOut[0].worldNormal;
+        gsOut.weight = vsOut[0].weight;
+
+        gsOut.svPosition = mul(float4(pos[0], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[0];
+        outStream.Append(gsOut);
+        gsOut.svPosition = mul(float4(pos[1], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[1];
+        outStream.Append(gsOut);
+        gsOut.svPosition = mul(float4(pos[2], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[2];
+        outStream.Append(gsOut);
+        outStream.RestartStrip();
+        
+        gsOut.svPosition = mul(float4(pos[0], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[0];
+        outStream.Append(gsOut);
+        gsOut.svPosition = mul(float4(pos[2], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[2];
+        outStream.Append(gsOut);
+        gsOut.svPosition = mul(float4(pos[3], 1.0f), worldToClipMatrix);
+        gsOut.texCoord   = uv[3];
+        outStream.Append(gsOut);
+        outStream.RestartStrip();
+    }
+}
+
+float4 CausticsPS(CausticsGSOut gsOut) : SV_TARGET
+{
+    float3 irradiance = GetIrradiance(gsOut.worldPosition, gsOut.worldNormal);
+
+    float3 color = irradiance * pointTex.Sample(bilinearSampler, gsOut.texCoord).xyz;
+    
+    float pointArea = pointSize.x * pointSize.x;
+    
+    return float4(color, gsOut.weight);
+}

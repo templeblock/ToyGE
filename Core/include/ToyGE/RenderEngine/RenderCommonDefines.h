@@ -2,14 +2,12 @@
 #ifndef RENDERCOMMONDEFINES_H
 #define RENDERCOMMONDEFINES_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\RenderEngine\RenderFormat.h"
 
 namespace ToyGE
 {
-	class RenderResource;
-
 	enum MapType : uint32_t
 	{
 		MAP_READ = 1UL,
@@ -18,21 +16,7 @@ namespace ToyGE
 		MAP_WRITE_DISCARD = 4UL,
 		MAP_WRITE_NO_OVERWRITE = 5UL
 	};
-
-	enum RenderResourceType
-	{
-		RENDER_RESOURCE_TEXTURE,
-		RENDER_RESOURCE_BUFFER
-	};
-
-	enum TextureType
-	{
-		TEXTURE_UNDEFINED,
-		TEXTURE_1D,
-		TEXTURE_2D,
-		TEXTURE_3D,
-		TEXTURE_CUBE
-	};
+	
 
 	enum RenderInputType : uint32_t
 	{
@@ -50,10 +34,29 @@ namespace ToyGE
 		SHADER_CS = 5UL
 	};
 
-	enum ShaderTypeNum
+	namespace ShaderTypeNum
 	{
-		NUM_SHADER_TYPE = SHADER_CS + 1
+		enum ShaderTypeNumDefine
+		{
+			NUM = SHADER_CS + 1
+		};
+	}
+
+	enum ShaderModel : uint32_t
+	{
+		SM_4 = 0UL,
+		SM_5 = 1UL
 	};
+
+	namespace ShaderModelNum
+	{
+		enum ShaderModelNumDefine : uint32_t
+		{
+			NUM = SM_5 + 1
+		};
+	};
+
+	TOYGE_CORE_API String GetShaderModelName(ShaderModel sm);
 
 	enum TextureBindFlag : uint32_t
 	{
@@ -74,7 +77,7 @@ namespace ToyGE
 		BUFFER_BIND_UNORDERED_ACCESS = 0x1UL << 3UL,
 		BUFFER_BIND_SHADER_RESOURCE = 0x1UL << 4UL,
 		BUFFER_BIND_RENDER_TARGET = 0x1UL << 5UL,
-		BUFFER_BIND_STRUCTURED = 0x1UL << 6UL,
+		//BUFFER_BIND_STRUCTURED = 0x1UL << 6UL,
 		BUFFER_BIND_IMMUTABLE = 0x1UL << 7UL,
 		BUFFER_BIND_INDIRECT_ARGS = 0x1UL << 8UL,
 		BUFFER_BIND_RAW = 0x1UL << 9UL
@@ -103,7 +106,7 @@ namespace ToyGE
 		CUBE_FACE_Z_NEGATIVE = 5UL
 	};
 
-	enum ComparisonFuc : uint32_t
+	enum ComparisonFunc : uint32_t
 	{
 		COMPARISON_NEVER = 1,
 		COMPARISON_LESS = 2,
@@ -115,46 +118,6 @@ namespace ToyGE
 		COMPARISON_ALWAYS = 8
 	};
 
-	enum DepthWriteMask : uint32_t
-	{
-		DEPTH_WRITE_ZERO = 0,
-		DEPTH_WRITE_ALL = 1
-	};
-
-	enum FillMode : uint32_t
-	{
-		FILL_WIREFRAME = 2,
-		FILL_SOLID = 3
-	};
-
-	enum CullMode : uint32_t
-	{
-		CULL_NONE = 1,
-		CULL_FRONT = 2,
-		CULL_BACK = 3
-	};
-
-	enum StencilOperation : uint32_t
-	{
-		STENCIL_OP_KEEP = 1,
-		STENCIL_OP_ZERO = 2,
-		STENCIL_OP_REPLACE = 3,
-		STENCIL_OP_INCR_SAT = 4,
-		STENCIL_OP_DECR_SAT = 5,
-		STENCIL_OP_INVERT = 6,
-		STENCIL_OP_INCR = 7,
-		STENCIL_OP_DECR = 8
-	};
-
-	enum TextureAddressMode : uint32_t
-	{
-		TEXTURE_ADDRESS_WRAP = 1,
-		TEXTURE_ADDRESS_MIRROR = 2,
-		TEXTURE_ADDRESS_CLAMP = 3,
-		TEXTURE_ADDRESS_BORDER = 4,
-		TEXTURE_ADDRESS_MIRROR_ONCE = 5
-	};
-
 	enum ColorWriteMask : uint32_t
 	{
 		COLOR_WRITE_R = 1UL << 0UL,
@@ -162,36 +125,6 @@ namespace ToyGE
 		COLOR_WRITE_B = 1UL << 2UL,
 		COLOR_WRITE_A = 1UL << 3UL,
 		COLOR_WRITE_ALL = (COLOR_WRITE_R | COLOR_WRITE_G | COLOR_WRITE_B | COLOR_WRITE_A)
-	};
-
-	enum BlendParam : uint32_t
-	{
-		BLEND_PARAM_ZERO = 1,
-		BLEND_PARAM_ONE = 2,
-		BLEND_PARAM_SRC_COLOR = 3,
-		BLEND_PARAM_INV_SRC_COLOR = 4,
-		BLEND_PARAM_SRC_ALPHA = 5,
-		BLEND_PARAM_INV_SRC_ALPHA = 6,
-		BLEND_PARAM_DEST_ALPHA = 7,
-		BLEND_PARAM_INV_DEST_ALPHA = 8,
-		BLEND_PARAM_DEST_COLOR = 9,
-		BLEND_PARAM_INV_DEST_COLOR = 10,
-		BLEND_PARAM_SRC_ALPHA_SAT = 11,
-		BLEND_PARAM_BLEND_FACTOR = 14,
-		BLEND_PARAM_INV_BLEND_FACTOR = 15,
-		BLEND_PARAM_SRC1_COLOR = 16,
-		BLEND_PARAM_INV_SRC1_COLOR = 17,
-		BLEND_PARAM_SRC1_ALPHA = 18,
-		BLEND_PARAM_INV_SRC1_ALPHA = 19
-	};
-
-	enum BlendOperation : uint32_t
-	{
-		BLEND_OP_ADD = 1,
-		BLEND_OP_SUBTRACT = 2,
-		BLEND_OP_REV_SUBTRACT = 3,
-		BLEND_OP_MIN = 4,
-		BLEND_OP_MAX = 5
 	};
 
 	enum PrimitiveTopology : uint32_t
@@ -240,120 +173,12 @@ namespace ToyGE
 		PRIMITIVE_TOPOLOGY_32_CONTROL_POINT_PATCHLIST = 64
 	};
 
-	enum Filter : uint32_t
-	{
-		FILTER_MIN_MAG_MIP_POINT = 0,
-		FILTER_MIN_MAG_POINT_MIP_LINEAR = 0x1,
-		FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x4,
-		FILTER_MIN_POINT_MAG_MIP_LINEAR = 0x5,
-		FILTER_MIN_LINEAR_MAG_MIP_POINT = 0x10,
-		FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x11,
-		FILTER_MIN_MAG_LINEAR_MIP_POINT = 0x14,
-		FILTER_MIN_MAG_MIP_LINEAR = 0x15,
-		FILTER_ANISOTROPIC = 0x55,
-		FILTER_COMPARISON_MIN_MAG_MIP_POINT = 0x80,
-		FILTER_COMPARISON_MIN_MAG_POINT_MIP_LINEAR = 0x81,
-		FILTER_COMPARISON_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x84,
-		FILTER_COMPARISON_MIN_POINT_MAG_MIP_LINEAR = 0x85,
-		FILTER_COMPARISON_MIN_LINEAR_MAG_MIP_POINT = 0x90,
-		FILTER_COMPARISON_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x91,
-		FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT = 0x94,
-		FILTER_COMPARISON_MIN_MAG_MIP_LINEAR = 0x95,
-		FILTER_COMPARISON_ANISOTROPIC = 0xd5,
-		FILTER_MINIMUM_MIN_MAG_MIP_POINT = 0x100,
-		FILTER_MINIMUM_MIN_MAG_POINT_MIP_LINEAR = 0x101,
-		FILTER_MINIMUM_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x104,
-		FILTER_MINIMUM_MIN_POINT_MAG_MIP_LINEAR = 0x105,
-		FILTER_MINIMUM_MIN_LINEAR_MAG_MIP_POINT = 0x110,
-		FILTER_MINIMUM_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x111,
-		FILTER_MINIMUM_MIN_MAG_LINEAR_MIP_POINT = 0x114,
-		FILTER_MINIMUM_MIN_MAG_MIP_LINEAR = 0x115,
-		FILTER_MINIMUM_ANISOTROPIC = 0x155,
-		FILTER_MAXIMUM_MIN_MAG_MIP_POINT = 0x180,
-		FILTER_MAXIMUM_MIN_MAG_POINT_MIP_LINEAR = 0x181,
-		FILTER_MAXIMUM_MIN_POINT_MAG_LINEAR_MIP_POINT = 0x184,
-		FILTER_MAXIMUM_MIN_POINT_MAG_MIP_LINEAR = 0x185,
-		FILTER_MAXIMUM_MIN_LINEAR_MAG_MIP_POINT = 0x190,
-		FILTER_MAXIMUM_MIN_LINEAR_MAG_POINT_MIP_LINEAR = 0x191,
-		FILTER_MAXIMUM_MIN_MAG_LINEAR_MIP_POINT = 0x194,
-		FILTER_MAXIMUM_MIN_MAG_MIP_LINEAR = 0x195,
-		FILTER_MAXIMUM_ANISOTROPIC = 0x1d5
-	};
-
-	struct MacroDesc
-	{
-		String name;
-		String value;
-	};
 
 	struct RenderDataDesc
 	{
 		void * pData;
 		size_t rowPitch;
 		size_t slicePitch;
-	};
-
-	struct TextureDesc
-	{
-		TextureType type = TEXTURE_UNDEFINED;
-		RenderFormat format = RENDER_FORMAT_UNDEFINED;
-		int32_t width = 0;
-		int32_t height = 0;
-		int32_t depth = 0;
-		int32_t arraySize = 1;
-		int32_t mipLevels = 0;
-		int32_t sampleCount = 1;
-		int32_t sampleQuality = 0;
-		uint32_t bindFlag = 0;
-		uint32_t cpuAccess = 0;
-	};
-
-	enum VertexBufferType
-	{
-		VERTEX_BUFFER_GEOMETRY,
-		VERTEX_BUFFER_INSHADERANCE
-	};
-
-	struct VertexElementDesc
-	{
-		String			name;
-		int32_t		index;
-		RenderFormat	format;
-		int32_t		instanceDataRate;
-		int32_t bytesOffset;
-		int32_t bytesSize;
-	};
-
-	struct RenderBufferDesc
-	{
-		size_t elementSize;
-		int32_t numElements;
-		uint32_t bindFlag;
-		uint32_t cpuAccess;
-		size_t structedByteStride;
-	};
-
-	struct TextureSubDesc
-	{
-		bool bAsCube;
-		int32_t firstMipLevel;
-		int32_t mipLevels;
-		union
-		{
-			struct
-			{
-				int32_t firstArray;
-				int32_t arraySize;
-			};
-
-			//for cube
-			struct
-			{
-				int32_t firstFaceOffset;
-				int32_t numCubes;
-			};
-		};
-		int32_t uavInitalCounts;
 	};
 
 	struct Box
@@ -366,144 +191,6 @@ namespace ToyGE
 		int32_t back;
 	};
 
-	struct BufferSubDesc
-	{
-		int32_t firstElement;
-		int32_t numElements;
-		uint32_t uavFlags;
-		int32_t uavInitalCounts;
-
-		bool operator==(const BufferSubDesc & subDesc) const
-		{
-			return firstElement == subDesc.firstElement
-				&& numElements == subDesc.numElements
-				&& uavFlags == subDesc.uavFlags;
-		}
-	};
-
-	struct RenderResourceSubDesc
-	{
-		union
-		{
-			TextureSubDesc textureDesc;
-			BufferSubDesc bufferDesc;
-		};
-
-	};
-
-	struct TOYGE_CORE_API ResourceView
-	{
-		Ptr<RenderResource> resource;
-		RenderResourceSubDesc subDesc;
-		RenderFormat formatHint;
-
-		ResourceView() : formatHint(RENDER_FORMAT_UNDEFINED)
-		{
-		}
-
-		bool operator==(const ResourceView & view) const;
-		bool operator!=(const ResourceView & view) const
-		{
-			return !this->operator==(view);
-		}
-	};
-
-	struct BlendRenderTargetDesc
-	{
-		bool     blendEnable = false;
-		BlendParam    srcBlend = BLEND_PARAM_ONE;
-		BlendParam    dstBlend = BLEND_PARAM_ZERO;
-		BlendOperation blendOP = BLEND_OP_ADD;
-		BlendParam    srcBlendAlpha = BLEND_PARAM_ONE;
-		BlendParam    dstBlendAlpha = BLEND_PARAM_ONE;
-		BlendOperation blendOPAlpha = BLEND_OP_ADD;
-		uint8_t  renderTargetWriteMask = COLOR_WRITE_ALL;
-	};
-
-	struct BlendStateDesc
-	{
-		bool			alphaToCoverageEnable = false;
-		bool			independentBlendEnable = false;
-		BlendRenderTargetDesc	blendRTDesc[8];
-	};
-
-	struct StencilOperationDesc
-	{
-		StencilOperation      stencilFailOp = STENCIL_OP_KEEP;
-		StencilOperation      stencilDepthFailOp = STENCIL_OP_KEEP;
-		StencilOperation      stencilPassOp = STENCIL_OP_KEEP;
-		ComparisonFuc stencilFunc = COMPARISON_ALWAYS;
-	};
-
-	struct DepthStencilStateDesc
-	{
-		bool                depthEnable = true;
-		DepthWriteMask    depthWriteMask = DEPTH_WRITE_ALL;
-		ComparisonFuc     depthFunc = COMPARISON_LESS;
-		bool                stencilEnable = false;
-		uint8_t             stencilReadMask = 0xff;
-		uint8_t             stencilWriteMask = 0xff;
-		StencilOperationDesc		frontFace;
-		StencilOperationDesc		backFace;
-	};
-
-	struct RasterizerStateDesc
-	{
-		FillMode fillMode = FILL_SOLID;
-		CullMode cullMode = CULL_BACK;
-		bool      bFrontCounterClockwise = false;
-		int32_t       depthBias = 0;
-		float     depthBiasClamp = 0.0f;
-		float     slopeScaledDepthBias = 0.0f;
-		bool      depthClipEnable = true;
-		bool      scissorEnable = false;
-		bool      multisampleEnable = false;
-		bool      antialiasedLineEnable = false;
-	};
-
-	struct SamplerDesc
-	{
-		Filter					filter = FILTER_MIN_MAG_MIP_LINEAR;
-		TextureAddressMode	addressU = TEXTURE_ADDRESS_CLAMP;
-		TextureAddressMode	addressV = TEXTURE_ADDRESS_CLAMP;
-		TextureAddressMode	addressW = TEXTURE_ADDRESS_CLAMP;
-		float                   mipLODBias = 0.0f;
-		uint8_t                 maxAnisotropy = 0;
-		ComparisonFuc			comparisonFunc = COMPARISON_NEVER;
-		float                   borderColor[4];
-		float                   minLOD = -FLT_MAX;
-		float                   maxLOD = FLT_MAX;
-	};
-
-	struct BufferVarReflectionInfo
-	{
-		String name;
-		size_t bytesOffset;
-		size_t bytesSize;
-	};
-
-	struct BufferReflectionInfo
-	{
-		String name;
-		size_t bytesSize;
-		int32_t bindPoint;
-		std::vector<BufferVarReflectionInfo> variables;
-	};
-
-	struct BoundResourceReflectionInfo
-	{
-		String name;
-		int32_t bindPoint;
-	};
-
-	struct ShaderProgramReflectionInfo
-	{
-		std::vector<BufferReflectionInfo> buffers;
-		std::vector<BoundResourceReflectionInfo> shaderResources;
-		std::vector<BoundResourceReflectionInfo> uavs;
-		std::vector<BoundResourceReflectionInfo> samplers;
-	};
-
 	struct Blob
 	{
 		void *bufferPointer;
@@ -512,7 +199,32 @@ namespace ToyGE
 
 	struct RenderDeviceAdapter
 	{
-		WString description;
+		String description;
+	};
+
+	enum OutputScalineOrder 
+	{
+		SCANLINE_ORDER_UNSPECIFIED = 0,
+		SCANLINE_ORDER_PROGRESSIVE = 1,
+		SCANLINE_ORDER_UPPER_FIELD_FIRST = 2,
+		SCANLINE_ORDER_LOWER_FIELD_FIRST = 3
+	};
+
+	enum OutputScaling
+	{
+		SCALING_UNSPECIFIED = 0,
+		SCALING_CENTERED = 1,
+		SCALING_STRETCHED = 2
+	};
+
+	struct RenderDeviceOutputMode
+	{
+		int32_t width;
+		int32_t height;
+		int32_t refreshRateNumerator;
+		int32_t refreshRateDenominator;
+		OutputScalineOrder scalineOrder;
+		OutputScaling scaling;
 	};
 
 }

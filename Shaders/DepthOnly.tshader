@@ -1,0 +1,26 @@
+#ifdef OUTPUT_VIEW_POSITION
+#define MVO_VIEW_POSITION 1
+#endif
+
+#include "MeshVertexInput.tshader"
+
+MeshVertexVSOutputs DepthOnlyVS(MeshVertexVSInputs inputs)
+{
+	  return GetMeshVSOutputs(inputs);
+}
+
+void DepthOnlyPS(
+    MeshVertexVSOutputs inputs
+#ifdef OUTPUT_VIEW_POSITION
+    , out float3 viewPos : SV_TARGET0
+#endif
+    )
+{
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+#ifdef OUTPUT_VIEW_POSITION
+    viewPos = inputs.viewPosition;
+#endif
+}

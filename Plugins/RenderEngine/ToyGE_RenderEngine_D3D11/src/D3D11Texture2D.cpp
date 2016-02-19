@@ -7,28 +7,43 @@
 
 namespace ToyGE
 {
-	D3D11Texture2D::D3D11Texture2D(const TextureDesc & desc)
-		: D3D11Texture2D(desc, std::vector<RenderDataDesc>())
+	void D3D11Texture2D::Init(const std::vector<RenderDataDesc> & initDataList)
 	{
+		D3D11Texture::Init(initDataList);
 
-	}
+		bool bWithData = initDataList.size() > 0;
 
-	D3D11Texture2D::D3D11Texture2D(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList)
-		: D3D11Texture(desc, initDataList)
-	{
+		auto adjustArraySize = _desc.bCube ? _desc.arraySize * 6 : _desc.arraySize;
+
+		// Init desc
 		D3D11_TEXTURE2D_DESC d3dTexDesc;
-		CreateRawD3DTexture2D_Desc(initDataList.size() > 0, d3dTexDesc);
+		d3dTexDesc.Format = GetD3DFormat(_desc.format);
+		d3dTexDesc.Width = _desc.width;
+		d3dTexDesc.Height = _desc.height;
+		d3dTexDesc.ArraySize = adjustArraySize;
+		d3dTexDesc.MipLevels = _desc.mipLevels;
+		d3dTexDesc.SampleDesc.Count = _desc.sampleCount;
+		d3dTexDesc.SampleDesc.Quality = _desc.sampleQuality;
+		GetD3DTextureCreateFlags(bWithData, d3dTexDesc.BindFlags, d3dTexDesc.CPUAccessFlags, d3dTexDesc.MiscFlags, d3dTexDesc.Usage);
+
+		if (IsCompress(_desc.format))
+		{
+			if (d3dTexDesc.Width > 1)
+				d3dTexDesc.Width = (d3dTexDesc.Width + 3) / 4 * 4;
+			if (d3dTexDesc.Height > 1)
+				d3dTexDesc.Height = (d3dTexDesc.Height + 3) / 4 * 4;
+		}
 
 		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
 		ID3D11Texture2D *pTexture2D = nullptr;
 
+		// Init with data
 		if (initDataList.size() > 0)
 		{
 			D3D11_SUBRESOURCE_DATA *pInitDataDesc = nullptr;
-
-			std::vector<D3D11_SUBRESOURCE_DATA> initDataDescList(_desc.arraySize * _desc.mipLevels);
+			std::vector<D3D11_SUBRESOURCE_DATA> initDataDescList(adjustArraySize * _desc.mipLevels);
 			int32_t dataIndex = 0;
-			for (int32_t arrayIndex = 0; arrayIndex != _desc.arraySize; ++arrayIndex)
+			for (int32_t arrayIndex = 0; arrayIndex != adjustArraySize; ++arrayIndex)
 			{
 				for (int32_t mipIndex = 0; mipIndex != _desc.mipLevels; ++mipIndex)
 				{
@@ -41,116 +56,97 @@ namespace ToyGE
 				}
 			}
 			pInitDataDesc = &initDataDescList[0];
-			re->RawD3DDevice()->CreateTexture2D(&d3dTexDesc, pInitDataDesc, &pTexture2D);
+			D3D11RenderEngine::d3d11Device->CreateTexture2D(&d3dTexDesc, pInitDataDesc, &pTexture2D);
 		}
 		else
-			re->RawD3DDevice()->CreateTexture2D(&d3dTexDesc, nullptr, &pTexture2D);
-	
+			D3D11RenderEngine::d3d11Device->CreateTexture2D(&d3dTexDesc, nullptr, &pTexture2D);
 
-//#if defined(DEBUG) || defined(_DEBUG)
-//		if (!pTexture2D)
-//		{
-//			_asm int 3;
-//		}
-//#endif
-		_rawD3DTexture2D = MakeComShared(pTexture2D);
+		_hardwareTexture2D = MakeComShared(pTexture2D);
 	}
 
-	Ptr<D3D11Texture2D> 
-		D3D11Texture2D::CreateFromRawD3D(
-		const Ptr<ID3D11Device> & rawDevice,
-		const Ptr<ID3D11Texture2D> & rawTexture2D)
+	void D3D11Texture2D::InitFromHardware(const Ptr<ID3D11Resource> & hardwareResource)
 	{
-		auto texture = Ptr<D3D11Texture2D>(new D3D11Texture2D());
-		texture->_rawD3DTexture2D = rawTexture2D;
-		texture->InitFromRawD3DTexture();
-		return texture;
+		_hardwareTexture2D = std::static_pointer_cast<ID3D11Texture2D>(hardwareResource);
+
+		D3D11_TEXTURE2D_DESC desc;
+		_hardwareTexture2D->GetDesc(&desc);
+		//_desc.type = TEXTURE_2D;
+		_desc.format = GetRenderFormat(desc.Format);
+		_desc.width = desc.Width;
+		_desc.height = desc.Height;
+		_desc.depth = 1;
+		_desc.arraySize = desc.ArraySize;
+		_desc.mipLevels = desc.MipLevels;
+		_desc.sampleCount = desc.SampleDesc.Count;
+		_desc.sampleQuality = desc.SampleDesc.Quality;
+		GetFlagsFromD3D(desc.BindFlags, desc.CPUAccessFlags, desc.MiscFlags, _desc.bindFlag, _desc.cpuAccess, _desc.bCube);
+
+		InitMipsSize();
 	}
 
-	const Ptr<ID3D11ShaderResourceView>& 
-		D3D11Texture2D::AcquireRawD3DShaderResourceView(int32_t firstMipLevel, int32_t numMipLevels, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
+	Ptr<TextureShaderResourceView> D3D11Texture2D::CreateShaderResourceView(int32_t firstMip, int32_t numMips, int32_t firstArray, int32_t numArrays, bool bCube, RenderFormat viewFormat)
 	{
+		// Init d3d11 srv desc
 		D3D11_SHADER_RESOURCE_VIEW_DESC desc;
 		memset(&desc, 0, sizeof(desc));
-		if (firstArray == 0 && arraySize == 1 && _desc.type == TEXTURE_2D && _desc.arraySize == 1)
+		if (!bCube)
 		{
-			desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-			desc.Texture2D.MostDetailedMip = firstMipLevel;
-			desc.Texture2D.MipLevels = numMipLevels;
+			if (firstArray == 0 && numArrays == 1)
+			{
+				desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+				desc.Texture2D.MostDetailedMip = firstMip;
+				desc.Texture2D.MipLevels = numMips;
+			}
+			else
+			{
+				desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
+				desc.Texture2DArray.MostDetailedMip = firstMip;
+				desc.Texture2DArray.MipLevels = numMips;
+				desc.Texture2DArray.FirstArraySlice = firstArray;
+				desc.Texture2DArray.ArraySize = numArrays;
+			}
 		}
 		else
 		{
-			desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DARRAY;
-			desc.Texture2DArray.MostDetailedMip = firstMipLevel;
-			desc.Texture2DArray.MipLevels = numMipLevels;
-			desc.Texture2DArray.FirstArraySlice = firstArray;
-			desc.Texture2DArray.ArraySize = arraySize;
+			if (numArrays == 1)
+			{
+				desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+				desc.TextureCube.MostDetailedMip = firstMip;
+				desc.TextureCube.MipLevels = numMips;
+			}
+			else
+			{
+				desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBEARRAY;
+				desc.TextureCubeArray.MostDetailedMip = firstMip;
+				desc.TextureCubeArray.MipLevels = numMips;
+				desc.TextureCubeArray.First2DArrayFace = firstArray;
+				desc.TextureCubeArray.NumCubes = numArrays;
+			}
 		}
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
 			desc.Format = GetD3DFormat(_desc.format);
 		else
-			desc.Format = GetD3DFormat(formatHint);
+			desc.Format = GetD3DFormat(viewFormat);
 
-		return InitShaderResourceView(desc);
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 srv
+		ID3D11ShaderResourceView *pSRV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateShaderResourceView(_hardwareTexture2D.get(), &desc, &pSRV);
+
+		auto resultSRV = std::make_shared<D3D11TextureShaderResourceView>();
+		resultSRV->hardwareSRV = MakeComShared(pSRV);
+
+		return resultSRV;
 	}
 
-	const Ptr<ID3D11RenderTargetView>&
-		D3D11Texture2D::AcquireRawD3DRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
+	Ptr<TextureUnorderedAccessView> D3D11Texture2D::CreateUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat)
 	{
-		D3D11_RENDER_TARGET_VIEW_DESC desc;
-		memset(&desc, 0, sizeof(desc));
-		if (firstArray == 0 && arraySize == 1 && _desc.type == TEXTURE_2D && _desc.arraySize == 1)
-		{
-			desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-			desc.Texture2D.MipSlice = mipLevel;
-		}
-		else
-		{
-			desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-			desc.Texture2DArray.ArraySize = arraySize;
-			desc.Texture2DArray.FirstArraySlice = firstArray;
-			desc.Texture2DArray.MipSlice = mipLevel;
-		}
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
-			desc.Format = GetD3DFormat(_desc.format);
-		else
-			desc.Format = GetD3DFormat(formatHint);
-
-		return InitRenderTargetView(desc);
-	}
-
-	const Ptr<ID3D11DepthStencilView>&
-		D3D11Texture2D::AcquireRawD3DDepthStencilView(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
-	{
-		D3D11_DEPTH_STENCIL_VIEW_DESC desc;
-		memset(&desc, 0, sizeof(desc));
-		if (firstArray == 0 && arraySize == 1 && _desc.type == TEXTURE_2D && _desc.arraySize == 1)
-		{
-			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-			desc.Texture2D.MipSlice = mipLevel;
-		}
-		else
-		{
-			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
-			desc.Texture2DArray.FirstArraySlice = firstArray;
-			desc.Texture2DArray.ArraySize = arraySize;
-			desc.Texture2DArray.MipSlice = mipLevel;
-		}
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
-			desc.Format = GetD3DFormat(_desc.format);
-		else
-			desc.Format = GetD3DFormat(formatHint);
-		desc.Flags = 0;
-
-		return InitDepthStencilView(desc);
-	}
-
-	const Ptr<ID3D11UnorderedAccessView>&
-		D3D11Texture2D::AcquireRawD3DUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint)
-	{
+		// Init d3d11 uav desc
 		D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
 		memset(&desc, 0, sizeof(desc));
-		if (firstArray == 0 && arraySize == 1 && _desc.type == TEXTURE_2D && _desc.arraySize == 1)
+
+		if (firstArray == 0 && numArrays == 1)
 		{
 			desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
 			desc.Texture2D.MipSlice = mipLevel;
@@ -159,53 +155,94 @@ namespace ToyGE
 		{
 			desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2DARRAY;
 			desc.Texture2DArray.FirstArraySlice = firstArray;
-			desc.Texture2DArray.ArraySize = arraySize;
+			desc.Texture2DArray.ArraySize = numArrays;
 			desc.Texture2DArray.MipSlice = mipLevel;
 		}
-		if (formatHint == RENDER_FORMAT_UNDEFINED)
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
 			desc.Format = GetD3DFormat(_desc.format);
 		else
-			desc.Format = GetD3DFormat(formatHint);
+			desc.Format = GetD3DFormat(viewFormat);
 
-		return InitUnorderedAccessView(desc);
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 uav
+		ID3D11UnorderedAccessView *pUAV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateUnorderedAccessView(_hardwareTexture2D.get(), &desc, &pUAV);
+
+		auto resultUAV = std::make_shared<D3D11TextureUnorderedAccessView>();
+		resultUAV->hardwareUAV = MakeComShared(pUAV);
+
+		return resultUAV;
 	}
 
-
-	void D3D11Texture2D::InitFromRawD3DTexture()
+	Ptr<TextureRenderTargetView> D3D11Texture2D::CreateRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat)
 	{
-		D3D11_TEXTURE2D_DESC desc;
-		_rawD3DTexture2D->GetDesc(&desc);
-		_desc.type = TEXTURE_2D;
-		_desc.format = GetRenderFormat(desc.Format);
-		_desc.width = desc.Width;
-		_desc.height = desc.Height;
-		_desc.depth = 0;
-		_desc.arraySize = desc.ArraySize;
-		_desc.mipLevels = desc.MipLevels;
-		_desc.sampleCount = desc.SampleDesc.Count;
-		_desc.sampleQuality = desc.SampleDesc.Quality;
+		// Init d3d11 rtv desc
+		D3D11_RENDER_TARGET_VIEW_DESC desc;
+		memset(&desc, 0, sizeof(desc));
 
-		_desc.mipLevels = ComputeMipLevels(_desc.mipLevels, _desc.width, _desc.height, _desc.depth, _mipSizeMap);
-	}
-
-	void D3D11Texture2D::CreateRawD3DTexture2D_Desc(bool hasInitData, D3D11_TEXTURE2D_DESC & texture2D_Desc)
-	{
-		texture2D_Desc.Format = GetD3DFormat(_desc.format);
-		texture2D_Desc.Width = _desc.width;
-		texture2D_Desc.Height = _desc.height;
-		texture2D_Desc.ArraySize = _desc.arraySize;
-		texture2D_Desc.MipLevels = _desc.mipLevels;
-		texture2D_Desc.SampleDesc.Count = _desc.sampleCount;
-		texture2D_Desc.SampleDesc.Quality = _desc.sampleQuality;
-
-		if (IsCompress(_desc.format))
+		if (firstArray == 0 && numArrays == 1)
 		{
-			if(texture2D_Desc.Width > 1)
-				texture2D_Desc.Width = (texture2D_Desc.Width + 3) / 4 * 4;
-			if (texture2D_Desc.Height > 1)
-				texture2D_Desc.Height = (texture2D_Desc.Height + 3) / 4 * 4;
+			desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+			desc.Texture2D.MipSlice = mipLevel;
 		}
+		else
+		{
+			desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+			desc.Texture2DArray.ArraySize = numArrays;
+			desc.Texture2DArray.FirstArraySlice = firstArray;
+			desc.Texture2DArray.MipSlice = mipLevel;
+		}
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
+			desc.Format = GetD3DFormat(_desc.format);
+		else
+			desc.Format = GetD3DFormat(viewFormat);
 
-		ExtractD3DBindFlags(hasInitData, texture2D_Desc.BindFlags, texture2D_Desc.CPUAccessFlags, texture2D_Desc.Usage, texture2D_Desc.MiscFlags);
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 rtv
+		ID3D11RenderTargetView *pRTV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateRenderTargetView(_hardwareTexture2D.get(), &desc, &pRTV);
+
+		auto resultRTV = std::make_shared<D3D11TextureRenderTargetView>();
+		resultRTV->hardwareRTV = MakeComShared(pRTV);
+
+		return resultRTV;
+	}
+
+	Ptr<TextureDepthStencilView> D3D11Texture2D::CreateDepthStencilView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat)
+	{
+		// Init d3d11 dsv desc
+		D3D11_DEPTH_STENCIL_VIEW_DESC desc;
+		memset(&desc, 0, sizeof(desc));
+
+		if (firstArray == 0 && numArrays == 1)
+		{
+			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+			desc.Texture2D.MipSlice = mipLevel;
+		}
+		else
+		{
+			desc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2DARRAY;
+			desc.Texture2DArray.FirstArraySlice = firstArray;
+			desc.Texture2DArray.ArraySize = numArrays;
+			desc.Texture2DArray.MipSlice = mipLevel;
+		}
+		if (viewFormat == RENDER_FORMAT_UNDEFINED)
+			desc.Format = GetD3DFormat(_desc.format);
+		else
+			desc.Format = GetD3DFormat(viewFormat);
+		desc.Flags = 0;
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		// Create d3d11 rtv
+		ID3D11DepthStencilView *pDSV = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateDepthStencilView(_hardwareTexture2D.get(), &desc, &pDSV);
+
+		auto resultDSV = std::make_shared<D3D11TextureDepthStencilView>();
+		resultDSV->hardwareDSV = MakeComShared(pDSV);
+
+		return resultDSV;
 	}
 }

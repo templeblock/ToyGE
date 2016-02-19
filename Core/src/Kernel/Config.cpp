@@ -1,7 +1,9 @@
 #include "ToyGE\Kernel\Config.h"
-#include "ToyGE\Kernel\File.h"
 #include "ToyGE\Kernel\Logger.h"
 #include "ToyGE\Kernel\Util.h"
+#include "ToyGE\Kernel\Global.h"
+#include "ToyGE\Platform\Platform.h"
+#include "ToyGE\Platform\File.h"
 
 #include "rapidxml.hpp"
 
@@ -16,68 +18,87 @@ namespace ToyGE
 
 	}
 
-	bool Config::Load(const WString & path, Config & outConfig)
+	Ptr<Config> Config::Load(const String & path)
 	{
-		auto file = std::make_shared<File>(path, FILE_OPEN_READ);
-		if (!file->CanRead())
-		{
-			Logger::LogLine("error> can not open config file %s", path.c_str());
-			return false;
-		}
+		auto file = Global::GetPlatform()->CreatePlatformFile(path, FILE_OPEN_READ);
+		if (!file->IsValid())
+			return nullptr;
 
-		auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[file->Size() + sizeof(wchar_t)]);
-		auto bytesRead = file->Read(buf.get(), file->Size());
+		auto config = std::make_shared<Config>();
+
+		auto fileSize = file->Size();
+		auto buf = std::unique_ptr<uint8_t[]>(new uint8_t[fileSize + 1]);
+		auto bytesRead = file->Read(buf.get(), fileSize);
 		buf[file->Size()] = 0;
-		buf[file->Size() + 1] = 0;
-		if (bytesRead != file->Size())
-			return false;
+		if (bytesRead != fileSize)
+			return nullptr;
 
-		rapidxml::xml_document<wchar_t> doc;
-		doc.parse<0>(reinterpret_cast<wchar_t*>(buf.get()));
+		rapidxml::xml_document<> doc;
+		doc.parse<0>( reinterpret_cast<char*>(buf.get()) );
 
-		auto configNode = doc.first_node(L"config");
+		auto configNode = doc.first_node("config");
 
-		auto windowNode = configNode->first_node(L"window");
-		if (windowNode)
 		{
-			auto windowTitleAttrib = windowNode->first_attribute(L"title");
-			if (windowTitleAttrib)
-				outConfig.windowTitle = windowTitleAttrib->value();
-			auto windowWidthAttrib = windowNode->first_attribute(L"width");
-			if (windowWidthAttrib)
-				outConfig.windowWidth = std::stoi(windowWidthAttrib->value());
-			else
-				outConfig.windowWidth = 800;
-			auto windowHeightAttrib = windowNode->first_attribute(L"height");
-			if (windowHeightAttrib)
-				outConfig.windowHeight = std::stoi(windowHeightAttrib->value());
-			else
-				outConfig.windowHeight = 600;
-			auto windowXAttrib = windowNode->first_attribute(L"x");
-			if (windowXAttrib)
-				outConfig.windowX = std::stoi(windowXAttrib->value());
-			else
-				outConfig.windowX = 0;
-			auto windowYAttrib = windowNode->first_attribute(L"y");
-			if (windowYAttrib)
-				outConfig.windowY = std::stoi(windowYAttrib->value());
-			else
-				outConfig.windowY = 0;
+			auto node = configNode->first_node("window");
+			if (node)
+			{
+				{
+					auto attrib = node->first_attribute("title");
+					if (attrib)
+						config->windowTitle = attrib->value();
+				}
+				{
+					auto attrib = node->first_attribute("width");
+					if (attrib)
+						config->windowWidth = std::stoi(attrib->value());
+				}
+				{
+					auto attrib = node->first_attribute("height");
+					if (attrib)
+						config->windowHeight = std::stoi(attrib->value());
+				}
+				{
+					auto attrib = node->first_attribute("x");
+					if (attrib)
+						config->windowX = std::stoi(attrib->value());
+				}
+				{
+					auto attrib = node->first_attribute("y");
+					if (attrib)
+						config->windowY = std::stoi(attrib->value());
+				}
+			}
 		}
 
-		auto resourceNode = configNode->first_node(L"resource");
-		while (resourceNode)
 		{
-			WString wName = resourceNode->first_attribute(L"name")->value();
-			String name;
-			ConvertStr_WToA(wName, name);
-			WString basePath = resourceNode->first_attribute(L"path")->value();
-
-			outConfig.resourceMap[name] = basePath;
-
-			resourceNode = resourceNode->next_sibling(L"resource");
+			auto node = configNode->first_node("adapter");
+			if (node)
+			{
+				{
+					auto attrib = node->first_attribute("index");
+					if (attrib)
+						config->adapterIndex = std::stoi(attrib->value());
+				}
+				{
+					auto attrib = node->first_attribute("key");
+					if (attrib)
+						config->adapterSelectKey = attrib->value();
+				}
+			}
 		}
 
-		return true;
+		{
+			auto node = configNode->first_node("graphics_engine");
+			if (node)
+			{
+				{
+					auto attrib = node->first_attribute("debug");
+					if (attrib)
+						config->bGraphicsEngineDebug = !!std::stoi(attrib->value());
+				}
+			}
+		}
+
+		return config;
 	}
 }

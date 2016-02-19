@@ -6,10 +6,7 @@ namespace ToyGE
 {
 	Ptr<DllObj> WindowsDllLoader::LoadDll(const String & name)
 	{
-		WString wStr;
-		ConvertStr_AToW(name, wStr);
-
-		HDLL hDll = ::LoadLibraryW( wStr.c_str() );
+		HDLL hDll = ::LoadLibraryW( reinterpret_cast<const wchar_t*>(StringConvert<StringEncode::UTF_8, StringEncode::UTF_16>(name).c_str()) );
 
 		return hDll ? WindowsDllObj::Create(hDll) : WindowsDllObj::Create(0);
 	}

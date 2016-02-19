@@ -6,12 +6,15 @@
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, HZBBuildPS, SHADER_PS, "SSR", "HZBBuildPS", SM_4);
+	DECLARE_SHADER(, ScreenSpaceReflectionPS, SHADER_PS, "SSR", "ScreenSpaceReflectionPS", SM_4);
+
 	class TOYGE_CORE_API SSR : public RenderAction
 	{
 	public:
 		SSR();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_SET(SSRMaxRoughness, float, _ssrMaxRoughness)
 		CLASS_GET(SSRMaxRoughness, float, _ssrMaxRoughness)
@@ -20,13 +23,10 @@ namespace ToyGE
 		CLASS_GET(SSRIntensity, float, _ssrIntensity)
 
 	private:
-		Ptr<RenderEffect> _fx;
 		float _ssrMaxRoughness;
 		float _ssrIntensity;
 
-		//void InitDither();
-
-		Ptr<Texture> BuildHZB(const Ptr<Texture> & depthTex);
+		PooledTextureRef BuildHZB(const Ptr<Texture> & depthTex);
 	};
 }
 

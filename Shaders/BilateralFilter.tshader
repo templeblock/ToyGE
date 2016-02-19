@@ -1,0 +1,96 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "BilateralFilterCommon.tshader"
+
+Texture2D lowResDepthTex;
+Texture2D highResDepthTex;
+Texture2D upSamplingInTex;
+
+float depthDiffThreshold;
+
+float4 BilateralUpSamplingPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float4 bilinearWeights;
+    float2 samplesPos[4];
+    GetBilateralUpSamplingCoords(vsOut.pos.xy, samplesPos, bilinearWeights);
+
+    static const float epison = 0.001f;
+    
+    float centerDepth = highResDepthTex.Load(int3(vsOut.pos.xy, 0)).x;
+    
+    float4 valueSum = 0.0f;
+    float weightSum = 0.0f;
+    [unroll] for(int i = 0; i < 4; ++i)
+    {
+        float4 sampleValue = upSamplingInTex.Load(int3(samplesPos[i], 0));
+        float sampleDepth = lowResDepthTex.Load(int3(samplesPos[i], 0)).x;
+        float depthDiffW = GetDepthDiffWeight(sampleDepth, centerDepth, depthDiffThreshold);//1.0f / (epison + abs(sampleDepth - centerDepth) * depthDiffScale);
+        
+        float sampleWeight = max(1e-5, bilinearWeights[i] * depthDiffW);
+        
+        valueSum += sampleValue * sampleWeight;
+        weightSum += sampleWeight;
+    }
+    
+    valueSum /= weightSum;
+    
+    return valueSum;
+}
+
+#ifndef BLUR_RADIUS
+#define BLUR_RADIUS 3
+#endif
+
+Texture2D bilateralDepthTex;
+Texture2D bilateralBlurInTex;
+
+SamplerState pointSampler;
+
+float4 bilateralBlurWeights[ (BLUR_RADIUS * 2 + 1 + 3) / 4 ];
+float4 texSize;
+  
+float4 BilateralBlur(DrawQuadVSOut vsOut, float2 axis)
+{
+    float weights[BLUR_RADIUS * 2 + 1] = (float[BLUR_RADIUS * 2 + 1])bilateralBlurWeights;
+    
+    float4 sum = 0.0f;
+    float weightsAll = 0.0f;
+    
+    static const float epison = 0.001f;
+    
+    float2 tc = vsOut.pos.xy * texSize.zw;
+    float4 vc = bilateralBlurInTex.SampleLevel(pointSampler, tc, 0);
+    float dc = bilateralDepthTex.SampleLevel(pointSampler, tc, 0).x;
+    float wc = weights[0] * 1.0f;// / (epison);
+    
+    sum = vc * wc;
+    weightsAll += wc;
+    
+    [unroll]
+    for(int i = -BLUR_RADIUS; i <= BLUR_RADIUS; ++i)
+    {
+        if(i != 0)
+        {
+            float2 ti = (vsOut.pos.xy + i * axis) * texSize.zw;
+            float4 vi = bilateralBlurInTex.SampleLevel(pointSampler, ti, 0);
+            float di = bilateralDepthTex.SampleLevel(pointSampler, ti, 0).x;
+            float wi = max(1e-5, weights[i + BLUR_RADIUS] * GetDepthDiffWeight(di, dc, depthDiffThreshold));// 1.0f / (epison + abs(di - dc));
+            sum += wi * vi;
+            weightsAll += wi;
+        }
+    }
+    
+    sum /= weightsAll;
+    
+    return sum;
+}
+
+float4 BilateralBlurXPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return BilateralBlur(vsOut, float2(1.0f, 0.0f));
+}
+
+float4 BilateralBlurYPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return BilateralBlur(vsOut, float2(0.0f, 1.0f));
+}

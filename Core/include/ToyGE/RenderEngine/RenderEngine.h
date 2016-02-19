@@ -2,8 +2,8 @@
 #ifndef RENDERENGINE_H
 #define RENDERENGINE_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
 
 #include "AntTweakBar.h"
@@ -18,61 +18,48 @@ namespace ToyGE
 	class TransientBuffer;
 	class SceneCuller;
 	class Texture;
+	class SceneRenderer;
 
-	enum TransientBufferType
+	struct RenderEngineInitParams
 	{
-		TRANSIENTBUFFER_TEXT_VERTEX,
-		TRANSIENTBUFFER_TEXT_INDEX
+		int32_t adapterIndex = -1;
+		String adapterSelectKey;
+		bool bGrapicsEngineDebug = false;
 	};
 
 	class TOYGE_CORE_API RenderEngine
 	{
 	public:
-		RenderEngine(const Ptr<Window> & window);
-
 		virtual ~RenderEngine();
 
-		void Startup();
+		virtual void Init(const RenderEngineInitParams & initParams);
 
-		void RenderFrame();
+		virtual void SwapChain() const = 0;
 
-		const Ptr<Window> & GetWindow()
-		{
-			return _window;
-		}
+		void Render();
 
-		const Ptr<RenderContext> & GetRenderContext()
-		{
-			return _renderContext;
-		}
+		CLASS_GET(RenderContext, Ptr<RenderContext>, _renderContext);
 
-		const Ptr<RenderFactory> & GetRenderFactory()
-		{
-			return _renderFactory;
-		}
+		CLASS_GET(RenderFactory, Ptr<RenderFactory>, _renderFactory);
 
-		CLASS_SET(FontFactory, Ptr<FontFactory>, _fontFactory);
-		CLASS_GET(FontFactory, Ptr<FontFactory>, _fontFactory);
+		CLASS_SET(SceneRenderer, Ptr<SceneRenderer>, _sceneRender);
+		CLASS_GET(SceneRenderer, Ptr<SceneRenderer>, _sceneRender);
 
-		void SetRenderFramework(const Ptr<RenderFramework> & framework)
-		{
-			_renderFramework = framework;
-		}
+		CLASS_GET(FrameBuffer, Ptr<Texture>, _frameBuffer);
 
-		Ptr<RenderFramework> GetRenderFramework() const
-		{
-			return _renderFramework;
-		}
+		CLASS_GET(BackBuffer, Ptr<Texture>, _backBuffer);
 
-		Ptr<TransientBuffer> GetTransientBuffer(TransientBufferType type)
-		{
-			return _transientBufferMap[type];
-		}
+		//Ptr<TransientBuffer> GetTransientBuffer(TransientBufferType type)
+		//{
+		//	return _transientBufferMap[type];
+		//}
 
 		const RenderDeviceAdapter & GetSelectedDeviceAdapter() const
 		{
 			return _adapter;
 		}
+
+		CLASS_GET(DeviceOutputMode, std::vector<std::vector<RenderDeviceOutputMode>>, _outputModesList);
 
 		void SetSceneRenderObjsCuller(const Ptr<SceneCuller> & culler)
 		{
@@ -94,27 +81,37 @@ namespace ToyGE
 			return _sceneRenderLightsCuller;
 		}
 
-		void PresentToBackBuffer(const ResourceView & resource);
+		static ShaderModel GetShaderModel()
+		{
+			return _shaderModel;
+		}
+
+		CLASS_SET(Gamma, float, _gamma);
+		CLASS_GET(Gamma, float, _gamma);
+
+		bool IsFullScreen() const
+		{
+			return _bFullScreen;
+		}
+		virtual void SetFullScreen(bool bFullScreen);
 
 	protected:
-		Ptr<Window> _window;
-		Ptr<RenderContext> _renderContext;
-		Ptr<RenderFactory> _renderFactory;
-		Ptr<FontFactory> _fontFactory;
-		Ptr<RenderFramework> _renderFramework;
-		Ptr<Texture> _defaultRenderTarget;
-		Ptr<Texture> _defaultDepthStencil;
+		Ptr<RenderContext>	_renderContext;
+		Ptr<RenderFactory>	_renderFactory;
+		Ptr<SceneRenderer>	_sceneRender;
+		Ptr<Texture>		_frameBuffer;
+		Ptr<Texture>		_backBuffer;
 		RenderDeviceAdapter _adapter;
-		Ptr<SceneCuller> _sceneRenderObjsCuller;
-		Ptr<SceneCuller> _sceneRenderLightsCuller;
+		std::vector<std::vector<RenderDeviceOutputMode>> _outputModesList;
+		Ptr<SceneCuller>	_sceneRenderObjsCuller;
+		Ptr<SceneCuller>	_sceneRenderLightsCuller;
+		float _gamma = 2.2f;
+		bool _bFullScreen = false;
 
-		std::map<TransientBufferType, Ptr<TransientBuffer>> _transientBufferMap;
-
-		virtual void SwapChain() const = 0;
-
-		virtual void DoStartup() = 0;
-
+		static ShaderModel _shaderModel;
 	};
+
+	using CreateRenderEngineFunc = void(*)(RenderEngine **ppRenderEngine);
 }
 
 #endif

@@ -2,7 +2,8 @@
 #ifndef IOHELPER_H
 #define IOHELPER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {
@@ -35,17 +36,6 @@ namespace ToyGE
 			}
 		}
 
-		void ReadString(WString & outStr)
-		{
-			wchar_t c;
-			ReadBytes(&c, sizeof(wchar_t));
-			while (c)
-			{
-				outStr.append(1, c);
-				ReadBytes(&c, sizeof(wchar_t));
-			}
-		}
-
 	protected:
 		virtual void DoReadBytes(void * dst, size_t numBytes) = 0;
 	};
@@ -71,19 +61,9 @@ namespace ToyGE
 			WriteBytes(str.c_str(), (str.size() + 1) * sizeof(char));
 		}
 
-		void WriteString(const WString & str)
-		{
-			WriteBytes(str.c_str(), (str.size() + 1) * sizeof(wchar_t));
-		}
-
 		void WriteStringNoTerminates(const String & str)
 		{
 			WriteBytes(str.c_str(), (str.size()) * sizeof(char));
-		}
-
-		void WriteStringNoTerminates(const WString & str)
-		{
-			WriteBytes(str.c_str(), (str.size()) * sizeof(wchar_t));
 		}
 
 	protected:

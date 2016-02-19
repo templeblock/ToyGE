@@ -2,9 +2,21 @@
 
 namespace ToyGE
 {
-	Sampler::Sampler(const SamplerDesc & desc)
-		: _desc(desc)
-	{
-
-	}
+	//template <
+	//	Filter				filter,
+	//	TextureAddressMode	addressU,
+	//	TextureAddressMode	addressV,
+	//	TextureAddressMode	addressW,
+	//	uint8_t             maxAnisotropy,
+	//	ComparisonFunc		comparisonFunc
+	//>
+	//	Ptr<Sampler> SamplerTemplate
+	//	<
+	//	filter,
+	//	addressU,
+	//	addressV,
+	//	addressW,
+	//	maxAnisotropy,
+	//	comparisonFunc
+	//	>::_sampler;
 }

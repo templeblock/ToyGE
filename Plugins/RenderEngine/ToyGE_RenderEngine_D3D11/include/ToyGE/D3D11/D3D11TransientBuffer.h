@@ -2,7 +2,7 @@
 #ifndef D3D11TRANSIENTBUFFER_H
 #define D3D11TRANSIENTBUFFER_H
 
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 #include "ToyGE\RenderEngine\TransientBuffer.h"
 
 namespace ToyGE
@@ -20,7 +20,6 @@ namespace ToyGE
 	class D3D11TransientBuffer : public TransientBuffer
 	{
 	public:
-		D3D11TransientBuffer(int32_t elementSize, int32_t initNumElements, uint32_t bufferBindFlags);
 
 	protected:
 		RetiredFramePtr CreateRetiredFrame() const override;

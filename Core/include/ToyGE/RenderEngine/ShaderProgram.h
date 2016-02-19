@@ -2,61 +2,72 @@
 #ifndef SHADERPROGRAM_H
 #define SHADERPROGRAM_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
-#include "ToyGE\Kernel\IOHelper.h"
+#include "ToyGE\RenderEngine\RenderResource.h"
 
 namespace ToyGE
 {
-	class TOYGE_CORE_API ShaderProgram
+	struct BoundCBVariable
 	{
-	public:
-		//ShaderProgram(ShaderType type, const std::shared_ptr<uint8_t> & compiledData, size_t compiledDataSize)
-		//	: _type(type), _compiledData(compiledData), _compiledDataSize(compiledDataSize)
-		//{
-		//}
+		String	name;
+		int32_t bytesOffset;
+		int32_t bytesSize;
+	};
 
-		ShaderProgram(ShaderType type);
+	struct BoundConstantBuffer
+	{
+		String	name;
+		int32_t boundIndex;
+		int32_t bytesSize;
+		std::vector<BoundCBVariable> variables;
+	};
+
+	struct BoundResource
+	{
+		String	name;
+		int32_t boundIndex;
+	};
+
+	struct ShaderProgramResourceMap
+	{
+		std::vector<BoundConstantBuffer>	constantBuffers;
+		std::vector<BoundResource>			srvs;
+		std::vector<BoundResource>			uavs;
+		std::vector<BoundResource>			samplers;
+	};
+
+	class TOYGE_CORE_API ShaderProgram : public RenderResource
+	{
+		friend class Shader;
+		friend class ShaderMetaType;
+
+	public:
+		ShaderProgram(ShaderType type) : RenderResource(RenderResourceType::RRT_SHADER), _type(type) {};
 
 		virtual ~ShaderProgram() = default;
 
-		const ShaderType Type() const
-		{
-			return _type;
-		}
+		virtual void Init() override;
 
-		CLASS_GET(ReflectInfo, ShaderProgramReflectionInfo, _reflectInfo);
-		CLASS_SET(ReflectInfo, ShaderProgramReflectionInfo, _reflectInfo);
+		CLASS_SET(Type, ShaderType, _type);
+		CLASS_GET(Type, ShaderType, _type);
+
+		CLASS_GET(ResourceMap, ShaderProgramResourceMap, _resourceMap);
+		CLASS_SET(ResourceMap, ShaderProgramResourceMap, _resourceMap);
 
 		std::shared_ptr<const uint8_t> GetCompiledData() const
 		{
 			return _compiledData;
 		}
 
-		size_t GetCompiledDataSize() const
+		int32_t GetCompiledDataSize() const
 		{
 			return _compiledDataSize;
 		}
 
-		virtual void Save(const Ptr<Writer> & writer) const;
-
-		static Ptr<ShaderProgram> Load(const Ptr<Reader> & reader);
-
-		/*const Blob & GetCompiledCode() const
-		{
-			return _compiledCode;
-		}*/
-
 	protected:
 		ShaderType _type;
+		ShaderProgramResourceMap _resourceMap;
 		std::shared_ptr<uint8_t> _compiledData;
-		size_t _compiledDataSize;
-
-		ShaderProgramReflectionInfo _reflectInfo;
-		//Blob _compiledCode;
-
-		virtual void DoLoad(const Ptr<Reader> & reader);
+		int32_t _compiledDataSize;
 	};
 }
 

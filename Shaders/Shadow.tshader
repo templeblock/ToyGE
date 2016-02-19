@@ -1,0 +1,49 @@
+#ifndef SHADOW_TSHADER
+#define SHADOW_TSHADER 
+
+#include "Common.tshader"
+#include "View.tshader"
+
+#ifndef ENABLE_SHADOW
+#define ENABLE_SHADOW 0
+#endif
+
+#define SHADOW_TECH_PCF   0
+#define SHADOW_TECH_VSM   1
+#define SHADOW_TECH_EVSM2 2
+#define SHADOW_TECH_EVSM4 3
+
+#ifndef SHADOW_TECH
+#define SHADOW_TECH SHADOW_TECH_PCF
+#endif
+
+#if SHADOW_TECH == SHADOW_TECH_PCF
+#include "PCFShadow.tshader"
+#elif (SHADOW_TECH == SHADOW_TECH_VSM || SHADOW_TECH == SHADOW_TECH_EVSM2 || SHADOW_TECH == SHADOW_TECH_EVSM4)
+#include "VSMShadow.tshader"
+#endif
+
+float ComputeShadow(float3 recieveWorldPos, float shadowNoise)
+{
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    return ComputePointLightShadow(recieveWorldPos, shadowNoise); 
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    return ComputeSpotLightShadow(recieveWorldPos, shadowNoise);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    float3 viewPos = mul(float4(recieveWorldPos, 1.0f), worldToViewMatrix).xyz;
+    return ComputeDirectionalLightShadow(recieveWorldPos, viewPos.z, shadowNoise);
+#endif
+}
+
+float ComputeShadow(float3 recieveWorldPos, float viewDepth, float shadowNoise)
+{
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    return ComputePointLightShadow(recieveWorldPos, shadowNoise); 
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    return ComputeSpotLightShadow(recieveWorldPos, shadowNoise);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    return ComputeDirectionalLightShadow(recieveWorldPos, viewDepth, shadowNoise);
+#endif
+}
+
+#endif

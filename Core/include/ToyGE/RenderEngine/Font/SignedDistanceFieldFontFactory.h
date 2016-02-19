@@ -3,6 +3,7 @@
 #define SIGNEDDISTANCEFIELDFONTFACTORY_H
 
 #include "ToyGE\RenderEngine\Font\FontFactory.h"
+#include "ToyGE\RenderEngine\Font\SignedDistanceFieldFont.h"
 
 namespace ToyGE
 {
@@ -11,7 +12,10 @@ namespace ToyGE
 	public:
 		virtual ~SignedDistanceFieldFontFactory() = default;
 
-		Ptr<Font> LoadFont(const Ptr<File> & file) override;
+		virtual Ptr<Font> CreateNewFont() override
+		{
+			return std::make_shared<SignedDistanceFieldFont>();
+		}
 	};
 }
 

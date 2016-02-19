@@ -3,24 +3,28 @@
 #define D3D11RASTERIZERSTATE_H
 
 #include "ToyGE\RenderEngine\RasterizerState.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 
 namespace ToyGE
 {
 	class D3D11RasterizerState : public RasterizerState
 	{
 	public:
-		D3D11RasterizerState(const RasterizerStateDesc & desc);
+		virtual void Init() override;
 
-		const Ptr<ID3D11RasterizerState> & RawD3DRasterizerState() const
+		virtual void Release() override
 		{
-			return _rawD3DRasterizerState;
+			RasterizerState::Release();
+			_hardwareD3DRasterizerState = nullptr;
+		}
+
+		const Ptr<ID3D11RasterizerState> & GetHardwareRasterizerState() const
+		{
+			return _hardwareD3DRasterizerState;
 		}
 
 	private:
-		Ptr<ID3D11RasterizerState> _rawD3DRasterizerState;
-
-		void CreateD3DRasterizerStateDesc(const RasterizerStateDesc & desc, D3D11_RASTERIZER_DESC & d3dDesc);
+		Ptr<ID3D11RasterizerState> _hardwareD3DRasterizerState;
 	};
 }
 

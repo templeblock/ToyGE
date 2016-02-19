@@ -1,170 +1,114 @@
 #include "ToyGE\RenderEngine\Effects\MotionBlur.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\DeferredRenderFramework.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\Kernel\GlobalInfo.h"
 
 namespace ToyGE
 {
 	MotionBlur::MotionBlur()
-		: _exposureTime(10.0f),
-		_maxVelocityLength(20),
-		_mbNumSamples(20)
+		: _exposureTime(5.0f),
+		_maxVelocityLength(16),
+		_mbNumSamples(16)
 	{
-		std::vector<MacroDesc> macros;
-		macros.push_back({ "MAX_VELOCTYLENGTH", std::to_string(_maxVelocityLength) });
-		macros.push_back({ "MB_NUMSAMPLES", std::to_string(_mbNumSamples) });
-
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"MotionBlur.xml");
-		_fx->SetExtraMacros(macros);
 	}
 
-	void MotionBlur::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void MotionBlur::Render(const Ptr<RenderView> & view)
 	{
-		auto rawVelocityTex = sharedEnviroment->ParamByName(CommonRenderShareName::Velocity())->As<SharedParam<Ptr<Texture>>>()->GetValue();
-		if (!rawVelocityTex)
+		auto rawVelocity = view->GetViewRenderContext()->GetSharedTexture("Velocity");
+		if (!rawVelocity)
 			return;
 
-		auto velocityTex = InitVelocityMap(rawVelocityTex);
+		auto velocityRef = InitVelocityMap(rawVelocity);
 
-		auto tileMaxTex = TileMax(velocityTex);
+		auto tileMaxTexRef = TileMax(velocityRef->Get()->Cast<Texture>());
 
-		auto neighborMaxTex = NeighborMax(tileMaxTex);
+		auto neighborMaxTexRef = NeighborMax(tileMaxTexRef->Get()->Cast<Texture>());
 
-		//auto targetTex = std::static_pointer_cast<Texture>(sharedEnviroment->GetView()->GetRenderTarget().resource);
-		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();
-		//targetTex->CopyTo(sceneTex, 0, 0, 0, 0, 0, 0, 0);
-		auto linearDepthTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
 
-		Blur(sceneTex, linearDepthTex, velocityTex, neighborMaxTex, sharedEnviroment->GetView()->GetRenderTarget()->CreateTextureView());
+		auto targetTexDesc = sceneTex->GetDesc();
+		auto targetTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, targetTexDesc });
 
-		sharedEnviroment->GetView()->FlipRenderTarget();
+		Blur(
+			sceneTex, 
+			sceneLinearClipDepth, 
+			velocityRef->Get()->Cast<Texture>(), 
+			neighborMaxTexRef->Get()->Cast<Texture>(), 
+			targetTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1));
 
-		velocityTex->Release();
-		tileMaxTex->Release();
-		neighborMaxTex->Release();
-		//sceneTex->Release();
+		view->GetViewRenderContext()->SetSharedResource("RenderResult", targetTexRef);
 	}
 
-	Ptr<Texture> MotionBlur::InitVelocityMap(const Ptr<Texture> & rawVelocityTex)
+	PooledTextureRef MotionBlur::InitVelocityMap(const Ptr<Texture> & rawVelocityTex)
 	{
-		auto texDesc = rawVelocityTex->Desc();
-		auto velocityMap = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto texDesc = rawVelocityTex->GetDesc();
+		auto velocityMap = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		auto ps = Shader::FindOrCreate<InitVelocityMapPS>();
 
-		auto preVP = rc->GetViewport();
-		auto vp = preVP;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		float velocityScale = _exposureTime * Global::GetInfo()->fps;
+		ps->SetScalar("velocityScale", velocityScale);
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
+		ps->SetSRV("velocityTex", rawVelocityTex->GetShaderResourceView());
 
-		float exposureTime = 10.0f;
-		float veloctyScale = exposureTime * Global::GetInfo()->GetFPS();
-		_fx->VariableByName("velocityScale")->AsScalar()->SetValue(&veloctyScale);
+		ps->Flush();
 
-		_fx->VariableByName("velocityTex")->AsShaderResource()->SetValue(rawVelocityTex->CreateTextureView());
-		rc->SetRenderTargets({ velocityMap->CreateTextureView() }, 0);
-
-		_fx->TechniqueByName("InitVelocityMap")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("InitVelocityMap")->PassByIndex(0)->UnBind();
-
-		rc->SetViewport(preVP);
+		DrawQuad({ velocityMap->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
 
 		return velocityMap;
 	}
 
-	Ptr<Texture> MotionBlur::TileMax(const Ptr<Texture> & velocityTex)
+	PooledTextureRef MotionBlur::TileMax(const Ptr<Texture> & velocityTex)
 	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		auto texDesc = velocityTex->GetDesc();
+		texDesc.width = (texDesc.width + _maxVelocityLength - 1) / _maxVelocityLength;
+		auto tileMaxTexTmpRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		texDesc.height = (texDesc.height + _maxVelocityLength - 1) / _maxVelocityLength;
+		auto tileMaxTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		auto preVP = rc->GetViewport();
+		{
+			auto ps = Shader::FindOrCreate<TileMaxXPS>();
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
+			ps->SetScalar("texSize", velocityTex->GetTexSize());
+			ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		int tileSize = 20;
+			ps->Flush();
 
-		//TileMax X
-		auto texDesc = velocityTex->Desc();
-		texDesc.width = (texDesc.width + tileSize - 1) / tileSize;
-		auto tileMapTexTmp = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+			DrawQuad({ tileMaxTexTmpRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+		}
 
-		auto vp = preVP;
-		vp.width = static_cast<float>(texDesc.width);
-		rc->SetViewport(vp);
+		{
+			auto ps = Shader::FindOrCreate<TileMaxYPS>();
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(velocityTex->Desc().width), static_cast<float>(velocityTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+			ps->SetScalar("texSize", tileMaxTexTmpRef->Get()->Cast<Texture>()->GetTexSize());
+			ps->SetSRV("velocityTex", tileMaxTexTmpRef->Get()->Cast<Texture>()->GetShaderResourceView());
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		_fx->VariableByName("velocityTex")->AsShaderResource()->SetValue(velocityTex->CreateTextureView());
-		rc->SetRenderTargets({ tileMapTexTmp->CreateTextureView() }, 0);
-		_fx->TechniqueByName("TileMaxX")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("TileMaxX")->PassByIndex(0)->UnBind();
+			ps->Flush();
 
-		//TileMax Y
-		texDesc.height = (texDesc.height + tileSize - 1) / tileSize;
-		auto tileMapTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+			DrawQuad({ tileMaxTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+		}
 
-		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
-
-		texelSize = 1.0f / float2(static_cast<float>(tileMapTexTmp->Desc().width), static_cast<float>(tileMapTexTmp->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
-
-		_fx->VariableByName("velocityTex")->AsShaderResource()->SetValue(tileMapTexTmp->CreateTextureView());
-		rc->SetRenderTargets({ tileMapTex->CreateTextureView() }, 0);
-		_fx->TechniqueByName("TileMaxY")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("TileMaxY")->PassByIndex(0)->UnBind();
-
-		rc->SetViewport(preVP);
-
-		tileMapTexTmp->Release();
-
-		return tileMapTex;
+		return tileMaxTexRef;
 	}
 
-	Ptr<Texture> MotionBlur::NeighborMax(const Ptr<Texture> & tileMaxTex)
+	PooledTextureRef MotionBlur::NeighborMax(const Ptr<Texture> & tileMaxTex)
 	{
-		auto texDesc = tileMaxTex->Desc();
-		auto neighborMaxTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto texDesc = tileMaxTex->GetDesc();
+		auto neighborMaxTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(tileMaxTex->Desc().width), static_cast<float>(tileMaxTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+		auto ps = Shader::FindOrCreate<NeighborMaxPS>();
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		ps->SetScalar("texSize", tileMaxTex->GetTexSize());
+		ps->SetSRV("tileMaxTex", tileMaxTex->GetShaderResourceView());
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		auto preVP = rc->GetViewport();
-		auto vp = preVP;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		rc->SetViewport(vp);
+		ps->Flush();
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
+		DrawQuad({ neighborMaxTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
 
-		_fx->VariableByName("tileMaxTex")->AsShaderResource()->SetValue(tileMaxTex->CreateTextureView());
-		rc->SetRenderTargets({ neighborMaxTex->CreateTextureView() }, 0);
-		_fx->TechniqueByName("NeighborMax")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("NeighborMax")->PassByIndex(0)->UnBind();
-
-		rc->SetViewport(preVP);
-
-		return neighborMaxTex;
+		return neighborMaxTexRef;
 	}
 
 	void MotionBlur::Blur(
@@ -172,45 +116,40 @@ namespace ToyGE
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & velocityTex,
 		const Ptr<Texture> & neighborMaxTex,
-		const ResourceView & target)
+		const Ptr<RenderTargetView> & target)
 	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		auto texDesc = sceneTex->Desc();
+		auto texDesc = sceneTex->GetDesc();
 		texDesc.mipLevels = 1;
-		auto tmpTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto tmpTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(sceneTex->Desc().width), static_cast<float>(sceneTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+		auto ps = Shader::FindOrCreate<MotionBlurPS>();
 
-		auto frameCount = Global::GetInfo()->GetFrameCount();
-		_fx->VariableByName("frameCount")->AsScalar()->SetValue(&frameCount);
+		{
+			ps->SetScalar("texSize", sceneTex->GetTexSize());
+			ps->SetScalar("frameCount", Global::GetInfo()->frameCount);
+			ps->SetSRV("sceneTex", sceneTex->GetShaderResourceView());
+			ps->SetSRV("linearDepthTex", linearDepthTex->GetShaderResourceView());
+			ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
+			ps->SetSRV("neighborMaxTex", neighborMaxTex->GetShaderResourceView());
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
-		_fx->VariableByName("velocityTex")->AsShaderResource()->SetValue(velocityTex->CreateTextureView());
-		_fx->VariableByName("neighborMaxTex")->AsShaderResource()->SetValue(neighborMaxTex->CreateTextureView());
+			ps->Flush();
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
+			DrawQuad({ tmpTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+		}
 
-		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
-		rc->SetRenderTargets({ tmpTex->CreateTextureView() }, 0);
+		{
+			ps->SetScalar("texSize", sceneTex->GetTexSize());
+			ps->SetScalar("frameCount", Global::GetInfo()->frameCount);
+			ps->SetSRV("sceneTex", tmpTex->Get()->Cast<Texture>()->GetShaderResourceView());
+			ps->SetSRV("linearDepthTex", linearDepthTex->GetShaderResourceView());
+			ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
+			ps->SetSRV("neighborMaxTex", neighborMaxTex->GetShaderResourceView());
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		_fx->TechniqueByName("MotionBlur")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("MotionBlur")->PassByIndex(0)->UnBind();
+			ps->Flush();
 
-
-		++frameCount;
-		_fx->VariableByName("frameCount")->AsScalar()->SetValue(&frameCount);
-
-		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(tmpTex->CreateTextureView());
-		rc->SetRenderTargets({ target }, 0);
-
-		_fx->TechniqueByName("MotionBlur")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("MotionBlur")->PassByIndex(0)->UnBind();
-
-		tmpTex->Release();
+			DrawQuad({ target });
+		}
 	}
 }

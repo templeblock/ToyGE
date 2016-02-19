@@ -1,19 +1,9 @@
 #include "ToyGE\RenderEngine\Effects\VolumetricLight.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Mesh.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\DeferredRenderFramework.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
 #include "ToyGE\RenderEngine\ShadowTechnique.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 #include "ToyGE\RenderEngine\Blur.h"
 
 namespace ToyGE
@@ -23,25 +13,21 @@ namespace ToyGE
 		_scattering(0.5f),
 		_phaseFunctionParam(0.5f)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"VolumetricLight.xml");
+		auto pointLightVolumeMesh = CommonMesh::CreateSphere(1.0f, 25);
+		_pointLightVolumeGeo = std::make_shared<RenderMeshComponent>();
+		_pointLightVolumeGeo->SetMesh(pointLightVolumeMesh);
 
-		auto sphereMesh = CommonMesh::CreateSphere(1.0f, 50);
-		sphereMesh->InitRenderData();
-		_pointLightVolumeGeo = std::make_shared<RenderComponent>();
-		_pointLightVolumeGeo->SetMesh(sphereMesh);
-
-		auto coneMesh = CommonMesh::CreateCone(1.0f, XM_PIDIV2, 50);
-		coneMesh->InitRenderData();
-		_spotLightVolumeGeo = std::make_shared<RenderComponent>();
-		_spotLightVolumeGeo->SetMesh(coneMesh);
+		auto spotLightVolumeMesh = CommonMesh::CreateCone(1.0f, XM_PIDIV2, 50);
+		_spotLightVolumeGeo = std::make_shared<RenderMeshComponent>();
+		_spotLightVolumeGeo->SetMesh(spotLightVolumeMesh);
 
 		InitDither();
 	}
 
-	void VolumetricLight::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void VolumetricLight::Render(const Ptr<RenderView> & view)
 	{
 		bool bNeedRender = false;
-		for (auto & light : sharedEnviroment->GetView()->GetRenderLights())
+		for (auto & light : view->GetViewRenderContext()->lights)
 		{
 			if (light->IsCastLightVolume())
 			{
@@ -52,66 +38,51 @@ namespace ToyGE
 		if (!bNeedRender)
 			return;
 
-		//auto targetTex = std::static_pointer_cast<Texture>(sharedEnviroment->GetView()->GetRenderTarget().resource);
-		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();//Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(targetTex->Desc());
-		//targetTex->CopyTo(sceneTex, 0, 0, 0, 0, 0, 0, 0);
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
 
-		auto linearDepthTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
-		auto lowResLinearDepthTex = DownSample(linearDepthTex->CreateTextureView(), 0.5f);
+		auto lowResLinearDepthDesc = sceneLinearClipDepth->GetDesc();
+		lowResLinearDepthDesc.width /= 2;
+		lowResLinearDepthDesc.height /= 2;
+		auto lowResLinearDepthRef = TexturePool::Instance().FindFree({ TEXTURE_2D, lowResLinearDepthDesc });
+		auto lowResLinearDepth = lowResLinearDepthRef->Get()->Cast<Texture>();
+		Transform(sceneLinearClipDepth->GetShaderResourceView(), lowResLinearDepth->GetRenderTargetView(0, 0, 1));
 
-		//Set Light Volume Rendering Params
-		/*auto camera = sharedEnviroment->GetView()->GetCamera();
-		_fx->VariableByName("view")->AsScalar()->SetValue(&camera->ViewMatrix());
-		_fx->VariableByName("proj")->AsScalar()->SetValue(&camera->ProjMatrix());
-		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
-		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
-		XMFLOAT4X4 invView;
-		XMStoreFloat4x4(&invView, invViewXM);
-		_fx->VariableByName("invView")->AsScalar()->SetValue(&invView);
-		_fx->VariableByName("cameraPos")->AsScalar()->SetValue(&camera->Pos());
-		float2 cameraNearFar = float2(camera->Near(), camera->Far());
-		_fx->VariableByName("cameraNearFar")->AsScalar()->SetValue(&cameraNearFar);*/
-		sharedEnviroment->GetView()->BindParams(_fx);
-
-		//Render in Low Res
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
-		auto preVP = rc->GetViewport();
-		auto lowResVP = preVP;
-		lowResVP.width = static_cast<float>(sceneTex->Desc().width / 2);
-		lowResVP.height = static_cast<float>(sceneTex->Desc().height / 2);
-		rc->SetViewport(lowResVP);
 
-		//Render Light Volume
-		TextureDesc texDesc = sceneTex->Desc();
-		texDesc.width /= 2;
-		texDesc.height /= 2;
-		auto lightVolumeTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		rc->ClearRenderTargets({ lightVolumeTex->CreateTextureView() }, 0.0f);
+		auto lowResLightVolumeDesc = sceneTex->GetDesc();
+		lowResLightVolumeDesc.width /= 2;
+		lowResLightVolumeDesc.height /= 2;
+		auto lowResLightVolumeRef = TexturePool::Instance().FindFree({ TEXTURE_2D, lowResLightVolumeDesc });
+		auto lowResLightVolume = lowResLightVolumeRef->Get()->Cast<Texture>();
+		rc->ClearRenderTarget(lowResLightVolume->GetRenderTargetView(0, 0, 1), 0.0f);
 
-		for (auto & light : sharedEnviroment->GetView()->GetRenderLights())
+		rc->SetViewport(GetTextureQuadViewport(lowResLightVolume));
+
+		for (auto & light : view->GetViewRenderContext()->lights)
 		{
-			if (light->IsCastLightVolume())
+			if (light->IsCastLightVolume() && light->IsCastShadow())
 			{
 				switch (light->Type())
 				{
 				case LIGHT_POINT:
 				{
 					auto pointLight = std::static_pointer_cast<PointLightComponent>(light);
-					RenderPointLightVolume(pointLight, sharedEnviroment->GetView()->GetCamera(), lowResLinearDepthTex, lightVolumeTex);
+					RenderPointLightVolume(pointLight, view, lowResLinearDepth, lowResLightVolume);
 					break;
 				}
 
 				case LIGHT_SPOT:
 				{
 					auto spotLight = std::static_pointer_cast<SpotLightComponent>(light);
-					RenderSpotLightVolume(spotLight, sharedEnviroment->GetView()->GetCamera(), lowResLinearDepthTex, lightVolumeTex);
+					RenderSpotLightVolume(spotLight, view, lowResLinearDepth, lowResLightVolume);
 					break;
 				}
 
 				case LIGHT_DIRECTIONAL:
 				{
 					auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
-					RenderDirectionalLightVolume(dirLight, sharedEnviroment->GetView()->GetCamera(), lowResLinearDepthTex, lightVolumeTex);
+					RenderDirectionalLightVolume(dirLight, view, lowResLinearDepth, lowResLightVolume);
 					break;
 				}
 
@@ -121,21 +92,27 @@ namespace ToyGE
 			}
 		}
 
+		float depthDiffThreshold = 0.1f / (view->GetCamera()->GetFar() - view->GetCamera()->GetNear());
 		//Blur
-		auto lightVolumeTexBlur = BilateralGaussBlur(lightVolumeTex, lowResLinearDepthTex);
+		//int32_t blurRadius = 2;
+		////auto lightVolumeTexBlur = BilateralGaussBlur(lightVolumeTex, lowResLinearDepthTex);
+		//BilateralBlur(
+		//	lowResLightVolume->GetShaderResourceView(), 
+		//	lowResLightVolume->GetRenderTargetView(0, 0, 1), 
+		//	lowResLinearDepth->GetShaderResourceView(), 
+		//	GetGaussTable(blurRadius * 2 + 1), 
+		//	depthDiffThreshold);
 
-		//Upsampling
-		BilateralUpSampling(lightVolumeTexBlur, linearDepthTex, lowResLinearDepthTex, sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView());
+		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
-		//sharedEnviroment->GetView()->FlipRenderTarget();
+		BilateralUpSampling(
+			lowResLightVolume->GetShaderResourceView(), 
+			sceneTex->GetRenderTargetView(0, 0, 1), 
+			lowResLinearDepth->GetShaderResourceView(), 
+			sceneLinearClipDepth->GetShaderResourceView(), 
+			depthDiffThreshold);
 
-		//Restore Viewport
-		rc->SetViewport(preVP);
-
-		//sceneTex->Release();
-		lowResLinearDepthTex->Release();
-		lightVolumeTex->Release();
-		lightVolumeTexBlur->Release();
+		rc->SetBlendState(nullptr);
 	}
 
 	void VolumetricLight::InitDither()
@@ -152,86 +129,109 @@ namespace ToyGE
 			i /= 16.0f;
 		}
 
-		_fx->VariableByName("dither")->AsScalar()->SetValue(data);
+		RenderBufferDesc bufDesc;
+		bufDesc.bindFlag = BUFFER_BIND_SHADER_RESOURCE;
+		bufDesc.bStructured = false;
+		bufDesc.cpuAccess = 0;
+		bufDesc.elementSize = sizeof(float);
+		bufDesc.numElements = 16;
+
+		_ditherBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+		_ditherBuffer->SetDesc(bufDesc);
+		_ditherBuffer->Init(data);
 	}
 
 	void VolumetricLight::RenderPointLightVolume(
 		const Ptr<PointLightComponent> & light,
-		const Ptr<Camera> & camera,
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & lightVolumeTex)
 	{
-		auto re = Global::GetRenderEngine();
-		auto rc = re->GetRenderContext();
+		auto meshElement = _pointLightVolumeGeo->GetSubRenderComponents()[0]->GetMeshElement();
+
+		std::map<String, String> macros;
+		meshElement->BindMacros(macros);
+		light->BindMacros(true, view, macros);
+
+		auto vs = Shader::FindOrCreate<RenderLightVolumeVS>(macros);
+		auto ps = Shader::FindOrCreate<RenderPointLightVolumePS>(macros);
 
 		auto & lightPos = light->GetPos();
 		_pointLightVolumeGeo->SetPos(lightPos);
 		float maxDist = light->MaxDistance();
 		_pointLightVolumeGeo->SetScale(XMFLOAT3(maxDist, maxDist, maxDist));
 		_pointLightVolumeGeo->UpdateTransform();
-		_fx->VariableByName("world")->AsScalar()->SetValue(&_pointLightVolumeGeo->GetTransformMatrix());
+		_pointLightVolumeGeo->BindShaderParams(vs);
 
-		/*_fx->VariableByName("lightPos")->AsScalar()->SetValue(&lightPos);
-		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&light->Radiance());*/
-		_fx->VariableByName("pointLightRadius")->AsScalar()->SetValue(&maxDist);
+		view->BindShaderParams(vs);
+		view->BindShaderParams(ps);
 
-		light->BindMacros(_fx, false, camera);
-		_fx->UpdateData();
-		light->BindParams(_fx, false, camera);
+		light->BindShaderParams(ps, true, view);
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+		ps->SetScalar("pointLightRadius", maxDist);
+		ps->SetScalar("attenuation", _attenuation);
+		ps->SetScalar("scattering", _scattering);
+		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
+		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
 
-		/*float attenuation = 0.1f;
-		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;*/
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
+		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
+		vs->Flush();
+		ps->Flush();
 
-		//int4 shadowConfig = 0;
-		//if (light->IsCastShadow())
-		//{
-		//	shadowConfig.x = 1;
-		//	shadowConfig.y = light->GetShadowTechnique()->RenderTechnique()->Type();
-		//	light->GetShadowTechnique()->BindShadowRenderParams(_fx, light, camera);
-		//}
-		//_fx->VariableByName("shadowConfig")->AsScalar()->SetValue(&shadowConfig, sizeof(shadowConfig));
+		auto stencilDSDesc = lightVolumeTex->GetDesc();
+		stencilDSDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
+		stencilDSDesc.format = RENDER_FORMAT_D24_UNORM_S8_UINT;
+		auto stencilDSRef = TexturePool::Instance().FindFree({ TEXTURE_2D, stencilDSDesc });
+		stencilDSRef->Get()->Cast<Texture>()->SetDesc(stencilDSDesc);
 
-		auto tmpDSDesc = lightVolumeTex->Desc();
-		tmpDSDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
-		tmpDSDesc.format = RENDER_FORMAT_D24_UNORM_S8_UINT;
-		auto tmpDS = re->GetRenderFactory()->GetTexturePooled(tmpDSDesc);
-		rc->SetDepthStencil(tmpDS->CreateTextureView());
-		rc->ClearDepthStencil(1.0f, 0);
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencil(stencilDSRef->Get()->Cast<Texture>()->GetDepthStencilView(0, 0, 1));
+		Global::GetRenderEngine()->GetRenderContext()->ClearDepthStencil(1.0f, 0);
 
-		rc->SetRenderTargets({ lightVolumeTex->CreateTextureView() }, 0);
-		rc->SetRenderInput(_pointLightVolumeGeo->GetMesh()->AcquireRender()->GetRenderInput());
+		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ lightVolumeTex->GetRenderTargetView(0, 0, 1) });
 
-		_fx->TechniqueByName("RenderLightVolumePoint")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("RenderLightVolumePoint")->PassByIndex(0)->UnBind();
+		auto dss = DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true,
+			0xff,
+			0xff,
+			STENCIL_OP_KEEP, STENCIL_OP_KEEP, STENCIL_OP_INCR, COMPARISON_EQUAL,
+			STENCIL_OP_KEEP, STENCIL_OP_KEEP, STENCIL_OP_INCR, COMPARISON_EQUAL>::Get();
 
-		tmpDS->Release();
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencilState(dss, 0);
+		Global::GetRenderEngine()->GetRenderContext()->SetRasterizerState(RasterizerStateTemplate<FILL_SOLID, CULL_NONE, false, 0, false>::Get());
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
+
+		meshElement->Draw();
+
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencilState(nullptr);
+		Global::GetRenderEngine()->GetRenderContext()->SetRasterizerState(nullptr);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
 	}
 
 	void VolumetricLight::RenderSpotLightVolume(
 		const Ptr<SpotLightComponent> & light,
-		const Ptr<Camera> & camera,
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & lightVolumeTex)
 	{
-		auto re = Global::GetRenderEngine();
-		auto rc = re->GetRenderContext();
+		auto meshElement = _pointLightVolumeGeo->GetSubRenderComponents()[0]->GetMeshElement();
+
+		std::map<String, String> macros;
+		meshElement->BindMacros(macros);
+		light->BindMacros(true, view, macros);
+
+		auto vs = Shader::FindOrCreate<RenderLightVolumeVS>(macros);
+		auto ps = Shader::FindOrCreate<RenderSpotLightVolumePS>(macros);
 
 		auto & lightPos = light->GetPos();
 		float maxDist = light->MaxDistance();
 		float3 lightPosf3 = *(reinterpret_cast<const float3*>(&lightPos));
 		float3 lightDirf3 = *(reinterpret_cast<const float3*>(&light->Direction()));
 		float3 geoPos = lightPosf3 + maxDist * lightDirf3;
-		_spotLightVolumeGeo->SetPos(XMFLOAT3(geoPos.x, geoPos.y, geoPos.z));
+		_spotLightVolumeGeo->SetPos(XMFLOAT3(geoPos.x(), geoPos.y(), geoPos.z()));
 
 		float angle = light->MaxAngle();
 		float xzScale = tan(angle) * maxDist;
@@ -247,193 +247,92 @@ namespace ToyGE
 		rotateAxis = normalize(rotateAxis);
 
 		float4 orientation = float4(
-			rotateAxis.x * sinAngle_d2,
-			rotateAxis.y * sinAngle_d2,
-			rotateAxis.z * sinAngle_d2,
+			rotateAxis.x() * sinAngle_d2,
+			rotateAxis.y() * sinAngle_d2,
+			rotateAxis.z() * sinAngle_d2,
 			cosAngle_d2);
-		/*if (cosAngle <= 1e-4)
-		{
-			orientation.x *= cosAngle;
-			orientation.y *= cosAngle;
-			orientation.z *= cosAngle;
-		}*/
-
-		_spotLightVolumeGeo->SetOrientation(XMFLOAT4(orientation.x, orientation.y, orientation.z, orientation.w));
+		_spotLightVolumeGeo->SetOrientation(XMFLOAT4(orientation.x(), orientation.y(), orientation.z(), orientation.w()));
 		_spotLightVolumeGeo->UpdateTransform();
-		_fx->VariableByName("world")->AsScalar()->SetValue(&_spotLightVolumeGeo->GetTransformMatrix());
+		_spotLightVolumeGeo->BindShaderParams(vs);
 
+		view->BindShaderParams(vs);
+		view->BindShaderParams(ps);
 
-		//_fx->VariableByName("lightPos")->AsScalar()->SetValue(&lightPos);
-		//_fx->VariableByName("lightDir")->AsScalar()->SetValue(&light->Direction());
-		//_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&light->Radiance());
-		_fx->VariableByName("spotLightAngle")->AsScalar()->SetValue(&angle);
-		_fx->VariableByName("spotLightDecrease")->AsScalar()->SetValue(&light->DecreaseSpeed());
+		light->BindShaderParams(ps, true, view);
 
-		light->BindMacros(_fx, false, camera);
-		_fx->UpdateData();
-		light->BindParams(_fx, false, camera);
+		ps->SetScalar("spotLightAngle", angle);
+		//ps->SetScalar("spotLightDecrease", light->DecreaseSpeed());
+		ps->SetScalar("attenuation", _attenuation);
+		ps->SetScalar("scattering", _scattering);
+		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
+		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
-		/*float attenuation = 0.1f;
-		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;*/
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
+		vs->Flush();
+		ps->Flush();
 
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
+		auto stencilDSDesc = lightVolumeTex->GetDesc();
+		stencilDSDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
+		stencilDSDesc.format = RENDER_FORMAT_D24_UNORM_S8_UINT;
+		auto stencilDSRef = TexturePool::Instance().FindFree({ TEXTURE_2D, stencilDSDesc });
+		stencilDSRef->Get()->Cast<Texture>()->SetDesc(stencilDSDesc);
 
-		//int4 shadowConfig = 0;
-		//if (light->IsCastShadow())
-		//{
-		//	shadowConfig.x = 1;
-		//	shadowConfig.y = light->GetShadowTechnique()->RenderTechnique()->Type();
-		//	light->GetShadowTechnique()->BindShadowRenderParams(_fx, light, camera);
-		//}
-		//_fx->VariableByName("shadowConfig")->AsScalar()->SetValue(&shadowConfig, sizeof(shadowConfig));
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencil(stencilDSRef->Get()->Cast<Texture>()->GetDepthStencilView(0, 0, 1));
+		Global::GetRenderEngine()->GetRenderContext()->ClearDepthStencil(1.0f, 0);
 
-		auto tmpDSDesc = lightVolumeTex->Desc();
-		tmpDSDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
-		tmpDSDesc.format = RENDER_FORMAT_D24_UNORM_S8_UINT;
-		auto tmpDS = re->GetRenderFactory()->GetTexturePooled(tmpDSDesc);
-		rc->SetDepthStencil(tmpDS->CreateTextureView());
-		rc->ClearDepthStencil(1.0f, 0);
+		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ lightVolumeTex->GetRenderTargetView(0, 0, 1) });
 
-		rc->SetRenderTargets({ lightVolumeTex->CreateTextureView() }, 0);
-		rc->SetRenderInput(_spotLightVolumeGeo->GetMesh()->AcquireRender()->GetRenderInput());
+		auto dss = DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true,
+			0xff,
+			0xff,
+			STENCIL_OP_KEEP, STENCIL_OP_KEEP, STENCIL_OP_INCR, COMPARISON_EQUAL,
+			STENCIL_OP_KEEP, STENCIL_OP_KEEP, STENCIL_OP_INCR, COMPARISON_EQUAL>::Get();
 
-		_fx->TechniqueByName("RenderLightVolumeSpot")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("RenderLightVolumeSpot")->PassByIndex(0)->UnBind();
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencilState(dss, 0);
+		Global::GetRenderEngine()->GetRenderContext()->SetRasterizerState(RasterizerStateTemplate<FILL_SOLID, CULL_NONE, false, 0, false>::Get());
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
-		tmpDS->Release();
+		meshElement->Draw();
+
+		Global::GetRenderEngine()->GetRenderContext()->SetDepthStencilState(nullptr);
+		Global::GetRenderEngine()->GetRenderContext()->SetRasterizerState(nullptr);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
 	}
 
 	void VolumetricLight::RenderDirectionalLightVolume(
 		const Ptr<DirectionalLightComponent> & light,
-		const Ptr<Camera> & camera,
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & lightVolumeTex)
 	{
-		auto re = Global::GetRenderEngine();
-		auto rc = re->GetRenderContext();
+		std::map<String, String> macros;
+		light->BindMacros(true, view, macros);
+
+		auto ps = Shader::FindOrCreate<RenderDirectionalLightVolumePS>(macros);
+
+		view->BindShaderParams(ps);
+		light->BindShaderParams(ps, true, view);
 
 		float dirLightDist = 10.0f;
-		_fx->VariableByName("dirLightDist")->AsScalar()->SetValue(&dirLightDist);
+		ps->SetScalar("dirLightDist", dirLightDist);
+		ps->SetScalar("attenuation", _attenuation);
+		ps->SetScalar("scattering", _scattering);
+		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
+		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
 
-		/*_fx->VariableByName("lightDir")->AsScalar()->SetValue(&light->Direction());
-		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&light->Radiance());*/
+		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
-		light->BindMacros(_fx, false, camera);
-		_fx->UpdateData();
-		light->BindParams(_fx, false, camera);
+		ps->Flush();
 
-		float2 texelSize = 1.0f / float2(static_cast<float>(lightVolumeTex->Desc().width), static_cast<float>(lightVolumeTex->Desc().height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
-		/*float attenuation = 0.1f;
-		float scattering = 10.0f;
-		float phaseFunctionParam = 0.5f;*/
-		_fx->VariableByName("attenuation")->AsScalar()->SetValue(&_attenuation);
-		_fx->VariableByName("scattering")->AsScalar()->SetValue(&_scattering);
-		_fx->VariableByName("phaseFunctionParam")->AsScalar()->SetValue(&_phaseFunctionParam);
+		DrawQuad({ lightVolumeTex->GetRenderTargetView(0, 0, 1) });
 
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
-
-		//int4 shadowConfig = 0;
-		//if (light->IsCastShadow())
-		//{
-		//	shadowConfig.x = 1;
-		//	shadowConfig.y = light->GetShadowTechnique()->RenderTechnique()->Type();
-		//	light->GetShadowTechnique()->BindShadowRenderParams(_fx, light, camera);
-		//}
-		//_fx->VariableByName("shadowConfig")->AsScalar()->SetValue(&shadowConfig, sizeof(shadowConfig));
-
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetRenderTargets({ lightVolumeTex->CreateTextureView() }, 0);
-		rc->SetDepthStencil(ResourceView());
-
-		_fx->TechniqueByName("RenderLightVolumeDirectional")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("RenderLightVolumeDirectional")->PassByIndex(0)->UnBind();
-	}
-
-	Ptr<Texture> VolumetricLight::BilateralGaussBlur(const Ptr<Texture> & lightVolumeTex, const Ptr<Texture> & linearDepthTex)
-	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		auto texDesc = lightVolumeTex->Desc();
-		auto resultTexTmp = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		int blurRadius = 3;
-		auto & gaussTable = Blur::GaussTable(blurRadius);
-		_fx->VariableByName("gaussTable")->AsScalar()->SetValue(&gaussTable[0], sizeof(float) * gaussTable.size());
-
-		float2 texelSize = 1.0f / float2(static_cast<float>(texDesc.width), static_cast<float>(texDesc.height));
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
-
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
-
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
-
-		//BlurX
-		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(lightVolumeTex->CreateTextureView());
-		rc->SetRenderTargets({ resultTexTmp->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("BilateralGaussBlurX"));
-
-		//_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->Bind();
-		//rc->DrawIndexed();
-		//_fx->TechniqueByName("BilateralGaussBlurX")->PassByIndex(0)->UnBind();
-
-		//BlurY
-		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(resultTexTmp->CreateTextureView());
-		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("BilateralGaussBlurY"));
-
-		/*_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("BilateralGaussBlurY")->PassByIndex(0)->UnBind();*/
-
-		resultTexTmp->Release();
-
-		return resultTex;
-	}
-
-	void VolumetricLight::BilateralUpSampling(
-		const Ptr<Texture> & lightVolumeTex,
-		const Ptr<Texture> & highResLinearDepthTex,
-		const Ptr<Texture> & lowResLinearDepthTex,
-		const ResourceView & target)
-	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		/*RenderViewport vp;
-		vp.width = static_cast<float>(highResLinearDepthTex->Desc().width);
-		vp.height = static_cast<float>(highResLinearDepthTex->Desc().height);
-		vp.topLeftX = vp.topLeftY = 0.0f;
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		rc->SetViewport(vp);*/
-
-		float2 texelSize = 1.0f / highResLinearDepthTex->GetTexSize().v(VEC_Z, VEC_W);
-		_fx->VariableByName("texelSize")->AsScalar()->SetValue(&texelSize);
-
-		_fx->VariableByName("lightVolumeTex")->AsShaderResource()->SetValue(lightVolumeTex->CreateTextureView());
-		_fx->VariableByName("highResLinearDepthTex")->AsShaderResource()->SetValue(highResLinearDepthTex->CreateTextureView());
-		_fx->VariableByName("lowResLinearDepthTex")->AsShaderResource()->SetValue(lowResLinearDepthTex->CreateTextureView());
-
-		//rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetRenderTargets({ target }, 0);
-		//rc->SetDepthStencil(ResourceView());
-
-		RenderQuad(_fx->TechniqueByName("BilateralUpSampling"));
-
-		/*_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		_fx->TechniqueByName("BilateralUpSampling")->PassByIndex(0)->UnBind();*/
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
 	}
 }

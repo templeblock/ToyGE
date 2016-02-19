@@ -1,0 +1,71 @@
+#include "Common.tshader"
+
+Texture2D<float3> backgroundTex;
+
+Texture2D<int>    oitListHead;
+Buffer<int>       oitListLink;
+Buffer<float3>    oitTransmittanceList;
+Buffer<float3>    oitLightingList;
+Buffer<float>     oitDepthList;
+
+RWTexture2D<float3> resultTex;
+
+#define MAX_PIXEL_LIST_SIZE 10
+
+[numthreads(16, 16, 1)]
+void OITRenderingMergeCS(uint3 dtID : SV_DispatchThreadID)
+{
+    float3 bgColor = backgroundTex[dtID.xy];
+
+    int headIndex = oitListHead[dtID.xy];
+    if( headIndex == -1 )
+    {
+        resultTex[dtID.xy] = bgColor;
+        return;
+    }
+    
+    float3 transmittanceArray[MAX_PIXEL_LIST_SIZE];
+    float3 lightingArray[MAX_PIXEL_LIST_SIZE];
+    float  depthArray[MAX_PIXEL_LIST_SIZE];
+    
+    int listSize = 0;
+    
+    int nextIndex = headIndex;
+    while(nextIndex != -1 && listSize < MAX_PIXEL_LIST_SIZE)
+    {
+        transmittanceArray[listSize] = oitTransmittanceList[nextIndex];
+        lightingArray[listSize]      = oitLightingList[nextIndex];
+        depthArray[listSize]         = oitDepthList[nextIndex];
+        
+        nextIndex = oitListLink[nextIndex];
+        
+        ++listSize;
+    }
+    
+    // Insertion sort
+    for(int i = 1; i < listSize; ++i)
+    {
+        float depth             = depthArray[i];
+        float3 transmittance    = transmittanceArray[i];
+        float3 lighting         = lightingArray[i];
+        
+        int j = i;
+        while(j > 0 && depthArray[j - 1] > depth)
+        {
+            depthArray[j]           = depthArray[j-1];
+            transmittanceArray[j]   = transmittanceArray[j-1];
+            lightingArray[j]        = lightingArray[j-1];
+            --j;
+        }
+        depthArray[j]           = depth;
+        transmittanceArray[j]   = transmittance;
+        lightingArray[j]        = lighting;
+    }
+    
+    // Merge
+    float3 finalColor = bgColor;
+    for(int k = listSize - 1; k >= 0; --k)
+        finalColor = finalColor * transmittanceArray[k] + lightingArray[k];
+    
+    resultTex[dtID.xy] = finalColor;
+}

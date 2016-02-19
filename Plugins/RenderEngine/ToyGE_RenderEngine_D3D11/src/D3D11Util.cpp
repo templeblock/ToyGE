@@ -2,7 +2,7 @@
 
 namespace ToyGE
 {
-	D3D11_COMPARISON_FUNC GetD3DComparisonFunc(ComparisonFuc func)
+	D3D11_COMPARISON_FUNC GetD3DComparisonFunc(ComparisonFunc func)
 	{
 		switch (func)
 		{

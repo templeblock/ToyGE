@@ -2,60 +2,58 @@
 #ifndef REFLECTIONMAP_H
 #define REFLECTIONMAP_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
 #include "ToyGE\Math\Math.h"
 #include "boost\noncopyable.hpp"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, PrefilterEnvMapPS, SHADER_PS, "IBLPreCompute", "PrefilterEnvMapPS", SM_4);
+	DECLARE_SHADER(, PreComputedLUTPS, SHADER_PS, "IBLPreCompute", "PreComputedLUTPS", SM_4);
+
 	class Texture;
-	class RenderEffect;
 
 	class TOYGE_CORE_API ReflectionMap : public std::enable_shared_from_this<ReflectionMap>, public boost::noncopyable
 	{
 	public:
-		static Ptr<ReflectionMap> Create();
+		int32_t maskID = -1;
 
-		static Ptr<ReflectionMap> GetReflectionMap(int32_t id);
-
-		static void RemoveReflectionMap(int32_t id);
-
-		static void Clear();
-
-		void SetEnvMap(const Ptr<Texture> & envMap)
+		static void SetLUTSize(int32_t size)
 		{
-			_envMap = envMap;
+			_lutSize = size;
 		}
 
-		const Ptr<Texture> & GetEnvMap() const
+		static int32_t GetLUTSize()
 		{
-			return _envMap;
+			return _lutSize;
 		}
 
-		void InitPreComputedData();
-
-		int32_t GetID() const
-		{
-			return _id;
-		}
-
-		void BindEffectParams(const Ptr<RenderEffect> & fx);
-
-	private:
-		static int32_t _defaultMapSize;
-		static int32_t _idAll;
-		static std::map<int32_t, Ptr<ReflectionMap>> _reflectionMaps;
-		int32_t _id;
-		int32_t _mapSize;
-		Ptr<RenderEffect> _fx;
-		Ptr<Texture> _envMap;
-		Ptr<Texture> _prefiltedEnvMap;
-		Ptr<Texture> _LUT;
+		static void InitLUT();
 
 		ReflectionMap();
 
-		void InitMapTextures();
+		~ReflectionMap() = default;
+
+		CLASS_SET(EnvironmentMap, Ptr<Texture>, _enviromentMap);
+		CLASS_GET(EnvironmentMap, Ptr<Texture>, _enviromentMap);
+
+		CLASS_SET(PreComputedMapSize, int32_t, _preComputedMapSize);
+		CLASS_GET(PreComputedMapSize, int32_t, _preComputedMapSize);
+
+		void InitPreComputedData();
+
+		void BindShaderParams(const Ptr<Shader> & shader);
+
+	private:
+		static Ptr<Texture> _lut;
+		static int32_t _lutSize;
+
+		int32_t _preComputedMapSize;
+		Ptr<Texture> _enviromentMap;
+		PooledTextureRef _prefiltedEnviromentMapRef;
 	};
 }
 

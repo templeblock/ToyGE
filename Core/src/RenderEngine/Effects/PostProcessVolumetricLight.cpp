@@ -1,13 +1,5 @@
 #include "ToyGE\RenderEngine\Effects\PostProcessVolumetricLight.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
 
 namespace ToyGE
@@ -15,77 +7,95 @@ namespace ToyGE
 	PostProcessVolumetricLight::PostProcessVolumetricLight()
 		: _density(0.8f),
 		_intensity(0.8f),
-		_decay(0.9f)
+		_decay(0.7f)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"PostProcessVolumetricLight.xml");
 	}
 
-	void PostProcessVolumetricLight::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void PostProcessVolumetricLight::Render(const Ptr<RenderView> & view)
 	{
 		if (!_light)
 			return;
 
-		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();
-		auto linearDepthTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
 
-		auto radialBlurInTex = Setup(sceneTex, linearDepthTex);
+		auto radialBlurInTexRef = Setup(sceneTex, sceneLinearClipDepth);
+		auto radialBlurInTex = radialBlurInTexRef->Get()->Cast<Texture>();
 
-		auto lightPosH = _light->GetLightClipPos(sharedEnviroment->GetView()->GetCamera());
+		auto lightPosH = _light->GetClipSpacePos(view->GetCamera());
 		auto lightPosUV = lightPosH * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
 		
-		auto volumetricLightTex = RenderVolumetricLight(radialBlurInTex, lightPosUV);
+		auto volumetricLightTexRef = RenderVolumetricLight(lightPosUV, radialBlurInTex);
+		auto volumetricLightTex = volumetricLightTexRef->Get()->Cast<Texture>();
 
-		BlurVolumetricLight(volumetricLightTex, lightPosUV, sharedEnviroment->GetView()->GetRenderResult());
-
-		radialBlurInTex->Release();
-		volumetricLightTex->Release();
+		BlurVolumetricLight(lightPosUV, sceneLinearClipDepth, volumetricLightTex, sceneTex->GetRenderTargetView(0, 0, 1));
 	}
 
-	Ptr<Texture> PostProcessVolumetricLight::Setup(const Ptr<Texture> & sceneTex, const Ptr<Texture> & linearDepthTex)
+	PooledTextureRef PostProcessVolumetricLight::Setup(const Ptr<Texture> & sceneTex, const Ptr<Texture> & linearDepthTex)
 	{
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(sceneTex->Desc());
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
+		auto resultTex = resultTexRef->Get()->Cast<Texture>();
 
-		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
+		auto ps = Shader::FindOrCreate<PPVolumeSetupPS>();
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
+		ps->SetSRV("sceneTex", sceneTex->GetShaderResourceView());
+		ps->SetSRV("linearDepthTex", linearDepthTex->GetShaderResourceView());
 
-		RenderQuad(_fx->TechniqueByName("Setup"));
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		return resultTex;
+		ps->Flush();
+
+		DrawQuad({ resultTex->GetRenderTargetView(0, 0, 1) });
+
+		return resultTexRef;
 	}
 
-	Ptr<Texture> PostProcessVolumetricLight::RenderVolumetricLight(const Ptr<Texture> & setupTex, const float2 & lightPosUV)
+	PooledTextureRef PostProcessVolumetricLight::RenderVolumetricLight(const float2 & lightPosUV, const Ptr<Texture> & setupTex)
 	{
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(setupTex->Desc());
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, setupTex->GetDesc() });
+		auto resultTex = resultTexRef->Get()->Cast<Texture>();
 
-		_fx->VariableByName("lightPosUV")->AsScalar()->SetValue(&lightPosUV);
-		_fx->VariableByName("density")->AsScalar()->SetValue(&_density);
-		_fx->VariableByName("intensity")->AsScalar()->SetValue(&_intensity);
-		_fx->VariableByName("decay")->AsScalar()->SetValue(&_decay);
+		auto ps = Shader::FindOrCreate<RadialBlurPS>();
 
-		_fx->VariableByName("radialBlurInTex")->AsShaderResource()->SetValue(setupTex->CreateTextureView());
+		ps->SetScalar("lightPosUV", lightPosUV);
+		ps->SetScalar("density", _density);
+		ps->SetScalar("intensity", _intensity);
+		ps->SetScalar("decay", _decay);
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets(
-		{ resultTex->CreateTextureView() }, 0);
+		ps->SetSRV("sceneTex", setupTex->GetShaderResourceView());
 
-		RenderQuad(_fx->TechniqueByName("RadialBlur"));
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
 
-		return resultTex;
+		ps->Flush();
+
+		DrawQuad({ resultTex->GetRenderTargetView(0, 0, 1) });
+
+		return resultTexRef;
 	}
 
 	void PostProcessVolumetricLight::BlurVolumetricLight(
-		const Ptr<Texture> & volumetricLightTex,
 		const float2 & lightPosUV,
-		const Ptr<Texture> & targetTex)
+		const Ptr<Texture> & linearDepthTex,
+		const Ptr<Texture> & volumetricLightTex,
+		const Ptr<RenderTargetView> & target)
 	{
-		_fx->VariableByName("lightPosUV")->AsScalar()->SetValue(&lightPosUV);
-		_fx->VariableByName("texSize")->AsScalar()->SetValue(&targetTex->GetTexSize());
+		auto ps = Shader::FindOrCreate<BlurVolumetricLightPS>();
 
-		_fx->VariableByName("volumetricLightTex")->AsShaderResource()->SetValue(volumetricLightTex->CreateTextureView());
+		ps->SetScalar("lightPosUV", lightPosUV);
+		ps->SetScalar("texSize", target->Cast<TextureRenderTargetView>()->GetResource()->Cast<Texture>()->GetTexSize());
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ targetTex->CreateTextureView() }, 0);
+		ps->SetSRV("volumetricLightTex", volumetricLightTex->GetShaderResourceView());
+		ps->SetSRV("linearDepthTex", linearDepthTex->GetShaderResourceView());
 
-		RenderQuad(_fx->TechniqueByName("BlurVolumetricLight"));
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
+
+		DrawQuad({ target });
+
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
 	}
 }

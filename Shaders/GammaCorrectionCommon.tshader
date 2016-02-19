@@ -1,0 +1,21 @@
+#ifndef GAMMACORRECTIONCOMMON_TSHADER
+#define GAMMACORRECTIONCOMMON_TSHADER
+
+#define IN_CORRECT_GAMMA 2.2
+
+cbuffer cb_gammacorrection
+{
+    float gamma;
+};
+
+float3 GammaCorrectIn(float3 color)
+{
+  return saturate( pow(abs(color), IN_CORRECT_GAMMA) );
+}
+
+float3 GammaCorrectOut(float3 color)
+{
+  return saturate( pow(abs(color), 1.0f/gamma) );
+}
+
+#endif

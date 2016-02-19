@@ -1,13 +1,11 @@
 #include "ToyGE\RenderEngine\FFT.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
 #include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\Kernel\Util.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
 
 namespace ToyGE
 {
@@ -20,133 +18,158 @@ namespace ToyGE
 		int32_t dstArrayOffset,
 		bool bInverse)
 	{
-		if (src->GetMipSize(srcMipLevel) != dst->GetMipSize(dstMipLevel)
-			|| src->Desc().format != RENDER_FORMAT_R32G32_FLOAT
-			|| dst->Desc().format != RENDER_FORMAT_R32G32_FLOAT)
-			return;
-
-		//Prepare src&dst textures for butterfly
 		auto mipSize = src->GetMipSize(srcMipLevel);
-		auto texDesc = src->Desc();
-		texDesc.width = std::get<0>(mipSize);
-		texDesc.height = std::get<1>(mipSize);
-		texDesc.arraySize = 1;
+
+		TextureDesc texDesc;
+		texDesc.width = mipSize.x();
+		texDesc.height = mipSize.y();
+		texDesc.depth = 1;
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_UNORDERED_ACCESS;
+		texDesc.cpuAccess = 0;
 		texDesc.format = RENDER_FORMAT_R32G32_FLOAT;
+		texDesc.mipLevels = 1;
+		texDesc.arraySize = 1;
+		texDesc.bCube = false;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
 
-		auto bfSrcTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		src->CopyTo(bfSrcTex, 0, 0, 0, 0, 0, srcMipLevel, srcArrayOffset);
+		PooledTextureRef bfSrcRef;
+		Ptr<Texture> bfSrc;
+		int32_t bfSrcMipLevel = 0;
+		int32_t bfSrcArrayOffset = 0;
+		if (!bInverse)
+		{
+			bfSrcRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			bfSrc = bfSrcRef->Get()->Cast<Texture>();
+			FFT::FFTSetup(src, srcMipLevel, srcArrayOffset, bfSrc, 0, 0);
+		}
+		else
+		{
+			bfSrc = src;
+			bfSrcMipLevel = srcMipLevel;
+			bfSrcArrayOffset = srcArrayOffset;
+		}
 
-		Ptr<Texture> bfDstTex;
+		PooledTextureRef bfDstRef;
+		Ptr<Texture> bfDst;
 		int32_t bfDstMipLevel = 0;
 		int32_t bfDstArrayOffset = 0;
-		if (dst->Desc().bindFlag & TEXTURE_BIND_UNORDERED_ACCESS)
+		if (dst->GetDesc().bindFlag & TEXTURE_BIND_UNORDERED_ACCESS && dst->GetDesc().format == RENDER_FORMAT_R32G32_FLOAT)
 		{
-			bfDstTex = dst;
+			bfDst = dst;
 			bfDstMipLevel = dstMipLevel;
 			bfDstArrayOffset = dstArrayOffset;
 		}
 		else
 		{
-			bfDstTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+			bfDstRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			bfDst = bfDstRef->Get()->Cast<Texture>();
 		}
 
-		//FX
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"FFT.xml");
-		fx->AddExtraMacro("FFT_2D", "");
-		if (bInverse)
-			fx->AddExtraMacro("FFT_INVERSE", "");
-		else
-			fx->RemoveExtraMacro("FFT_INVERSE");
-		fx->UpdateData();
-		auto fxUtil = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"FFTUtil.xml");
+		
+		std::map<String, String> macros;
 
-		fx->VariableByName("dataSize")->AsScalar()->SetValue(&src->GetTexSize());
+		macros["FFT_2D"] = "";
+		if (bInverse)
+			macros["FFT_INVERSE"] = "";
+		static int fftGroupSize = 64;
+		macros["FFT_GROUP_SIZE"] = std::to_string(fftGroupSize);
+
+		auto fftXCS = Shader::FindOrCreate<FFTRadix2_2D_XCS>(macros);
+		auto fftYCS = Shader::FindOrCreate<FFTRadix2_2D_YCS>(macros);
+
+		auto ifftScalePS = Shader::FindOrCreate<IFFTScalePS>();
+
+		float4 dataSize = float4((float)mipSize.x(), (float)mipSize.y(), 1.0f / (float)mipSize.x(), 1.0f / (float)mipSize.y());
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		const int32_t groupSize = std::stoi(fx->MacroByName("FFT_GROUP_SIZE").value);
-
 		//Butterfly X
 		{
-			uint32_t numGroups = std::max<uint32_t>(1, texDesc.width / groupSize / 2);
+			uint32_t numGroups = std::max<uint32_t>(1, texDesc.width / fftGroupSize / 2);
 
 			uint32_t bfLen = 2;
 			while (bfLen <= static_cast<uint32_t>(texDesc.width))
 			{
-				fx->VariableByName("butterflyLength")->AsScalar()->SetValue(&bfLen);
+				fftXCS->SetScalar("dataSize", dataSize);
+				fftXCS->SetScalar("butterflyLength", bfLen);
 
-				fx->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				fx->VariableByName("dstTex")->AsUAV()->SetValue(bfDstTex->CreateTextureView(bfDstMipLevel, 1, bfDstArrayOffset, 1));
+				fftXCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+				fftXCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
 
-				fx->TechniqueByName("FFTRadix2_2D_X")->PassByIndex(0)->Bind();
+				fftXCS->Flush();
+
 				rc->Compute(numGroups, texDesc.height, 1);
-				fx->TechniqueByName("FFTRadix2_2D_X")->PassByIndex(0)->UnBind();
 
-				std::swap(bfSrcTex, bfDstTex);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 
 				bfLen = bfLen << 1;
 			}
+			rc->ResetShader(SHADER_CS);
 
 			if (bInverse)
 			{
-				float ifftScale = 1.0f / texDesc.width;
-				fxUtil->VariableByName("ifftScale")->AsScalar()->SetValue(&ifftScale);
-				fxUtil->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				rc->SetRenderTargets({ bfDstTex->CreateTextureView() }, 0);
-				RenderQuad(fxUtil->TechniqueByName("IFFTScale"));
+				float ifftScale = 1.0f / (float)texDesc.width;
+				ifftScalePS->SetScalar("ifftScale", ifftScale);
+				ifftScalePS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+				ifftScalePS->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ifftScalePS->Flush();
 
-				std::swap(bfSrcTex, bfDstTex);
+				DrawQuad({ bfDst->GetRenderTargetView(dstMipLevel, dstArrayOffset, 1) });
 
-				rc->SetRenderTargets({}, 0);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 			}
 		}
 
 		//Butterfly Y
 		{
-			uint32_t numGroups = std::max<uint32_t>(1, texDesc.height / groupSize / 2);
+			uint32_t numGroups = std::max<uint32_t>(1, texDesc.height / fftGroupSize / 2);
 
 			uint32_t bfLen = 2;
 			while (bfLen <= static_cast<uint32_t>(texDesc.height))
 			{
-				fx->VariableByName("butterflyLength")->AsScalar()->SetValue(&bfLen);
+				fftYCS->SetScalar("dataSize", dataSize);
+				fftYCS->SetScalar("butterflyLength", bfLen);
 
-				fx->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				fx->VariableByName("dstTex")->AsUAV()->SetValue(bfDstTex->CreateTextureView(bfDstMipLevel, 1, bfDstArrayOffset, 1));
+				fftYCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+				fftYCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
 
-				fx->TechniqueByName("FFTRadix2_2D_Y")->PassByIndex(0)->Bind();
+				fftYCS->Flush();
+
 				rc->Compute(numGroups, texDesc.width, 1);
-				fx->TechniqueByName("FFTRadix2_2D_Y")->PassByIndex(0)->UnBind();
 
-				std::swap(bfSrcTex, bfDstTex);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 
 				bfLen = bfLen << 1;
 			}
+			rc->ResetShader(SHADER_CS);
 
 			if (bInverse)
 			{
 				float ifftScale = 1.0f / texDesc.height;
-				fxUtil->VariableByName("ifftScale")->AsScalar()->SetValue(&ifftScale);
-				fxUtil->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				rc->SetRenderTargets({ bfDstTex->CreateTextureView() }, 0);
-				RenderQuad(fxUtil->TechniqueByName("IFFTScale"));
+				ifftScalePS->SetScalar("ifftScale", ifftScale);
+				ifftScalePS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+				ifftScalePS->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ifftScalePS->Flush();
 
-				std::swap(bfSrcTex, bfDstTex);
+				DrawQuad({ bfDst->GetRenderTargetView(dstMipLevel, dstArrayOffset, 1) });
 
-				rc->SetRenderTargets({}, 0);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 			}
 		}
 
 		//Clear
-		if (bfSrcTex == dst) //dst is result
+		if (bfSrc != dst) //dst is result
 		{
-			bfDstTex->Release();
-		}
-		else //dst is not result, copy from bfSrcTex
-		{
-			bfSrcTex->CopyTo(dst, dstMipLevel, dstArrayOffset, 0, 0, 0, 0, 0);
-			if (bfDstTex != dst)
-				bfDstTex->Release();
+			bfSrc->CopyTo(dst, dstMipLevel, dstArrayOffset, 0, 0, 0, 0, 0);
 		}
 	}
 
@@ -159,60 +182,80 @@ namespace ToyGE
 		int32_t dstArrayOffset,
 		bool bInverse)
 	{
-		if (src->GetMipSize(srcMipLevel) != dst->GetMipSize(dstMipLevel)
-			|| src->Desc().format != RENDER_FORMAT_R32G32_FLOAT
-			|| dst->Desc().format != RENDER_FORMAT_R32G32_FLOAT)
-			return;
-
-		//Prepare src&dst textures for butterfly
 		auto mipSize = src->GetMipSize(srcMipLevel);
-		auto texDesc = src->Desc();
-		texDesc.width = std::get<0>(mipSize);
-		texDesc.height = std::get<1>(mipSize);
-		texDesc.arraySize = 1;
+
+		TextureDesc texDesc;
+		texDesc.width = mipSize.x();
+		texDesc.height = mipSize.y();
+		texDesc.depth = 1;
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_UNORDERED_ACCESS;
+		texDesc.cpuAccess = 0;
 		texDesc.format = RENDER_FORMAT_R32G32_FLOAT;
+		texDesc.mipLevels = 1;
+		texDesc.arraySize = 1;
+		texDesc.bCube = false;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
 
-		auto bfSrcTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		src->CopyTo(bfSrcTex, 0, 0, 0, 0, 0, srcMipLevel, srcArrayOffset);
+		PooledTextureRef bfSrcRef;
+		Ptr<Texture> bfSrc;
+		int32_t bfSrcMipLevel = 0;
+		int32_t bfSrcArrayOffset = 0;
+		if (!bInverse)
+		{
+			bfSrcRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			bfSrc = bfSrcRef->Get()->Cast<Texture>();
+			FFT::FFTSetup(src, srcMipLevel, srcArrayOffset, bfSrc, 0, 0);
+		}
+		else
+		{
+			bfSrc = src;
+			bfSrcMipLevel = srcMipLevel;
+			bfSrcArrayOffset = srcArrayOffset;
+		}
 
-		Ptr<Texture> bfDstTex;
+		PooledTextureRef bfDstRef;
+		Ptr<Texture> bfDst;
 		int32_t bfDstMipLevel = 0;
 		int32_t bfDstArrayOffset = 0;
-		if (dst->Desc().bindFlag & TEXTURE_BIND_UNORDERED_ACCESS)
+		if (dst->GetDesc().bindFlag & TEXTURE_BIND_UNORDERED_ACCESS && dst->GetDesc().format == RENDER_FORMAT_R32G32_FLOAT)
 		{
-			bfDstTex = dst;
+			bfDst = dst;
 			bfDstMipLevel = dstMipLevel;
 			bfDstArrayOffset = dstArrayOffset;
 		}
 		else
 		{
-			bfDstTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+			bfDstRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			bfDst = bfDstRef->Get()->Cast<Texture>();
 		}
 
-		//FX
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"FFT.xml");
-		fx->AddExtraMacro("FFT_2D", "");
-		if (bInverse)
-			fx->AddExtraMacro("FFT_INVERSE", "");
-		else
-			fx->RemoveExtraMacro("FFT_INVERSE");
-		fx->UpdateData();
 
-		fx->VariableByName("dataSize")->AsScalar()->SetValue(&src->GetTexSize());
+		std::map<String, String> macros;
+
+		macros["FFT_2D"] = "";
+		if (bInverse)
+			macros["FFT_INVERSE"] = "";
+		static int fftGroupSize = 64;
+		macros["FFT_GROUP_SIZE"] = std::to_string(fftGroupSize);
+
+		auto fftXCS = Shader::FindOrCreate<FFTRadix8_2D_XCS>(macros);
+		auto fftXFinalCS = Shader::FindOrCreate<FFTRadix8_2D_X_FinalCS>(macros);
+		auto fftYCS = Shader::FindOrCreate<FFTRadix8_2D_YCS>(macros);
+		auto fftYFinalCS = Shader::FindOrCreate<FFTRadix8_2D_Y_FinalCS>(macros);
+
+		auto ifftScalePS = Shader::FindOrCreate<IFFTScalePS>();
+
+		float4 dataSize = float4((float)mipSize.x(), (float)mipSize.y(), 1.0f / (float)mipSize.x(), 1.0f / (float)mipSize.y());
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		const int32_t groupSize = std::stoi(fx->MacroByName("FFT_GROUP_SIZE").value);
-
 		//FFT X
 		{
-			uint32_t numGroups = texDesc.width / groupSize / 8;
+			uint32_t numGroups = texDesc.width / fftGroupSize / 8;
 
 			uint32_t threadCount = texDesc.width / 8;
-			fx->VariableByName("threadCount")->AsScalar()->SetValue(&threadCount);
-			uint32_t ostirde = threadCount;
-			fx->VariableByName("ostride")->AsScalar()->SetValue(&ostirde);
+			uint32_t ostride = threadCount;
 
 			uint32_t istride = threadCount;
 			float phaseBase = -XM_2PI / texDesc.width;
@@ -220,26 +263,38 @@ namespace ToyGE
 				phaseBase *= -1.0f;
 			while (istride > 0)
 			{
-				fx->VariableByName("istride")->AsScalar()->SetValue(&istride);
-				fx->VariableByName("phaseBase")->AsScalar()->SetValue(&phaseBase);
-
-				fx->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				fx->VariableByName("dstTex")->AsUAV()->SetValue(bfDstTex->CreateTextureView(bfDstMipLevel, 1, bfDstArrayOffset, 1));
-
 				if (istride > 1)
 				{
-					fx->TechniqueByName("FFTRadix8_2D_X")->PassByIndex(0)->Bind();
+					fftXCS->SetScalar("dataSize", dataSize);
+					fftXCS->SetScalar("threadCount", threadCount);
+					fftXCS->SetScalar("ostride", ostride);
+					fftXCS->SetScalar("istride", istride);
+
+					fftXCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+					fftXCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
+
+					fftXCS->Flush();
+
 					rc->Compute(numGroups, texDesc.height, 1);
-					fx->TechniqueByName("FFTRadix8_2D_X")->PassByIndex(0)->UnBind();
 				}
 				else
 				{
-					fx->TechniqueByName("FFTRadix8_2D_X_Final")->PassByIndex(0)->Bind();
+					fftXFinalCS->SetScalar("dataSize", dataSize);
+					fftXFinalCS->SetScalar("threadCount", threadCount);
+					fftXFinalCS->SetScalar("ostride", ostride);
+					fftXFinalCS->SetScalar("istride", istride);
+
+					fftXFinalCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+					fftXFinalCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
+
+					fftXFinalCS->Flush();
+
 					rc->Compute(numGroups, texDesc.height, 1);
-					fx->TechniqueByName("FFTRadix8_2D_X_Final")->PassByIndex(0)->UnBind();
 				}
 
-				std::swap(bfSrcTex, bfDstTex);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 
 				istride /= 8;
 				phaseBase *= 8.0f;
@@ -249,12 +304,10 @@ namespace ToyGE
 
 		//FFT Y
 		{
-			uint32_t numGroups = texDesc.height / groupSize / 8;
+			uint32_t numGroups = texDesc.height / fftGroupSize / 8;
 
 			uint32_t threadCount = texDesc.height / 8;
-			fx->VariableByName("threadCount")->AsScalar()->SetValue(&threadCount);
-			uint32_t ostirde = threadCount;
-			fx->VariableByName("ostride")->AsScalar()->SetValue(&ostirde);
+			uint32_t ostride = threadCount;
 
 			uint32_t istride = threadCount;
 			float phaseBase = -XM_2PI / texDesc.height;
@@ -262,26 +315,38 @@ namespace ToyGE
 				phaseBase *= -1.0f;
 			while (istride > 0)
 			{
-				fx->VariableByName("istride")->AsScalar()->SetValue(&istride);
-				fx->VariableByName("phaseBase")->AsScalar()->SetValue(&phaseBase);
-
-				fx->VariableByName("srcTex")->AsShaderResource()->SetValue(bfSrcTex->CreateTextureView());
-				fx->VariableByName("dstTex")->AsUAV()->SetValue(bfDstTex->CreateTextureView(bfDstMipLevel, 1, bfDstArrayOffset, 1));
-
 				if (istride > 1)
 				{
-					fx->TechniqueByName("FFTRadix8_2D_Y")->PassByIndex(0)->Bind();
+					fftYCS->SetScalar("dataSize", dataSize);
+					fftYCS->SetScalar("threadCount", threadCount);
+					fftYCS->SetScalar("ostride", ostride);
+					fftYCS->SetScalar("istride", istride);
+
+					fftYCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+					fftYCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
+
+					fftYCS->Flush();
+
 					rc->Compute(numGroups, texDesc.width, 1);
-					fx->TechniqueByName("FFTRadix8_2D_Y")->PassByIndex(0)->UnBind();
 				}
 				else
 				{
-					fx->TechniqueByName("FFTRadix8_2D_Y_Final")->PassByIndex(0)->Bind();
+					fftYFinalCS->SetScalar("dataSize", dataSize);
+					fftYFinalCS->SetScalar("threadCount", threadCount);
+					fftYFinalCS->SetScalar("ostride", ostride);
+					fftYFinalCS->SetScalar("istride", istride);
+
+					fftYFinalCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
+					fftYFinalCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
+
+					fftYFinalCS->Flush();
+
 					rc->Compute(numGroups, texDesc.width, 1);
-					fx->TechniqueByName("FFTRadix8_2D_Y_Final")->PassByIndex(0)->UnBind();
 				}
 
-				std::swap(bfSrcTex, bfDstTex);
+				std::swap(bfSrc, bfDst);
+				std::swap(bfSrcMipLevel, bfDstMipLevel);
+				std::swap(bfSrcArrayOffset, bfDstArrayOffset);
 
 				istride /= 8;
 				phaseBase *= 8.0f;
@@ -289,16 +354,12 @@ namespace ToyGE
 
 		}
 
+		rc->ResetShader(SHADER_CS);
+
 		//Clear
-		if (bfSrcTex == dst) //dst is result
+		if (bfSrc != dst) //dst is result
 		{
-			bfDstTex->Release();
-		}
-		else //dst is not result, copy from bfSrcTex
-		{
-			bfSrcTex->CopyTo(dst, dstMipLevel, dstArrayOffset, 0, 0, 0, 0, 0);
-			if (bfDstTex != dst)
-				bfDstTex->Release();
+			bfSrc->CopyTo(dst, dstMipLevel, dstArrayOffset, 0, 0, 0, 0, 0);
 		}
 	}
 
@@ -310,14 +371,12 @@ namespace ToyGE
 		int32_t dstMipLevel,
 		int32_t dstArrayOffset)
 	{
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"FFTUtil.xml");
+		auto ps = Shader::FindOrCreate<FFTSetupPS>();
 
-		fx->VariableByName("srcTex")->AsShaderResource()->SetValue(src->CreateTextureView(srcMipLevel, 1, srcArrayOffset, 1));
+		ps->SetSRV("srcTex", src->GetShaderResourceView(srcMipLevel, 1, srcArrayOffset, 1));
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->Flush();
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ dst->CreateTextureView(dstMipLevel, 1, dstArrayOffset, 1) }, 0);
-
-		RenderQuad(fx->TechniqueByName("FFTSetup"));
-
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({}, 0);
+		DrawQuad({ dst->GetRenderTargetView(dstMipLevel, dstArrayOffset, 1) });
 	}
 }

@@ -1,0 +1,31 @@
+#define MVO_WORLD_POSITION 1
+
+#include "MeshVertexInput.tshader"
+#include "Lighting.tshader"
+#include "View.tshader"
+
+MeshVertexVSOutputs RenderRSMVS(MeshVertexVSInputs inputs)
+{
+	  return GetMeshVSOutputs(inputs);
+}
+
+void RenderRSMPS(
+    MeshVertexVSOutputs inputs,
+    out float3 radiance : SV_TARGET0,
+    out float3 normal   : SV_TARGET1
+)
+{
+    NormalizeMeshVertexVSOutputs(inputs);
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+    float3 n = mat.normal;
+    float3 l = GetPosToLightDir(inputs.worldPosition);
+    float3 v = normalize(viewWorldPosition - inputs.worldPosition);
+    
+    float3 irradiance = GetIrradiance(inputs.worldPosition, n);
+    
+    radiance = irradiance / PI * mat.diffuseColor + mat.emissive;
+    normal = EncodeNormal(mat.normal);
+}

@@ -1,122 +1,105 @@
 #include "ToyGE\RenderEngine\Font\BitmapFontRenderer.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Mesh.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
-#include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\Platform\Window.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\RenderContext.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
 
 namespace ToyGE
 {
 	BitmapFontRenderer::BitmapFontRenderer(const Ptr<BitmapFont> & font)
 		: _font(font)
 	{
-		_textRenderInput = Global::GetRenderEngine()->GetRenderFactory()->CreateRenderInput();
-		_textRenderInput->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	}
 
-	void BitmapFontRenderer::SetText(const WString & text)
+	void BitmapFontRenderer::SetText(const String & text)
 	{
 		if (_text != text)
 		{
+			_bNeedUpdate = true;
+
 			if (_text.size() != text.size())
 			{
-				if (_textRenderVB)
+				if (_vbTransientSubAlloc)
 				{
-					auto transientVB = Global::GetRenderEngine()->GetTransientBuffer(TRANSIENTBUFFER_TEXT_VERTEX);
-					auto transientIB = Global::GetRenderEngine()->GetTransientBuffer(TRANSIENTBUFFER_TEXT_INDEX);
-
-					transientVB->Free(_textRenderVB);
-					transientIB->Free(_textRenderIB);
-
-					_textRenderVB = nullptr;
-					_textRenderIB = nullptr;
+					_vbTransientSubAlloc->Free();
+					_vbTransientSubAlloc = nullptr;
+					_ibTransientSubAlloc->Free();
+					_ibTransientSubAlloc = nullptr;
 				}
 			}
 
 			_text = text;
-			UpdateRenderBuffers();
 		}
 	}
 
-	void BitmapFontRenderer::Render(const ResourceView & target, const float2 & screenPos, const float2 pixelSize)
+	void BitmapFontRenderer::Render(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width)
 	{
-		float2 screenSize = float2(
-			static_cast<float>(Global::GetRenderEngine()->GetWindow()->Width()),
-			static_cast<float>(Global::GetRenderEngine()->GetWindow()->Height()));
+		if (_text.size() == 0)
+			return;
 
-		auto scaling = XMMatrixScaling(pixelSize.x / screenSize.x * 2.0f, pixelSize.y / screenSize.y * 2.0f, 0.0f);
+		if(_bNeedUpdate)
+			UpdateRenderBuffers();
 
-		float2 posH = (screenPos / screenSize) * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
-		auto trans = XMMatrixTranslation(posH.x, posH.y, 0.0f);
+		auto fontRenderingVS = Shader::FindOrCreate<FontRenderingVS>();
+		auto fontRenderingPS = Shader::FindOrCreate<BitmapFontRenderingPS>();
+		
+		fontRenderingVS->SetScalar("transform", ComputeTransform(target, screenPos, height, width));
 
-		auto transformXM = XMMatrixMultiply(scaling, trans);
-		XMFLOAT4X4 transfom;
-		XMStoreFloat4x4(&transfom, transformXM);
+		fontRenderingPS->SetScalar("color", _color);
+		fontRenderingPS->SetSRV("fontTex", _font->GetGlyphRenderMapTex()->GetShaderResourceView(0, 0, 0, 0));
+		fontRenderingPS->SetSampler("bilinearSampler", SamplerTemplate<>::Get());
 
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Font.xml");
-
-		fx->VariableByName("transform")->AsScalar()->SetValue(&transfom);
-		fx->VariableByName("color")->AsScalar()->SetValue(&_color);
-
-		fx->VariableByName("fontTex")->AsShaderResource()->SetValue(_font->GetRenderMapTex()->CreateTextureView(0, 0, 0, 0));
+		fontRenderingVS->Flush();
+		fontRenderingPS->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		rc->SetRenderInput(_textRenderInput);
-		rc->SetDepthStencil(ResourceView());
+		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_SRC_ALPHA, BLEND_PARAM_INV_SRC_ALPHA>::Get());
 
-		rc->SetRenderTargets({ target }, 0);
+		rc->SetVertexBuffer({ _vb }, { _vbTransientSubAlloc->bytesOffset });
+		rc->SetIndexBuffer(_ib, _ibTransientSubAlloc->bytesOffset);
+		rc->SetPrimitiveTopology(PrimitiveTopology::PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		fx->TechniqueByName("FontRender")->PassByIndex(0)->Bind();
-		rc->DrawIndexed(static_cast<int32_t>(_text.size()) * 6, 0, 0);
-		fx->TechniqueByName("FontRender")->PassByIndex(0)->UnBind();
+		rc->SetRenderTargets({ target });
+		rc->SetDepthStencil(nullptr);
+
+		rc->SetViewport(GetTextureQuadViewport(target->GetResource()->Cast<Texture>()));
+
+		rc->DrawIndexed(_textNumCharacters * 6, 0, 0);
+
+		rc->SetBlendState(nullptr);
 	}
 
 	void BitmapFontRenderer::UpdateRenderBuffers()
 	{
-		if (_text.size() == 0)
-		{
-			_textRenderInput->SetVerticesBuffers({});
-			_textRenderInput->SetIndicesBuffers(nullptr);
-			return;
-		}
+		auto u32Text = StringConvert<StringEncode::UTF_8, StringEncode::UTF_32>(_text);
+		_textNumCharacters = (int32_t)u32Text.size();
 
-		VertexDataBuildHelp builder;
+		// Init buffers data
+		VertexBufferBuilder builder;
 		builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 		builder.AddElementDesc("TEXCOORD", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.SetNumVertices(4 * static_cast<int32_t>(_text.size()));
+		builder.SetNumVertices(4 * static_cast<int32_t>(u32Text.size()));
 
-		std::vector<uint32_t> indicesData(6 * static_cast<int32_t>(_text.size()));
+		std::vector<uint32_t> indicesData(6 * static_cast<int32_t>(u32Text.size()));
 
 		float3 curPos = 0.0f;
 		int32_t vertexOffset = 0;
 		int32_t indexOffset = 0;
 
-		builder.Start();
-
-		auto transientVB = Global::GetRenderEngine()->GetTransientBuffer(TRANSIENTBUFFER_TEXT_VERTEX);
-		auto transientIB = Global::GetRenderEngine()->GetTransientBuffer(TRANSIENTBUFFER_TEXT_INDEX);
-		if (_textRenderVB == nullptr)
+		for (auto & curChar : u32Text)
 		{
-			_textRenderVB = transientVB->Alloc(builder.vertexDataDesc.numVertices * builder.vertexDataDesc.vertexByteSize);
-			_textRenderIB = transientIB->Alloc(static_cast<int32_t>(sizeof(uint32_t) * indicesData.size()));
-		}
-
-		for (auto & curChar : _text)
-		{
-			auto glyphIndex = _font->GetCharGlyphIndex(curChar);
+			auto glyphIndex = _font->GetAsset()->GetCharGlyphIndex(curChar);
 			auto & glyphRenderInfo = _font->GetBitmapFontGlyphRenderInfo(glyphIndex);
 
-			float left = curPos.x + glyphRenderInfo.glyphBearingX;
+			float left = curPos.x() + glyphRenderInfo.glyphBearingX;
 			float right = left + glyphRenderInfo.glyphWidth;
-			float top = curPos.y + glyphRenderInfo.glyphBearingY;
-			float bottom = curPos.y - (glyphRenderInfo.glyphHeight - glyphRenderInfo.glyphBearingY);
+			float top = curPos.y() + glyphRenderInfo.glyphBearingY;
+			float bottom = curPos.y() - (glyphRenderInfo.glyphHeight - glyphRenderInfo.glyphBearingY);
 
 			builder.Add(float3(left, top, 0.0f));
 			builder.Add(float3(glyphRenderInfo.renderMapUVLeft, glyphRenderInfo.renderMapUVTop, glyphRenderInfo.renderMapSlice));
@@ -140,47 +123,54 @@ namespace ToyGE
 
 			vertexOffset += 4;
 
-			curPos.x += glyphRenderInfo.glyphAdvanceWidth;
+			curPos.x() += glyphRenderInfo.glyphAdvanceWidth;
 		}
-		builder.Finish();
 
-		transientVB->Update(_textRenderVB, builder.vertexDataDesc.pData.get(), _textRenderVB->bytesSize, 0);
-		transientVB->UpdateFinish();
+		// Init buffers
+		auto transientVB = Global::GetTransientBuffer(TRANSIENTBUFFER_TEXT_VERTEX);
+		if (_vbTransientSubAlloc == nullptr)
+		{
+			_vbTransientSubAlloc = transientVB->Alloc(builder.numVertices * builder.vertexSize);
+		}
+		transientVB->Update(_vbTransientSubAlloc, builder.dataBuffer.get(), _vbTransientSubAlloc->bytesSize, 0);
+		transientVB->FlushUpdate();
+		_vb = transientVB->GetBuffer()->DyCast<VertexBuffer>();
+		_vb->SetType(VERTEX_BUFFER_GEOMETRY);
+		_vb->SetElementsDesc(builder.vertexElementsDesc);
 
-		transientIB->Update(_textRenderIB, &indicesData[0], _textRenderIB->bytesSize, 0);
-		transientIB->UpdateFinish();
+		auto transientIB = Global::GetTransientBuffer(TRANSIENTBUFFER_TEXT_INDEX);
+		if (_ibTransientSubAlloc == nullptr)
+		{
+			_ibTransientSubAlloc = transientIB->Alloc(static_cast<int32_t>(sizeof(uint32_t) * indicesData.size()));
+		}
+		transientIB->Update(_ibTransientSubAlloc, &indicesData[0], _ibTransientSubAlloc->bytesSize, 0);
+		transientIB->FlushUpdate();
+		_ib = transientIB->GetBuffer();
 
-		transientVB->GetBuffer()->SetVertexBufferType(VERTEX_BUFFER_GEOMETRY);
-		transientVB->GetBuffer()->SetVertexElementsDesc(builder.vertexDataDesc.elementsDesc);
+		_bNeedUpdate = false;
+	}
 
-		_textRenderInput->SetVerticesBuffers({ transientVB->GetBuffer() });
-		_textRenderInput->SetVerticesBytesOffset(0, _textRenderVB->bytesOffset);
+	XMFLOAT4X4 BitmapFontRenderer::ComputeTransform(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width)
+	{
+		float2 targetSize = float2(
+			static_cast<float>(target->GetResource()->Cast<Texture>()->GetDesc().width),
+			static_cast<float>(target->GetResource()->Cast<Texture>()->GetDesc().height));
 
-		_textRenderInput->SetIndicesBuffers(transientIB->GetBuffer());
-		_textRenderInput->SetIndicesBytesOffset(_textRenderIB->bytesOffset);
+		float scalingY = height / targetSize.y() * 2.0f;
+		float scalingX;
+		if (width == 0.0f)
+			scalingX = height / targetSize.x() * 2.0f;
+		else
+			scalingX = width / targetSize.x() * 2.0f;
+		auto scaling = XMMatrixScaling(scalingX, scalingY, 0.0f);
 
-		//_textRenderInput->SetVerticesElementDesc(0, builder.vertexDataDesc.elementsDesc);
+		float2 posH = (screenPos / targetSize) * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+		auto trans = XMMatrixTranslation(posH.x(), posH.y(), 0.0f);
 
-		/*RenderBufferDesc vertexBufDesc;
-		vertexBufDesc.bindFlag = BUFFER_BIND_VERTEX | BUFFER_BIND_IMMUTABLE;
-		vertexBufDesc.cpuAccess = 0;
-		vertexBufDesc.numElements = builder.vertexDataDesc.numVertices;
-		vertexBufDesc.elementSize = builder.vertexDataDesc.vertexByteSize;
-		vertexBufDesc.structedByteStride = 0;
+		auto transformXM = XMMatrixMultiply(scaling, trans);
+		XMFLOAT4X4 transform;
+		XMStoreFloat4x4(&transform, transformXM);
 
-		auto vb = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(
-			vertexBufDesc, builder.vertexDataDesc.pData.get(), VERTEX_BUFFER_GEOMETRY, builder.vertexDataDesc.elementsDesc);
-		_textRenderInput->SetVerticesBuffers({ vb });
-
-		RenderBufferDesc indexBufDesc;
-		indexBufDesc.bindFlag = BUFFER_BIND_INDEX | BUFFER_BIND_IMMUTABLE;
-		indexBufDesc.cpuAccess = 0;
-		indexBufDesc.numElements = static_cast<int32_t>(indicesData.size());
-		indexBufDesc.elementSize = sizeof(indicesData[0]);
-		indexBufDesc.structedByteStride = 0;
-
-		auto ib = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(
-			indexBufDesc, &indicesData[0]);
-		_textRenderInput->SetIndicesBuffers(ib);*/
+		return transform;
 	}
 }

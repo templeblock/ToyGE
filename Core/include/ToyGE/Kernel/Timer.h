@@ -2,8 +2,8 @@
 #ifndef TIMER_H
 #define TIMER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {
@@ -14,7 +14,7 @@ namespace ToyGE
 			: _prevTick(0)
 		{
 			long long frequency;
-#ifdef PLATFORM_WINDOWS
+#ifdef TOYGE_PLATFORM_WINDOWS
 			::QueryPerformanceFrequency((LARGE_INTEGER*)&frequency);
 #endif
 			_secondsPerTick = 1.0f / frequency;
@@ -36,7 +36,7 @@ namespace ToyGE
 		long long CurTick() const
 		{
 			long long curTick;
-#ifdef PLATFORM_WINDOWS
+#ifdef TOYGE_PLATFORM_WINDOWS
 			::QueryPerformanceCounter((LARGE_INTEGER*)&curTick);
 #endif
 			return curTick;

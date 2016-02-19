@@ -1,179 +1,162 @@
 #include "ToyGE\RenderEngine\Mesh.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Material.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\Kernel\ResourceManager.h"
 #include "ToyGE\RenderEngine\Scene.h"
 #include "ToyGE\RenderEngine\SceneObject.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
-#include "ToyGE\Kernel\Util.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\RenderContext.h"
 
 namespace ToyGE
 {
-	String StandardVertexElementName::Position()
+	void Mesh::Init()
 	{
-		return "POSITION";
-	}
-
-	String StandardVertexElementName::TextureCoord()
-	{
-		return "TEXCOORD";
-	}
-
-	String StandardVertexElementName::Normal()
-	{
-		return "NORMAL";
-	}
-
-	String StandardVertexElementName::Tangent()
-	{
-		return "TANGENT";
-	}
-
-
-	VertexDataBuildHelp::VertexDataBuildHelp()
-		: _pBufferData(nullptr),
-		_bytesOffset(0)
-	{
-
-	}
-
-	void VertexDataBuildHelp::AddElementDesc(const String & name, int32_t index, RenderFormat format, int32_t instanceRate)
-	{
-		VertexElementDesc desc;
-		desc.name = name;
-		desc.index = index;
-		desc.format = format;
-		desc.instanceDataRate = instanceRate;
-		desc.bytesOffset = _bytesOffset;
-		desc.bytesSize = GetRenderFormatNumBits(format) / 8;
-		vertexDataDesc.elementsDesc.push_back(desc);
-		_bytesOffset += desc.bytesSize;
-	}
-
-	void VertexDataBuildHelp::SetNumVertices(int32_t numVertices)
-	{
-		vertexDataDesc.numVertices = numVertices;
-	}
-
-	void VertexDataBuildHelp::Start()
-	{
-		vertexDataDesc.vertexByteSize = _bytesOffset;
-		_buffer = MakeBufferedDataShared(static_cast<size_t>(vertexDataDesc.numVertices * vertexDataDesc.vertexByteSize));
-		_pBufferData = _buffer.get();
-	}
-
-	void VertexDataBuildHelp::Finish()
-	{
-		vertexDataDesc.pData = _buffer;
-		_pBufferData = nullptr;
-		_bytesOffset = 0;
-	}
-
-
-	void Mesh::SaveBin(const Ptr<Writer> & writer, const std::map<Ptr<Material>, int32_t> & materials)
-	{
-		writer->WriteString(_name);
-		//writer->Write<uint32_t>(_dataFlag);
-		writer->Write<int32_t>(static_cast<int32_t>(_vertexDatas.size()));
-		for (auto & slot : _vertexDatas)
+		_renderData = std::make_shared<MeshRenderData>();
+		for (auto & assetMeshElement : _data)
 		{
-			writer->Write<int32_t>(slot.numVertices);
-			writer->Write<int32_t>(slot.vertexByteSize);
-			writer->Write<int32_t>(static_cast<int32_t>(slot.elementsDesc.size()));
-			for (auto & elemDesc : slot.elementsDesc)
+			auto meshElementRender = std::make_shared<MeshElementRenderData>();
+			meshElementRender->_meshElementData = assetMeshElement;
+
+			RenderBufferDesc bufDesc;
+			bufDesc.bindFlag = BUFFER_BIND_VERTEX;
+			bufDesc.cpuAccess = 0;
+			bufDesc.bStructured = false;
+
+			// Vertex buffer
+			meshElementRender->_vertexBuffers.resize(assetMeshElement->vertexData.size());
+			int32_t slotIndex = 0;
+			for (auto & vb : meshElementRender->_vertexBuffers)
 			{
-				writer->WriteString(elemDesc.name);
-				writer->Write<int32_t>(elemDesc.index);
-				writer->Write<uint32_t>(elemDesc.format);
-				writer->Write<int32_t>(elemDesc.instanceDataRate);
-				writer->Write<int32_t>(elemDesc.bytesOffset);
-				writer->Write<int32_t>(elemDesc.bytesSize);
+				vb = Global::GetRenderEngine()->GetRenderFactory()->CreateVertexBuffer();
+				bufDesc.elementSize = assetMeshElement->vertexData[slotIndex]->vertexDesc.bytesSize;
+				bufDesc.numElements = assetMeshElement->vertexData[slotIndex]->GetNumVertices();
+				vb->SetDesc(bufDesc);
+				vb->SetType(VertexBufferType::VERTEX_BUFFER_GEOMETRY);
+				vb->Init(assetMeshElement->vertexData[slotIndex]->rawBuffer.get());
+
+				// Vertex elements desc
+				std::vector<VertexElementDesc> vertexElementDescList;
+				VertexElementDesc vertexElementDesc;
+				vertexElementDesc.instanceDataRate = 0;
+				for (auto & assetVertexElementDesc : assetMeshElement->vertexData[slotIndex]->vertexDesc.elementsDesc)
+				{
+					switch (assetVertexElementDesc.signature)
+					{
+					case MeshVertexElementSignature::MVET_POSITION:
+						vertexElementDesc.name = "POSITION";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					case MeshVertexElementSignature::MVET_TEXCOORD:
+						vertexElementDesc.name = "TEXCOORD";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					case MeshVertexElementSignature::MVET_NORMAL:
+						vertexElementDesc.name = "NORMAL";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					case MeshVertexElementSignature::MVET_TANGENT:
+						vertexElementDesc.name = "TANGENT";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					case MeshVertexElementSignature::MVET_BITANGENT:
+						vertexElementDesc.name = "BITANGENT";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					case MeshVertexElementSignature::MVET_COLOR:
+						vertexElementDesc.name = "COLOR";
+						vertexElementDesc.format = RENDER_FORMAT_R32G32B32_FLOAT;
+						break;
+					default:
+						break;
+					}
+					vertexElementDesc.index = assetVertexElementDesc.signatureIndex;
+					vertexElementDesc.bytesOffset = assetVertexElementDesc.bytesOffset;
+					vertexElementDesc.bytesSize = assetVertexElementDesc.bytesSize;
+
+					vertexElementDescList.push_back(vertexElementDesc);
+				}
+				vb->SetElementsDesc(vertexElementDescList);
+
+				++slotIndex;
 			}
-			if (slot.numVertices > 0)
-				writer->WriteBytes(slot.pData.get(), static_cast<size_t>(slot.numVertices * slot.vertexByteSize));
+
+			// Indices
+			meshElementRender->_indexBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+			bufDesc.bindFlag = BUFFER_BIND_INDEX;
+			bufDesc.cpuAccess = 0;
+			bufDesc.elementSize = sizeof(uint32_t);
+			bufDesc.numElements = static_cast<int32_t>( assetMeshElement->indices.size() );
+			meshElementRender->_indexBuffer->SetDesc(bufDesc);
+			meshElementRender->_indexBuffer->Init(&assetMeshElement->indices[0]);
+
+			// Material
+			if(assetMeshElement->material)
+				meshElementRender->_material = assetMeshElement->material->GetMaterial();
+
+			_renderData->_meshElements.push_back(meshElementRender);
 		}
-
-		writer->Write<int32_t>(static_cast<int32_t>(_indices.size()));
-		if (_indices.size() > 0)
-			writer->WriteBytes(&_indices[0], sizeof(uint32_t) * _indices.size());
-
-		//writer->Write<int32_t>(static_cast<int32_t>(_uvChannelsNumComs.size()));
-		//if (_uvChannelsNumComs.size() > 0)
-		//	writer->WriteBytes(&_uvChannelsNumComs[0], sizeof(uint8_t) * _uvChannelsNumComs.size());
+		
+		InitDepthRenderData();
 	}
 
-	Ptr<Mesh> Mesh::LoadBin(const Ptr<Reader> & reader, const std::vector<Ptr<Material>> & materials)
+	void Mesh::InitDepthRenderData()
 	{
-		auto mesh = std::make_shared<Mesh>();
-
-		reader->ReadString(mesh->_name);
-
-		//uint32_t dataFlag = reader->Read<uint32_t>();
-		//mesh->_dataFlag = dataFlag;
-
-		int32_t numSlots = reader->Read<int32_t>();
-		mesh->_vertexDatas.resize(numSlots);
-		for (int32_t slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+		int32_t index = 0;
+		for (auto & meshElementAsset : _data)
 		{
-			auto & vertexDataDesc = mesh->_vertexDatas[slotIndex];
-			vertexDataDesc.numVertices = reader->Read<int32_t>();
-			vertexDataDesc.vertexByteSize = reader->Read<int32_t>();
-			auto numElemDescs = reader->Read<int32_t>();
-			vertexDataDesc.elementsDesc.resize(numElemDescs);
-			for (int32_t elemIndex = 0; elemIndex < numElemDescs; ++elemIndex)
+			auto & meshElmentRenderData = _renderData->GetMeshElements()[index];
+
+			// Position
 			{
-				auto & elemDesc = vertexDataDesc.elementsDesc[elemIndex];
-				reader->ReadString(elemDesc.name);
-				elemDesc.index = reader->Read<int32_t>();
-				elemDesc.format = static_cast<RenderFormat>(reader->Read<uint32_t>());
-				elemDesc.instanceDataRate = reader->Read<int32_t>();
-				elemDesc.bytesOffset = reader->Read<int32_t>();
-				elemDesc.bytesSize = reader->Read<int32_t>();
+				VertexBufferBuilder builder;
+				for (auto & vertexDataSlot : meshElementAsset->vertexData)
+				{
+					auto positionElmentIndex = vertexDataSlot->FindVertexElement(MeshVertexElementSignature::MVET_POSITION, 0);
+					if (positionElmentIndex >= 0)
+					{
+						builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+						builder.SetNumVertices( vertexDataSlot->GetNumVertices() );
+
+						for (int32_t i = 0; i < builder.numVertices; ++i)
+						{
+							float3 * pPosition = vertexDataSlot->GetElement<float3>(i, MeshVertexElementSignature::MVET_POSITION, 0);
+							builder.Add(*pPosition);
+						}
+						meshElmentRenderData->_depthVertexBuffer.push_back(builder.Finish()->DyCast<VertexBuffer>());
+					}
+				}
 			}
-			auto dataSize = static_cast<size_t>(vertexDataDesc.numVertices * vertexDataDesc.vertexByteSize);
-			if (dataSize > 0)
+			
+			// Texcoord
 			{
-				auto dataBuffer = MakeBufferedDataShared(dataSize);
-				reader->ReadBytes(dataBuffer.get(), dataSize);
-				vertexDataDesc.pData = dataBuffer;
+				VertexBufferBuilder builder;
+				for (auto & vertexDataSlot : meshElementAsset->vertexData)
+				{
+					auto positionElmentIndex = vertexDataSlot->FindVertexElement(MeshVertexElementSignature::MVET_TEXCOORD, 0);
+					if (positionElmentIndex >= 0)
+					{
+						builder.AddElementDesc("TEXCOORD", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+						builder.SetNumVertices(vertexDataSlot->GetNumVertices());
+
+						for (int32_t i = 0; i < builder.numVertices; ++i)
+						{
+							float3 * pTexcoord = vertexDataSlot->GetElement<float3>(i, MeshVertexElementSignature::MVET_TEXCOORD, 0);
+							builder.Add(*pTexcoord);
+						}
+						meshElmentRenderData->_depthVertexBuffer.push_back(builder.Finish()->DyCast<VertexBuffer>());
+					}
+				}
 			}
+
+			++index;
 		}
-
-		int32_t numIndices = reader->Read<int32_t>();
-		mesh->_indices.resize(numIndices);
-		if (numIndices > 0)
-			reader->ReadBytes(&mesh->_indices[0], sizeof(uint32_t) * numIndices);
-
-		//int32_t numUVChannels = reader->Read<int32_t>();
-		//mesh->_uvChannelsNumComs.resize(numUVChannels);
-		//if (numUVChannels > 0)
-		//	reader->ReadBytes(&mesh->_uvChannelsNumComs[0], sizeof(uint8_t) * numUVChannels);
-
-		/*int matIndex = reader->Read<int32_t>();
-		if (matIndex >= 0)
-		{
-			mesh->_material = materials[matIndex];
-		}
-		else
-		{
-			mesh->SetMaterial(std::make_shared<Material>());
-		}*/
-
-		return mesh;
 	}
 
-	const Ptr<RenderMesh> & Mesh::InitRenderData()
-	{
-		_renderData = std::make_shared<RenderMesh>(shared_from_this());
-		return _renderData;
-	}
-
-	Ptr<RenderComponent> Mesh::AddInstanceToScene(
+	Ptr<RenderMeshComponent> Mesh::AddInstanceToScene(
 		const Ptr<Scene> & scene,
 		const XMFLOAT3 & pos,
 		const XMFLOAT3 & scale,
@@ -182,7 +165,7 @@ namespace ToyGE
 		auto sceneObj = std::make_shared<SceneObject>();
 		scene->AddSceneObject(sceneObj);
 
-		auto renderCom = std::make_shared<RenderComponent>();
+		auto renderCom = std::make_shared<RenderMeshComponent>();
 		renderCom->SetMesh(shared_from_this());
 		renderCom->SetPos(pos);
 		renderCom->SetScale(scale);
@@ -195,64 +178,246 @@ namespace ToyGE
 		return renderCom;
 	}
 
-	Ptr<Mesh> Mesh::Copy() const
+	bool Mesh::IsDirty() const
 	{
-		auto mesh = std::make_shared<Mesh>();
-		mesh->_vertexDatas = _vertexDatas;
-		mesh->_indices = _indices;
-		return mesh;
+		return _bDirty || (_renderData && _renderData->IsDirty());
 	}
 
-	RenderMesh::RenderMesh(const Ptr<Mesh> & mesh)
+	void Mesh::UpdateFromRenderData()
 	{
-		auto factory = Global::GetRenderEngine()->GetRenderFactory();
+		if (!_renderData)
+			return;
 
-		//Create Vertex Buffers
-		std::vector<Ptr<RenderBuffer>> verticesBuffers;
-		RenderBufferDesc bufferDesc;
-		bufferDesc.bindFlag = BUFFER_BIND_VERTEX | BUFFER_BIND_IMMUTABLE;
-		bufferDesc.cpuAccess = 0;
-		bufferDesc.structedByteStride = 0;
-		for (int32_t slotIndex = 0; slotIndex < mesh->NumVertexSlots(); ++slotIndex)
+		for (auto & meshElementRender : _renderData->GetMeshElements())
 		{
-			auto & vertexData = mesh->GetVertexData(slotIndex);
-			bufferDesc.elementSize = vertexData.vertexByteSize;
-			bufferDesc.numElements = vertexData.numVertices;
+			auto meshElement = meshElementRender->GetElementData();
 
-			verticesBuffers.push_back(factory->CreateBuffer(bufferDesc, vertexData.pData.get()));
-			verticesBuffers.back()->SetVertexBufferType(VERTEX_BUFFER_GEOMETRY);
-			verticesBuffers.back()->SetVertexElementsDesc(vertexData.elementsDesc);
+			// Vertex data
+			int32_t slotIndex = 0;
+			for (auto & vb : meshElementRender->GetVertexBuffer())
+			{
+				auto vbSize = vb->GetDataSize();
+				meshElement->vertexData[slotIndex]->bufferSize = vbSize;
+				meshElement->vertexData[slotIndex]->rawBuffer = MakeBufferedDataShared(vbSize);
+				vb->Dump(meshElement->vertexData[slotIndex]->rawBuffer.get());
+
+				++slotIndex;
+			}
+
+			// Index
+			auto ib = meshElementRender->GetIndexBuffer();
+			meshElement->indices.resize(ib->GetDesc().numElements);
+			if (ib->GetDesc().elementSize == sizeof(uint32_t))
+			{
+				ib->Dump(&meshElement->indices[0]);
+			}
+			else if(ib->GetDesc().elementSize == sizeof(uint16_t))
+			{
+				auto indexBuf = MakeBufferedDataShared(ib->GetDataSize());
+				ib->Dump(indexBuf.get());
+				auto pIndex = reinterpret_cast<uint16_t*>( indexBuf.get() );
+				for (auto & i : meshElement->indices)
+					i = *(pIndex++);
+			}
+			else
+			{
+				ToyGE_ASSERT_FAIL("Unexpected index buffer format!");
+			}
+		}
+	}
+
+	bool MeshElementRenderData::IsDirty() const
+	{
+		bool bDirty = _bDirty || (_material && _material->IsDirty()) || _indexBuffer->IsDirty();
+		if (!bDirty)
+		{
+			for (auto & vb : _vertexBuffers)
+				if (vb->IsDirty())
+					return true;
+			return false;
+		}
+		else
+			return true;
+	}
+
+
+	void MeshElementRenderData::BindMacros(std::map<String, String> & outMacros)
+	{
+		static const std::map<MeshVertexElementSignature, String> mviMacrosMap =
+		{
+			{ MeshVertexElementSignature::MVET_POSITION,	"MVI_POSITION" },
+			{ MeshVertexElementSignature::MVET_TEXCOORD,	"MVI_TEXCOORD" },
+			{ MeshVertexElementSignature::MVET_NORMAL,		"MVI_NORMAL" },
+			{ MeshVertexElementSignature::MVET_TANGENT,		"MVI_TANGENT" },
+			{ MeshVertexElementSignature::MVET_BITANGENT,	"MVI_BITANGENT" },
+			{ MeshVertexElementSignature::MVET_COLOR,		"MVI_COLOR" }
+		};
+
+		auto meshElement = GetElementData();
+		int32_t numTexCoords = 0;
+		for (auto vertexSlot : meshElement->vertexData)
+		{
+			for (auto & vertexElementDesc : vertexSlot->vertexDesc.elementsDesc)
+			{
+				outMacros[mviMacrosMap.find(vertexElementDesc.signature)->second] = "1";
+
+				if (vertexElementDesc.signature == MeshVertexElementSignature::MVET_TEXCOORD)
+					numTexCoords = std::max<int32_t>(numTexCoords, vertexElementDesc.signatureIndex + 1);
+			}
 		}
 
-		//Create Index Buffer
-		bufferDesc.bindFlag = BUFFER_BIND_INDEX | BUFFER_BIND_IMMUTABLE;
-		bufferDesc.elementSize = sizeof(uint32_t);
-		bufferDesc.numElements = mesh->NumIndices();
-		auto indicesBuffer = factory->CreateBuffer(bufferDesc, &mesh->_indices[0]);
+		outMacros["NUM_TEXCOORD"] = std::to_string(numTexCoords);
+	}
 
-		_input = factory->CreateRenderInput();
-		_input->SetVerticesBuffers(verticesBuffers);
-		_input->SetIndicesBuffers(indicesBuffer);
-		_input->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	void MeshElementRenderData::BindShaderParams(const Ptr<Shader> & shader)
+	{
+
+	}
+
+	void MeshElementRenderData::Draw()
+	{
+		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		rc->SetVertexBuffer(_vertexBuffers);
+		rc->SetIndexBuffer(_indexBuffer);
+		rc->SetPrimitiveTopology(PrimitiveTopology::PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		rc->DrawIndexed(0, 0);
 	}
 
 
+	void MeshElementRenderData::BindDepthMacros(bool bWithOpacityMask, std::map<String, String> & outMacros)
+	{
+		static const std::map<MeshVertexElementSignature, String> mviMacrosMap =
+		{
+			{ MeshVertexElementSignature::MVET_POSITION,	"MVI_POSITION" },
+			{ MeshVertexElementSignature::MVET_TEXCOORD,	"MVI_TEXCOORD" }
+		};
 
+		auto meshElement = GetElementData();
+		int32_t numTexCoords = 0;
+		for (auto & vertexSlot : meshElement->vertexData)
+		{
+			for (auto & vertexElementDesc : vertexSlot->vertexDesc.elementsDesc)
+			{
+				if (mviMacrosMap.count(vertexElementDesc.signature) == 0)
+					continue;
+
+				if (vertexElementDesc.signature == MeshVertexElementSignature::MVET_TEXCOORD)
+				{
+					if (bWithOpacityMask)
+					{
+						numTexCoords = std::max<int32_t>(numTexCoords, vertexElementDesc.signatureIndex + 1);
+
+						outMacros[mviMacrosMap.find(vertexElementDesc.signature)->second] = "1";
+					}
+				}
+				else
+				{
+					outMacros[mviMacrosMap.find(vertexElementDesc.signature)->second] = "1";
+				}
+			}
+		}
+
+		outMacros["NUM_TEXCOORD"] = std::to_string(numTexCoords);
+	}
+
+	void MeshElementRenderData::BindDepthShaderParams(const Ptr<class Shader> & shader, bool bWithOpacityMask)
+	{
+
+	}
+
+	void MeshElementRenderData::DrawDepth(bool bWithOpacityMask)
+	{
+		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		if(bWithOpacityMask)
+			rc->SetVertexBuffer(_depthVertexBuffer);
+		else
+			rc->SetVertexBuffer({ _depthVertexBuffer[0] });
+		rc->SetIndexBuffer(_indexBuffer);
+		rc->SetPrimitiveTopology(PrimitiveTopology::PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		rc->DrawIndexed(0, 0);
+	}
+
+	void MeshElementRenderData::InitWeightBuffer()
+	{
+		VertexBufferBuilder builder;
+		builder.AddElementDesc("WEIGHT", 0, RENDER_FORMAT_R32_FLOAT, 0);
+		builder.SetNumVertices(_vertexBuffers[0]->GetDesc().numElements);
+
+		auto meshElementAsset = _meshElementData.lock();
+
+		int32_t posVertexSlotIndex = 0;
+		for (auto & slot : meshElementAsset->vertexData)
+		{
+			if (slot->GetElement<float3>(0, MeshVertexElementSignature::MVET_POSITION, 0))
+				break;
+			else
+				++posVertexSlotIndex;
+		}
+
+		std::vector<float> weights(builder.numVertices);
+		//float all = 0.0f;
+		int32_t numTriangles = _indexBuffer->GetDesc().numElements / 3;
+		
+		for (int32_t triangleIndex = 0; triangleIndex < numTriangles; ++triangleIndex)
+		{
+			auto i0 = meshElementAsset->indices[triangleIndex * 3 + 0];
+			auto i1 = meshElementAsset->indices[triangleIndex * 3 + 1];
+			auto i2 = meshElementAsset->indices[triangleIndex * 3 + 2];
+			auto p0 = *meshElementAsset->vertexData[posVertexSlotIndex]->GetElement<float3>(i0, MeshVertexElementSignature::MVET_POSITION, 0);
+			auto p1 = *meshElementAsset->vertexData[posVertexSlotIndex]->GetElement<float3>(i1, MeshVertexElementSignature::MVET_POSITION, 0);
+			auto p2 = *meshElementAsset->vertexData[posVertexSlotIndex]->GetElement<float3>(i2, MeshVertexElementSignature::MVET_POSITION, 0);
+
+			float3 v0 = p1 - p0;
+			float3 v1 = p2 - p0;
+			float3 t = cross(v0, v1);
+			float area = length(t) * 0.5f;
+			float areaVertex = area / 3.0f;
+			weights[i0] += areaVertex;
+			weights[i1] += areaVertex;
+			weights[i2] += areaVertex;
+			//all += area * 0.5f;
+		}
+
+		memcpy(builder.dataBuffer.get(), &weights[0], sizeof(float) * weights.size());
+		_weightBuffer = builder.Finish();
+	}
+	
 	Ptr<Mesh> CommonMesh::CreatePlane(float width, float height, int32_t uSplits, int32_t vSplits)
 	{
 		auto mesh = std::make_shared<Mesh>();
-		VertexDataBuildHelp builder;
-		builder.AddElementDesc(StandardVertexElementName::Position(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::TextureCoord(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::Normal(),   0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::Tangent(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+
+		auto meshElement = std::make_shared<MeshElement>();
+		meshElement->vertexData.push_back(std::make_shared<MeshVertexSlotData>());
+
+		VertexBufferBuilder builder;
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_POSITION, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("TEXCOORD", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_TEXCOORD, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("TANGENT", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_TANGENT, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("BITANGENT", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_BITANGENT, 0, i, builder.vertexSize - i });
+		}
+		meshElement->vertexData[0]->vertexDesc.bytesSize = builder.vertexSize;
 
 		builder.SetNumVertices(uSplits * vSplits * 4);
-
-		//mesh->AddDataFlag(MESH_DATA_POS);
-		//mesh->AddDataFlag(MESH_DATA_NORMAL);
-		//mesh->AddDataFlag(MESH_DATA_TANGENT);
-		//mesh->AddDataFlag(MESH_DATA_UV);
 
 		float x = -width * 0.5f;
 		float z =  height * 0.5f;
@@ -265,8 +430,8 @@ namespace ToyGE
 
 		float3 normal = float3(0.0f, 1.0f, 0.0f);
 		float3 tangent = float3(1.0f, 0.0f, 0.0f);
+		float3 bitangent = float3(0.0f, 0.0f, -1.0f);
 
-		builder.Start();
 		int32_t vertexIndex = 0;
 		for (int32_t uSplitIndex = 0; uSplitIndex < uSplits; ++uSplitIndex)
 		{
@@ -276,41 +441,33 @@ namespace ToyGE
 				builder.Add(float3(0.0f, 0.0f, 0.0f));
 				builder.Add(normal);
 				builder.Add(tangent);
+				builder.Add(bitangent);
 
 				builder.Add(float3(x + xStep, 0.0f, z));
 				builder.Add(float3(1.0f, 0.0f, 0.0f));
 				builder.Add(normal);
 				builder.Add(tangent);
+				builder.Add(bitangent);
 
 				builder.Add(float3(x + xStep, 0.0f, z + zStep));
 				builder.Add(float3(1.0f, 1.0f, 0.0f));
 				builder.Add(normal);
 				builder.Add(tangent);
+				builder.Add(bitangent);
 
 				builder.Add(float3(x, 0.0f, z + zStep));
 				builder.Add(float3(0.0f, 1.0f, 0.0f));
 				builder.Add(normal);
 				builder.Add(tangent);
-				/*vertex.pos = float3(x, 0.0f, z);
-				vertex.texCoord[0] = float3(0.0f, 0.0f, 0.0f);
-				mesh->AddVertex(vertex);
-				vertex.pos = float3(x + xStep, 0.0f, z);
-				vertex.texCoord[0] = float3(1.0f, 0.0f, 0.0f);
-				mesh->AddVertex(vertex);
-				vertex.pos = float3(x + xStep, 0.0f, z - zStep);
-				vertex.texCoord[0] = float3(1.0f, 1.0f, 0.0f);
-				mesh->AddVertex(vertex);
-				vertex.pos = float3(x, 0.0f, z - zStep);
-				vertex.texCoord[0] = float3(0.0f, 1.0f, 0.0f);
-				mesh->AddVertex(vertex);*/
+				builder.Add(bitangent);
 
-				mesh->AddIndex(vertexIndex + 0);
-				mesh->AddIndex(vertexIndex + 1);
-				mesh->AddIndex(vertexIndex + 2);
+				meshElement->indices.push_back(vertexIndex + 0);
+				meshElement->indices.push_back(vertexIndex + 1);
+				meshElement->indices.push_back(vertexIndex + 2);
 
-				mesh->AddIndex(vertexIndex + 0);
-				mesh->AddIndex(vertexIndex + 2);
-				mesh->AddIndex(vertexIndex + 3);
+				meshElement->indices.push_back(vertexIndex + 0);
+				meshElement->indices.push_back(vertexIndex + 2);
+				meshElement->indices.push_back(vertexIndex + 3);
 
 				vertexIndex += 4;
 				z += zStep;
@@ -319,9 +476,12 @@ namespace ToyGE
 			x += xStep;
 		}
 
-		builder.Finish();
-		mesh->AddVertexData(builder.vertexDataDesc);
+		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;
+		meshElement->vertexData[0]->rawBuffer = builder.dataBuffer;
 
+		mesh->SetData({ meshElement });
+		mesh->Init();
+		
 		return mesh;
 	}
 
@@ -331,16 +491,25 @@ namespace ToyGE
 			return Ptr<Mesh>();
 
 		auto mesh = std::make_shared<Mesh>();
-		VertexDataBuildHelp builder;
-		builder.AddElementDesc(StandardVertexElementName::Position(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::Normal(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		//mesh->AddDataFlag(MESH_DATA_POS);
-		//mesh->AddDataFlag(MESH_DATA_NORMAL);
+
+		auto meshElement = std::make_shared<MeshElement>();
+		meshElement->vertexData.push_back(std::make_shared<MeshVertexSlotData>());
+
+		VertexBufferBuilder builder;
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_POSITION, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
+		}
+		meshElement->vertexData[0]->vertexDesc.bytesSize = builder.vertexSize;
 
 		builder.SetNumVertices((numSplits + 1) * (numSplits + 1));
 
-		builder.Start();
-		//MeshVertex vertex;
 		for (int32_t thetaIndex = 0; thetaIndex <= numSplits; ++thetaIndex)
 		{
 			float theta = static_cast<float>(thetaIndex) / static_cast<float>(numSplits) * XM_PI;
@@ -352,28 +521,28 @@ namespace ToyGE
 				float z = radius * sin(theta) * cos(phi);
 				builder.Add(normalize(float3(x, y, z)));
 				builder.Add(normalize(float3(x, y, z)));
-				/*vertex.pos = float3(x, y, z);
-				vertex.normal = float3(x, y, z);
-				mesh->AddVertex(vertex);*/
 			}
 		}
-		builder.Finish();
-		mesh->AddVertexData(builder.vertexDataDesc);
+		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;
+		meshElement->vertexData[0]->rawBuffer = builder.dataBuffer;
 
 		for (int32_t thetaIndex = 0; thetaIndex < numSplits; ++thetaIndex)
 		{
 			int32_t offset = thetaIndex * (numSplits + 1);
 			for (int32_t phiIndex = 0; phiIndex < numSplits; ++phiIndex)
 			{
-				mesh->AddIndex(offset + phiIndex);
-				mesh->AddIndex(offset + phiIndex + numSplits + 1);
-				mesh->AddIndex(offset + phiIndex + 1);
+				meshElement->indices.push_back(offset + phiIndex);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 1);
+				meshElement->indices.push_back(offset + phiIndex + 1);
 
-				mesh->AddIndex(offset + phiIndex + 1);
-				mesh->AddIndex(offset + phiIndex + numSplits + 1);
-				mesh->AddIndex(offset + phiIndex + numSplits + 2);
+				meshElement->indices.push_back(offset + phiIndex + 1);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 1);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 2);
 			}
 		}
+
+		mesh->SetData({ meshElement });
+		mesh->Init();
 
 		return mesh;
 	}
@@ -381,13 +550,26 @@ namespace ToyGE
 	Ptr<Mesh> CommonMesh::CreateCone(float height, float angle, int32_t numSplits)
 	{
 		auto mesh = std::make_shared<Mesh>();
-		VertexDataBuildHelp builder;
-		builder.AddElementDesc(StandardVertexElementName::Position(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::Normal(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+
+		auto meshElement = std::make_shared<MeshElement>();
+		meshElement->vertexData.push_back(std::make_shared<MeshVertexSlotData>());
+
+		VertexBufferBuilder builder;
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_POSITION, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
+		}
+		meshElement->vertexData[0]->vertexDesc.bytesSize = builder.vertexSize;
 
 		builder.SetNumVertices((numSplits + 1) * (numSplits + 1) + 1);
 
-		builder.Start();
+		//builder.Start();
 		for (int32_t hIndex = 0; hIndex <= numSplits; ++hIndex)
 		{
 			float h = height - static_cast<float>(hIndex) * height / static_cast<float>(numSplits);
@@ -407,31 +589,34 @@ namespace ToyGE
 		builder.Add(float3(0.0f, 0.0f, 0.0f));
 		builder.Add(float3(0.0f, -1.0f, 0.0f));
 
-		builder.Finish();
-		mesh->AddVertexData(builder.vertexDataDesc);
+		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;
+		meshElement->vertexData[0]->rawBuffer = builder.dataBuffer;
 
 		for (int32_t hIndex = 0; hIndex < numSplits; ++hIndex)
 		{
 			int32_t offset = hIndex * (numSplits + 1);
 			for (int32_t phiIndex = 0; phiIndex < numSplits; ++phiIndex)
 			{
-				mesh->AddIndex(offset + phiIndex);
-				mesh->AddIndex(offset + phiIndex + numSplits + 1);
-				mesh->AddIndex(offset + phiIndex + 1);
+				meshElement->indices.push_back(offset + phiIndex);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 1);
+				meshElement->indices.push_back(offset + phiIndex + 1);
 
-				mesh->AddIndex(offset + phiIndex + 1);
-				mesh->AddIndex(offset + phiIndex + numSplits + 1);
-				mesh->AddIndex(offset + phiIndex + numSplits + 2);
+				meshElement->indices.push_back(offset + phiIndex + 1);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 1);
+				meshElement->indices.push_back(offset + phiIndex + numSplits + 2);
 			}
 		}
 
 		int32_t offset = numSplits * (numSplits + 1);
 		for (int32_t phiIndex = 0; phiIndex < numSplits; ++phiIndex)
 		{
-			mesh->AddIndex(offset + phiIndex);
-			mesh->AddIndex(builder.vertexDataDesc.numVertices - 1);
-			mesh->AddIndex(offset + phiIndex + 1);
+			meshElement->indices.push_back(offset + phiIndex);
+			meshElement->indices.push_back(builder.numVertices - 1);
+			meshElement->indices.push_back(offset + phiIndex + 1);
 		}
+
+		mesh->SetData({ meshElement });
+		mesh->Init();
 
 		return mesh;
 	}
@@ -439,29 +624,40 @@ namespace ToyGE
 	Ptr<Mesh> CommonMesh::CreateCube(float width, float height, float depth)
 	{
 		auto mesh = std::make_shared<Mesh>();
-		VertexDataBuildHelp builder;
-		builder.AddElementDesc(StandardVertexElementName::Position(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
-		builder.AddElementDesc(StandardVertexElementName::Normal(), 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+
+		auto meshElement = std::make_shared<MeshElement>();
+		meshElement->vertexData.push_back(std::make_shared<MeshVertexSlotData>());
+
+		VertexBufferBuilder builder;
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_POSITION, 0, i, builder.vertexSize - i });
+		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
+		}
+		meshElement->vertexData[0]->vertexDesc.bytesSize = builder.vertexSize;
 
 		builder.SetNumVertices(24);
 
 		float3 extent = float3(width, height, depth) * 0.5f;
 		float3 pos[8] = 
 		{
-			float3(-extent.x, -extent.y, -extent.z),
-			float3( extent.x, -extent.y, -extent.z),
-			float3(-extent.x,  extent.y, -extent.z),
-			float3( extent.x,  extent.y, -extent.z),
+			float3(-extent.x(), -extent.y(), -extent.z()),
+			float3( extent.x(), -extent.y(), -extent.z()),
+			float3(-extent.x(),  extent.y(), -extent.z()),
+			float3( extent.x(),  extent.y(), -extent.z()),
 
-			float3(-extent.x, -extent.y,  extent.z),
-			float3( extent.x, -extent.y,  extent.z),
-			float3(-extent.x,  extent.y,  extent.z),
-			float3( extent.x,  extent.y,  extent.z)
+			float3(-extent.x(), -extent.y(),  extent.z()),
+			float3( extent.x(), -extent.y(),  extent.z()),
+			float3(-extent.x(),  extent.y(),  extent.z()),
+			float3( extent.x(),  extent.y(),  extent.z())
 		};
 
 		int32_t idx = 0;
-
-		builder.Start();
 
 		//Face +X
 		builder.Add(pos[1]);
@@ -472,12 +668,12 @@ namespace ToyGE
 		builder.Add(float3(1.0f, 0.0f, 0.0f));
 		builder.Add(pos[7]);
 		builder.Add(float3(1.0f, 0.0f, 0.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 		idx += 4;
 
 		//Face -X
@@ -489,12 +685,12 @@ namespace ToyGE
 		builder.Add(float3(-1.0f, 0.0f, 0.0f));
 		builder.Add(pos[2]);
 		builder.Add(float3(-1.0f, 0.0f, 0.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 		idx += 4;
 
 		//Face +Y
@@ -506,12 +702,12 @@ namespace ToyGE
 		builder.Add(float3(0.0f, 1.0f, 0.0f));
 		builder.Add(pos[7]);
 		builder.Add(float3(0.0f, 1.0f, 0.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 		idx += 4;
 
 		//Face -Y
@@ -523,12 +719,12 @@ namespace ToyGE
 		builder.Add(float3(0.0f, -1.0f, 0.0f));
 		builder.Add(pos[4]);
 		builder.Add(float3(0.0f, -1.0f, 0.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 		idx += 4;
 
 		//Face +Z
@@ -540,12 +736,12 @@ namespace ToyGE
 		builder.Add(float3(0.0f, 0.0f, 1.0f));
 		builder.Add(pos[6]);
 		builder.Add(float3(0.0f, 0.0f, 1.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 		idx += 4;
 
 		//Face -Z
@@ -557,15 +753,18 @@ namespace ToyGE
 		builder.Add(float3(0.0f, 0.0f, -1.0f));
 		builder.Add(pos[3]);
 		builder.Add(float3(0.0f, 0.0f, -1.0f));
-		mesh->AddIndex(idx + 0);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 1);
-		mesh->AddIndex(idx + 2);
-		mesh->AddIndex(idx + 3);
-		mesh->AddIndex(idx + 1);
+		meshElement->indices.push_back(idx + 0);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 1);
+		meshElement->indices.push_back(idx + 2);
+		meshElement->indices.push_back(idx + 3);
+		meshElement->indices.push_back(idx + 1);
 
-		builder.Finish();
-		mesh->AddVertexData(builder.vertexDataDesc);
+		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;
+		meshElement->vertexData[0]->rawBuffer = builder.dataBuffer;
+
+		mesh->SetData({ meshElement });
+		mesh->Init();
 
 		return mesh;
 	}

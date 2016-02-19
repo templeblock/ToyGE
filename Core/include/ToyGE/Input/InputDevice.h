@@ -2,8 +2,8 @@
 #ifndef INPUTDEVICE_H
 #define INPUTDEVICE_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\Math\Math.h"
 #include "boost\signals2.hpp"
 

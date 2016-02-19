@@ -4,6 +4,7 @@
 
 #include "ToyGE\RenderEngine\TransformComponent.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
+#include "ToyGE\RenderEngine\Mesh.h"
 
 namespace ToyGE
 {
@@ -21,24 +22,29 @@ namespace ToyGE
 
 		String GetComponentName() const override;
 
-
-		void SetMesh(const Ptr<Mesh> & mesh)
+		void SetRenderMeshComponent(const Ptr<class RenderMeshComponent> & com)
 		{
-			if (_mesh != mesh)
+			_renderMeshComponent = com;
+		}
+		Ptr<class RenderMeshComponent> GetRenderMeshComponent() const
+		{
+			return _renderMeshComponent.lock();
+		}
+
+
+		void SetMeshElement(const Ptr<MeshElementRenderData> & meshElement)
+		{
+			if (_meshElement != meshElement)
 			{
-				_mesh = mesh;
+				_meshElement = meshElement;
 				UpdateLocalAABB();
 				UpdateBoundsAABB();
 			}
-			else
-			{
-				_mesh = mesh;
-			}
 		}
 
-		const Ptr<Mesh> & GetMesh() const
+		const Ptr<MeshElementRenderData> & GetMeshElement() const
 		{
-			return _mesh;
+			return _meshElement;
 		}
 
 		void SetMaterial(const Ptr<Material> & material)
@@ -99,7 +105,8 @@ namespace ToyGE
 		}
 
 	protected:
-		Ptr<Mesh> _mesh;
+		std::weak_ptr<class RenderMeshComponent> _renderMeshComponent;
+		Ptr<MeshElementRenderData> _meshElement;
 		Ptr<Material> _material;
 		XNA::AxisAlignedBox _localAABB;
 		XNA::AxisAlignedBox _boundsAABB;
@@ -115,6 +122,37 @@ namespace ToyGE
 	private:
 		void UpdateLocalAABB();
 		void UpdateBoundsAABB();
+	};
+
+	class TOYGE_CORE_API RenderMeshComponent : public TransformComponent, public std::enable_shared_from_this<RenderMeshComponent>
+	{
+	public:
+		static String Name()
+		{
+			return "";
+		}
+
+		String GetComponentName() const override
+		{
+			return "";
+		}
+
+		void SetMesh(const Ptr<Mesh> & mesh);
+
+		const Ptr<Mesh> & GetMesh() const
+		{
+			return _mesh;
+		}
+
+		CLASS_GET(SubRenderComponents, std::vector<Ptr<RenderComponent>>, _renderComponents);
+
+	protected:
+		Ptr<Mesh> _mesh;
+		std::vector<Ptr<RenderComponent>> _renderComponents;
+
+		void DoActive() override;
+
+		void OnTranformUpdated() override;
 	};
 }
 

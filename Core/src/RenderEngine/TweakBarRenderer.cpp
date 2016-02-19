@@ -3,7 +3,7 @@
 
 namespace ToyGE
 {
-	void TweakBarRenderer::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void TweakBarRenderer::Render(const Ptr<RenderView> & view)
 	{
 		TwDraw();
 	}

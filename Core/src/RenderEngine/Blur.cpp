@@ -1,209 +1,151 @@
 #include "ToyGE\RenderEngine\Blur.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
 #include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
-#include "ToyGE\Kernel\Util.h"
-#include "ToyGE\Kernel\File.h"
-#include "ToyGE\Math\Math.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
 
 namespace ToyGE
 {
-	std::vector< std::vector<float> > Blur::_gaussTableMap;
-
-	const std::vector<float> & Blur::GaussTable(int32_t blurRadius)
-	{
-		if (_gaussTableMap.size() < blurRadius + 1)
-		{
-			_gaussTableMap.resize(blurRadius + 1);
-		}
-
-		if (_gaussTableMap[blurRadius].size() == 0)
-			GetGaussTable(blurRadius, _gaussTableMap[blurRadius]);
-
-		return _gaussTableMap[blurRadius];
-	}
-
 	void Blur::BoxBlur(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float2 sampleOffsetScale)
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int2 numSamples,
+		float2 blurRadius)
 	{
-		float w = 1.0f / static_cast<float>(blurRadius * 2 + 1);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(w);
+		auto dstTex = dst->GetResource()->Cast<Texture>();
+		auto mipSize = dstTex->GetMipSize(dst->Cast<TextureRenderTargetView>()->mipLevel);
 
-		SeparableBlur(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::BoxBlurX(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale)
-	{
-		float w = 1.0f / static_cast<float>(blurRadius * 2 + 1);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(w);
-
-		BlurX(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::BoxBlurY(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale)
-	{
-		float w = 1.0f / static_cast<float>(blurRadius * 2 + 1);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(w);
-
-		BlurY(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::GaussBlur(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float2 sampleOffsetScale)
-	{
-		auto & gaussTable = GaussTable(blurRadius);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(gaussTable[abs(i)]);
-
-		SeparableBlur(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::GaussBlurX(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale)
-	{
-		auto & gaussTable = GaussTable(blurRadius);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(gaussTable[abs(i)]);
-
-		BlurX(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::GaussBlurY(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale)
-	{
-		auto & gaussTable = GaussTable(blurRadius);
-		std::vector<float> weights;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			weights.push_back(gaussTable[abs(i)]);
-
-		BlurY(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale, weights);
-	}
-
-	void Blur::SeparableBlur(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float2 sampleOffsetScale,
-		const std::vector<float> & weights)
-	{
-		auto & mipSize = src->GetMipSize(srcMipLevel);
-
-		auto texDesc = src->Desc();
-		texDesc.width = std::get<0>(mipSize);
-		texDesc.height = std::get<1>(mipSize);
+		TextureDesc texDesc = dst->GetResource()->Cast<Texture>()->GetDesc();
+		texDesc.width = mipSize.x();
+		texDesc.height = mipSize.y();
 		texDesc.depth = 1;
 		texDesc.arraySize = 1;
 		texDesc.mipLevels = 1;
-		auto tmpTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto tmpTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		BlurX(src, srcMipLevel, srcArrayOffset, tmpTex, 0, 0, blurRadius, sampleOffsetScale.x, weights);
+		BoxBlurX(src, tmpTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), numSamples.x(), blurRadius.x());
 
-		BlurY(tmpTex, 0, 0, dst, dstMipLevel, dstArrayOffset, blurRadius, sampleOffsetScale.y, weights);
+		BoxBlurY(tmpTex->Get()->Cast<Texture>()->GetShaderResourceView(0, 1, 0, 1), dst, numSamples.y(), blurRadius.y());
+	}
 
-		tmpTex->Release();
+	void Blur::BoxBlurX(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius)
+	{
+		float w = 1.0f / (float)numSamples;
+		std::vector<float> weights(numSamples, w);
+
+		BlurX(src, dst, numSamples, blurRadius, weights);
+	}
+
+	void Blur::BoxBlurY(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius)
+	{
+		float w = 1.0f / (float)numSamples;
+		std::vector<float> weights(numSamples, w);
+
+		BlurY(src, dst, numSamples, blurRadius, weights);
+	}
+
+	void Blur::GaussBlur(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int2 numSamples,
+		float2 blurRadius)
+	{
+		auto dstTex = dst->GetResource()->Cast<Texture>();
+		auto mipSize = dstTex->GetMipSize(dst->Cast<TextureRenderTargetView>()->mipLevel);
+
+		TextureDesc texDesc = dst->GetResource()->Cast<Texture>()->GetDesc();
+		texDesc.width = mipSize.x();
+		texDesc.height = mipSize.y();
+		texDesc.depth = 1;
+		texDesc.arraySize = 1;
+		texDesc.mipLevels = 1;
+		auto tmpTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+		GaussBlurX(src, tmpTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), numSamples.x(), blurRadius.x());
+
+		GaussBlurY(tmpTex->Get()->Cast<Texture>()->GetShaderResourceView(0, 1, 0, 1), dst, numSamples.y(), blurRadius.y());
+	}
+
+	void Blur::GaussBlurX(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius)
+	{
+		BlurX(src, dst, numSamples, blurRadius, GetGaussTable(numSamples));
+	}
+
+	void Blur::GaussBlurY(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius)
+	{
+		BlurY(src, dst, numSamples, blurRadius, GetGaussTable(numSamples));
 	}
 
 	void Blur::BlurX(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale,
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius,
 		const std::vector<float> & weights)
 	{
-		auto & mipSize = src->GetMipSize(srcMipLevel);
-		float2 texelSize = 1.0f / float2(static_cast<float>(std::get<0>(mipSize)), static_cast<float>(std::get<1>(mipSize)));
+		auto srcTex = src->GetResource()->Cast<Texture>();
+
+		auto & mipSize = srcTex->GetMipSize(src->Cast<TextureShaderResourceView>()->firstMip);
+		float2 texelSize = 1.0f / float2((float)mipSize.x(), (float)mipSize.y());
+
+		float offsetStep = 0.0f;
+		float offsetStart = 0.0f;
+		if (numSamples > 0)
+		{
+			offsetStep = blurRadius / (float)(numSamples - 1);
+			offsetStart = -blurRadius * 0.5f;
+		}
 
 		std::vector<float2> offsets;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			offsets.push_back(float2(static_cast<float>(i)* texelSize.x * sampleOffsetScale, 0.0f));
+		for (int32_t i = 0; i < numSamples; ++i)
+			offsets.push_back(float2((offsetStart + (float)i * offsetStep)  * texelSize.x(), 0.0f));
 
-		TextureFilter(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius * 2 + 1, offsets, weights);
+		TextureFilter(src, dst, offsets, weights);
 	}
 
 	void Blur::BlurY(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t blurRadius,
-		float sampleOffsetScale,
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		int32_t numSamples,
+		float blurRadius,
 		const std::vector<float> & weights)
 	{
-		auto & mipSize = src->GetMipSize(srcMipLevel);
-		float2 texelSize = 1.0f / float2(static_cast<float>(std::get<0>(mipSize)), static_cast<float>(std::get<1>(mipSize)));
+		auto srcTex = src->GetResource()->Cast<Texture>();
+
+		auto & mipSize = srcTex->GetMipSize(src->Cast<TextureShaderResourceView>()->firstMip);
+		float2 texelSize = 1.0f / float2((float)mipSize.x(), (float)mipSize.y());
+
+		float offsetStep = 0.0f;
+		float offsetStart = 0.0f;
+		if (numSamples > 0)
+		{
+			offsetStep = blurRadius / (float)(numSamples - 1);
+			offsetStart = -blurRadius * 0.5f;
+		}
 
 		std::vector<float2> offsets;
-		for (int32_t i = -blurRadius; i <= blurRadius; ++i)
-			offsets.push_back(float2(0.0f, static_cast<float>(i)* texelSize.y * sampleOffsetScale));
+		for (int32_t i = 0; i < numSamples; ++i)
+			offsets.push_back(float2(0.0f, (offsetStart + (float)i * offsetStep)  * texelSize.y()));
 
-		TextureFilter(src, srcMipLevel, srcArrayOffset, dst, dstMipLevel, dstArrayOffset, blurRadius * 2 + 1, offsets, weights);
+		TextureFilter(src, dst, offsets, weights);
 	}
 }

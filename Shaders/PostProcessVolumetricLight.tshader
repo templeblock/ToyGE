@@ -1,0 +1,113 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D sceneTex;
+Texture2D linearDepthTex;
+Texture2D volumetricLightTex;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float4 texSize;
+float2 lightPosUV;
+float density;
+float intensity;
+float decay;
+
+float4 PPVolumeSetupPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float4 color = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float depth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+  
+    if(depth <= 0.9999f)
+      color = 0.0f;
+    
+    return color;
+}
+
+#define NUM_SAMPLES 8
+  
+float4 RadialBlurPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+  //float density = 0.8f;
+  //float weight = 0.7f;
+  //float decay = 0.9f;
+  
+    float2 uvCenter = vsOut.uv;
+    
+    float centerToLightUVLen = length(uvCenter - lightPosUV);
+    
+    float2 uvStep = (lightPosUV - uvCenter) * density / NUM_SAMPLES;
+    float stepLen = centerToLightUVLen / NUM_SAMPLES;
+    // float stepDecay = (1.0 - decay) / NUM_SAMPLES;
+    
+    float dither = InterleavedGradientNoise(vsOut.pos.xy, 0.5f);
+    dither = dither + 0.5f;
+    
+    float2 sampleUV = uvCenter + dither * uvStep;
+    float sampleWeight = 1.0f;
+    // float sampleDecay = decay;
+    
+    float4 colorAccum = sceneTex.SampleLevel(linearSampler, sampleUV, 0);
+    
+    for(int i = 0; i < NUM_SAMPLES; ++i)
+    {
+        sampleUV += uvStep;
+    
+        float4 sampleColor = sceneTex.SampleLevel(linearSampler, sampleUV, 0);
+        
+        colorAccum += sampleColor * sampleWeight;
+        
+        sampleWeight *= decay;
+    }
+    
+    colorAccum /= NUM_SAMPLES;
+    
+    float2 lightPosH = lightPosUV * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+    float centerLen = sqrt(max(1e-4, dot(lightPosH, lightPosH)));
+    float borderDecay = 1.0f - saturate( (centerLen - 0.0f) / 1.0f );
+    
+    colorAccum *= borderDecay;
+    
+    return float4(colorAccum.xyz * intensity, 1.0f);
+}
+
+float4 BlurVolumetricLightPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float4 centerColor = volumetricLightTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    // float centerDepth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    
+    float4 colorSum = centerColor;
+    
+    float2 dir = lightPosUV - vsOut.uv;
+    float len = length(dir);
+    if(len <= 1e-4)
+        return centerColor;
+        
+    dir /= len;
+    
+    float dither = InterleavedGradientNoise(vsOut.pos.xy, 0.5f);
+    dither = dither + 0.5f;
+    
+    float stepLen =  texSize.z * 1.5;// * (dither + 1.0);
+    // float weightSum = 1e4;
+    
+    [unroll] for(int i = -1; i <= 1; ++i)
+    {
+        if( i == 0 )
+            continue;
+            
+        float2 sampleUV = vsOut.uv + i * dir * stepLen;
+        
+        // float sampleDepth = linearDepthTex.SampleLevel(linearSampler, sampleUV, 0).x;
+        // float weight = 1.0 / (max(1e-4, abs(sampleDepth - centerDepth)));
+        
+        colorSum += volumetricLightTex.SampleLevel(linearSampler, sampleUV, 0);// * weight;
+        // weightSum += weight;
+    }
+    
+    colorSum /= 3;
+    // colorSum /= weightSum;
+    
+    return colorSum;
+}

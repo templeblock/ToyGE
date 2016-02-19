@@ -1,0 +1,23 @@
+#ifndef BILATERALFILTERCOMMON_TSHADER
+#define BILATERALFILTERCOMMON_TSHADER
+
+float GetDepthDiffWeight(float d0, float d1, float diffThreshold)
+{
+    float d = diffThreshold;
+    return saturate( (d - abs(d0 - d1)) / d );
+}
+
+void GetBilateralUpSamplingCoords(float2 centerPosS, out float2 samplePosS[4], out float4 bilinearWeights)
+{
+    float2 lowResPosLU = ceil( (centerPosS - 0.5f) * 0.5f ) - 0.5f;
+    bilinearWeights.xy = frac(centerPosS * 0.5f);
+    bilinearWeights.zw = 1.0f - bilinearWeights.xy;
+    bilinearWeights = bilinearWeights.xzxz * bilinearWeights.yyww;
+    
+    samplePosS[0] = float2(lowResPosLU);
+    samplePosS[1] = float2(lowResPosLU) + float2(1, 0);
+    samplePosS[2] = float2(lowResPosLU) + float2(0, 1);
+    samplePosS[3] = float2(lowResPosLU) + float2(1, 1);
+}
+
+#endif

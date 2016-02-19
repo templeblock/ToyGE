@@ -14,7 +14,7 @@ namespace ToyGE
 		float3 max_1;
 		Math::AxisAlignedBoxToMinMax(aabb1, min_1, max_1);
 
-		return min_0 <= min_1 && max_0 >= max_1;
+		return all(min_0 <= min_1) && all(max_0 >= max_1);
 	}
 
 	OctreeCuller::OctreeCuller(int32_t maxNodeDepth, int32_t maxNodeElements)
@@ -340,8 +340,8 @@ namespace ToyGE
 			float3 elementAABBMin;
 			float3 elementAABBMax;
 			Math::AxisAlignedBoxToMinMax((*itr)->GetBoundsAABB(), elementAABBMin, elementAABBMax);
-			nodeAABBMin = vecMin(nodeAABBMin, elementAABBMin);
-			nodeAABBMax = vecMax(nodeAABBMax, elementAABBMax);
+			nodeAABBMin = min_vec(nodeAABBMin, elementAABBMin);
+			nodeAABBMax = max_vec(nodeAABBMax, elementAABBMax);
 		}
 
 		nodeAABBMin -= 1e-4f;
@@ -509,50 +509,50 @@ namespace ToyGE
 		return std::make_shared<DefaultRenderLightCuller>(maxNodeDepth, maxNodeElements);
 	}
 
-	//XNA::AxisAlignedBox DefaultRenderLightCuller::ComputeNodeAABB(const std::vector<Ptr<Cullable>> & elements)
-	//{
-	//	float3 nodeAABBMin = FLT_MAX;
-	//	float3 nodeAABBMax = FLT_MIN;
-	//	//AxisAlignedBoxToMinMax((*elements.begin())->GetBoundsAABB(), nodeAABBMin, nodeAABBMax);
-	//	bool bNodeAABBValid = false;
-	//	for (auto itr = elements.begin(); itr != elements.end(); ++itr)
-	//	{
-	//		auto light = std::static_pointer_cast<LightComponent>(*itr);
-	//		if (light->Type() == LIGHT_DIRECTIONAL)
-	//		{
-	//			auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
-	//			if (dirLight->IsInfluenceAll())
-	//				continue;
-	//		}
+	XNA::AxisAlignedBox DefaultRenderLightCuller::ComputeNodeAABB(const std::vector<Ptr<Cullable>> & elements)
+	{
+		float3 nodeAABBMin = FLT_MAX;
+		float3 nodeAABBMax = FLT_MIN;
+		//AxisAlignedBoxToMinMax((*elements.begin())->GetBoundsAABB(), nodeAABBMin, nodeAABBMax);
+		bool bNodeAABBValid = false;
+		for (auto itr = elements.begin(); itr != elements.end(); ++itr)
+		{
+			auto light = std::static_pointer_cast<LightComponent>(*itr);
+			if (light->Type() == LIGHT_DIRECTIONAL)
+			{
+				auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
+				if (dirLight->IsInfluenceAll())
+					continue;
+			}
 
-	//		float3 elementAABBMin;
-	//		float3 elementAABBMax;
-	//		Math::AxisAlignedBoxToMinMax((*itr)->GetBoundsAABB(), elementAABBMin, elementAABBMax);
-	//		nodeAABBMin = vecMin(nodeAABBMin, elementAABBMin);
-	//		nodeAABBMax = vecMax(nodeAABBMax, elementAABBMax);
-	//		bNodeAABBValid = true;
-	//	}
-	//	if (!bNodeAABBValid)
-	//	{
-	//		nodeAABBMin = nodeAABBMax = 0.0f;
-	//	}
+			float3 elementAABBMin;
+			float3 elementAABBMax;
+			Math::AxisAlignedBoxToMinMax((*itr)->GetBoundsAABB(), elementAABBMin, elementAABBMax);
+			nodeAABBMin = min_vec(nodeAABBMin, elementAABBMin);
+			nodeAABBMax = max_vec(nodeAABBMax, elementAABBMax);
+			bNodeAABBValid = true;
+		}
+		if (!bNodeAABBValid)
+		{
+			nodeAABBMin = nodeAABBMax = 0.0f;
+		}
 
-	//	XNA::AxisAlignedBox nodeAABB;
-	//	Math::MinMaxToAxisAlignedBox(nodeAABBMin, nodeAABBMax, nodeAABB);
-	//	return nodeAABB;
-	//}
+		XNA::AxisAlignedBox nodeAABB;
+		Math::MinMaxToAxisAlignedBox(nodeAABBMin, nodeAABBMax, nodeAABB);
+		return nodeAABB;
+	}
 
-	//bool DefaultRenderLightCuller::IsExceedNodeAABB(const Ptr<Cullable> & element)
-	//{
-	//	auto light = std::static_pointer_cast<LightComponent>(element);
-	//	if (light->Type() == LIGHT_DIRECTIONAL)
-	//	{
-	//		auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
-	//		if (dirLight->IsInfluenceAll())
-	//			return false;
-	//	}
-	//	return !Contains(_nodeAABB, element->GetBoundsAABB());
-	//}
+	bool DefaultRenderLightCuller::IsExceedNodeAABB(const Ptr<Cullable> & element)
+	{
+		auto light = std::static_pointer_cast<LightComponent>(element);
+		if (light->Type() == LIGHT_DIRECTIONAL)
+		{
+			auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(light);
+			if (dirLight->IsInfluenceAll())
+				return false;
+		}
+		return !Contains(_nodeAABB, element->GetBoundsAABB());
+	}
 
 	template <typename BoundsType>
 	void DefaultRenderLightCuller::_Cull(

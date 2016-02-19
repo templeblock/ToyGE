@@ -2,9 +2,25 @@
 
 namespace ToyGE
 {
-	RasterizerState::RasterizerState(const RasterizerStateDesc & desc)
-		: _desc(desc)
-	{
-
-	}
+	//template <
+	//	FillMode  fillMode,
+	//	CullMode  cullMode,
+	//	bool      bFrontCounterClockwise,
+	//	int32_t   depthBias,
+	//	bool      depthClipEnable,
+	//	bool      scissorEnable,
+	//	bool      multisampleEnable,
+	//	bool      antialiasedLineEnable
+	//>
+	//	Ptr<RasterizerState> RasterizerStateTemplate
+	//	<
+	//	fillMode,
+	//	cullMode,
+	//	bFrontCounterClockwise,
+	//	depthBias,
+	//	depthClipEnable,
+	//	scissorEnable,
+	//	multisampleEnable,
+	//	antialiasedLineEnable
+	//	>::_state;
 }

@@ -2,12 +2,11 @@
 #ifndef BITMAPFONT_H
 #define BITMAPFONT_H
 
-#include "ToyGE\RenderEngine\Font\FreetypeFont.h"
+#include "ToyGE\RenderEngine\Font\Font.h"
 #include "ToyGE\Math\Math.h"
 
 namespace ToyGE
 {
-	class BitmapFont;
 	class Texture;
 
 	struct BitmapFontGlyphRenderInfo
@@ -24,33 +23,41 @@ namespace ToyGE
 		float glyphHeight;
 	};
 
-	class TOYGE_CORE_API BitmapFont : public FreetypeFont, public std::enable_shared_from_this<BitmapFont>
+	class TOYGE_CORE_API BitmapFont : public Font
 	{
 	public:
-		static Ptr<BitmapFont> Load(const Ptr<File> & file);
-
-		virtual void Init(int32_t glyphWidth, int32_t glyphHeight);
-
 		virtual ~BitmapFont() = default;
 
-		float2 GetBitmapGlyphSize();
+		virtual void Init() override;
 
 		const BitmapFontGlyphRenderInfo & GetBitmapFontGlyphRenderInfo(int32_t glyhIndex)
 		{
 			return _glyphRenderInfoTable[glyhIndex];
 		}
 
-		CLASS_GET(RenderMapTex, Ptr<Texture>, _glyphRenderMapTex);
+		CLASS_GET(GlyphRenderMapTex, Ptr<Texture>, _glyphRenderMapTex);
 
-		Ptr<FontRenderer> CreateRenderer() override;
+		virtual Ptr<FontRenderer> CreateRenderer() override;
+
+		CLASS_SET(GlyphSize, int2, _glyphSize);
+		CLASS_GET(GlyphSize, int2, _glyphSize);
 
 	protected:
+		int2 _glyphSize = 32;
+		int32_t borderSpace = 0;
 		Ptr<Texture> _glyphRenderMapTex;
 		std::vector<BitmapFontGlyphRenderInfo> _glyphRenderInfoTable;
 
-		BitmapFont(const Ptr<File> & file);
+		std::shared_ptr<uint8_t> _glyphMapData;
+		int32_t _glyphMapCols;
+		int32_t _glyphMapRows;
+		int32_t _glyphMapSlices;
 
-		void ComputeTexSize(int32_t glyphWidth, int32_t glyphHeight, int32_t & outTexWidth, int32_t & outTexHeight, int32_t & outTexNumSlices);
+		void ComputeTexSize(int32_t numGlyphs, int32_t glyphWidth, int32_t glyphHeight, int32_t & outTexWidth, int32_t & outTexHeight, int32_t & outTexNumSlices);
+
+		void InitGlyphMapDataAndRenderInfo(bool bInitMapData);
+
+		void InitGlyphMapTex(bool bGenMips);
 	};
 }
 

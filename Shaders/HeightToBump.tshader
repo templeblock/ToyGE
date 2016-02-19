@@ -1,0 +1,34 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D heightTex;
+
+SamplerState pointSampler;
+
+float4 texSize;
+float  scale;
+
+float4 HeightToBumpPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+	float hc = heightTex.SampleLevel(pointSampler, vsOut.uv, 0).r;
+  
+    float dhx = 
+    heightTex.SampleLevel(pointSampler, vsOut.uv + float2(texSize.z, 0.0f), 0).r - 
+    heightTex.SampleLevel(pointSampler, vsOut.uv - float2(texSize.z, 0.0f), 0).r;
+    
+    float dhy = 
+    heightTex.SampleLevel(pointSampler, vsOut.uv + float2(0.0f, texSize.w), 0).r -
+    heightTex.SampleLevel(pointSampler, vsOut.uv - float2(0.0f, texSize.w), 0).r;
+    
+    float dhdx = dhx * scale;
+    float dhdy = dhy * scale;
+    
+    float3 s = float3(1.0f, 0.0f, dhdx);
+    float3 t = float3(0.0f, 1.0f, dhdy);
+    
+    float3 n = cross(s, t);
+    n = normalize(n);
+    n = (n + 1.0f) * 0.5f;
+  
+	return float4(n, hc);
+}

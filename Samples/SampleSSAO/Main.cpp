@@ -21,27 +21,25 @@ public:
 		_aoIntensity(0.5f),
 		_aoOnly(false)
 	{
-		_sampleName = L"SSAO";
+		_sampleName = "SSAO";
 	}
 
-	void Startup() override
+	void Init() override
 	{
-		SampleCommon::Startup();
+		SampleCommon::Init();
 
+		auto pp = std::make_shared<PostProcessing>();
 		_ssao = std::make_shared<SSAO>();
-		_renderView->AddPostProcessRender(_ssao);
-
-
-		_renderView->AddPostProcessRender(std::make_shared<HDR>());
-
+		pp->AddRender(_ssao);
+		pp->AddRender(std::make_shared<HDR>());
 		_paramRender = std::make_shared<SharedParamRender>();
-		_paramRender->SetRenderParam("AOTex");
+		_paramRender->SetRenderParam("AmbientOcclusion");
 		_paramRender->SetRenderParamColorWrite(COLOR_WRITE_R);
-		_renderView->AddPostProcessRender(_paramRender);
+		pp->AddRender(_paramRender);
 
-		_renderView->AddPostProcessRender(std::make_shared<GammaCorrection>());
-		_renderView->AddPostProcessRender(std::make_shared<FXAA>());
-		_renderView->AddPostProcessRender(std::make_shared<TweakBarRenderer>());
+		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<TweakBarRenderer>());
+		_renderView->SetPostProcessing(pp);
 
 		auto camera = _renderView->GetCamera();
 		camera->SetPos(XMFLOAT3(10.0f, 2.0f, 0.0f));
@@ -53,7 +51,8 @@ public:
 		//Add Light
 		auto pointLightCom = std::make_shared<PointLightComponent>();
 		pointLightCom->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
-		pointLightCom->SetRadiance(XMFLOAT3(30.0f, 30.0f, 30.0f));
+		pointLightCom->SetColor(1.0f);
+		pointLightCom->SetIntensity(30.0f);
 		pointLightCom->SetCastShadow(true);
 		auto pointLightObj = std::make_shared<SceneObject>();
 		pointLightObj->AddComponent(pointLightCom);
@@ -63,19 +62,28 @@ public:
 		//Add Objs
 		std::vector<Ptr<RenderComponent>> objs;
 
-		auto model = Global::GetResourceManager(RESOURCE_MODEL)->As<ModelManager>()->AcquireResource(L"crytek-sponza/sponza.tx");
-		model->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f), nullptr);
+		{
+			auto model = Asset::Find<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
+			if (!model->IsInit())
+				model->Init();
+			model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f)); 
+		}
 
-		model = Global::GetResourceManager(RESOURCE_MODEL)->As<ModelManager>()->AcquireResource(L"stanford_bunny.tx");
-		model->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f), &objs);
+		{
+			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+			if (!model->IsInit())
+				model->Init();
+			auto objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
 
-		auto mat = std::make_shared<Material>();
-		mat->SetBaseColor(1.0f);
-		mat->SetRoughness(0.0f);
-		mat->SetMetallic(0.0f);
+			auto mat = std::make_shared<Material>();
+			mat->SetBaseColor(1.0f);
+			mat->SetRoughness(0.0f);
+			mat->SetMetallic(0.0f);
 
-		for (auto obj : objs)
-			obj->SetMaterial(mat);
+			for (auto obj : objs->GetSubRenderComponents())
+				obj->SetMaterial(mat);
+		}
+
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "SSAO");
@@ -88,17 +96,17 @@ public:
 		float step = 0.01f;
 
 		TwAddVarRW(_twBar, "AORadius", TW_TYPE_FLOAT, &_aoRadius, nullptr);
-		TwSetParam(_twBar, "AORadius", "min", TW_PARAM_FLOAT, 1, &minMax.x);
+		TwSetParam(_twBar, "AORadius", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "AORadius", "step", TW_PARAM_FLOAT, 1, &step);
 
 		step = 0.1f;
 		TwAddVarRW(_twBar, "AOPower", TW_TYPE_FLOAT, &_aoPower, nullptr);
-		TwSetParam(_twBar, "AOPower", "min", TW_PARAM_FLOAT, 1, &minMax.x);
+		TwSetParam(_twBar, "AOPower", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "AOPower", "step", TW_PARAM_FLOAT, 1, &step);
 
 		step = 0.01f;
 		TwAddVarRW(_twBar, "AOIntensity", TW_TYPE_FLOAT, &_aoIntensity, nullptr);
-		TwSetParam(_twBar, "AOIntensity", "min", TW_PARAM_FLOAT, 1, &minMax.x);
+		TwSetParam(_twBar, "AOIntensity", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "AOIntensity", "step", TW_PARAM_FLOAT, 1, &step);
 	}
 

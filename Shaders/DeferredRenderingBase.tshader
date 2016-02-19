@@ -1,0 +1,50 @@
+// #define MVO_VIEW_POSITION 1
+
+#ifdef GEN_VELOCITY
+#define MVO_PRE_VIEW_POSITION 1
+#endif
+
+#include "MeshVertexInput.tshader"
+#include "GBuffer.tshader"
+
+MeshVertexVSOutputs DeferredRenderingBaseVS(MeshVertexVSInputs inputs)
+{
+	  return GetMeshVSOutputs(inputs);
+}
+
+void DeferredRenderingBasePS(
+    MeshVertexVSOutputs inputs,
+    out float4 gbuffer0 : SV_TARGET0,
+    out float4 gbuffer1 : SV_TARGET1,
+    out float4 gbuffer2 : SV_TARGET2
+    // out float  sceneLinearDepth : SV_TARGET3
+#ifdef GEN_VELOCITY
+    , out float2  velocity : SV_TARGET3
+#endif
+)
+{
+    NormalizeMeshVertexVSOutputs(inputs);
+    Material mat = GetMaterial(GetMaterialInputs(inputs));
+    
+    CLIP_OPCACITYMASK(mat.opacityMask, 0.1);
+    
+    GBuffer gbuf = MaterialToGBuffer(mat);
+    
+    gbuffer0 = gbuf.gbuf0;
+    gbuffer1 = gbuf.gbuf1;
+    gbuffer2 = gbuf.gbuf2;
+
+    // sceneLinearDepth = (inputs.viewPosition.z - viewNear) / viewLength;
+    
+#ifdef GEN_VELOCITY
+    velocity = 0.0f;
+    
+    float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), viewToClipMatrix);
+    preClipPos /= preClipPos.w;
+    
+    float2 velStart = preClipPos.xy * float2(0.5f, -0.5f) + 0.5f;
+    float2 velEnd   = inputs.svPosition.xy * invViewSize;
+    
+    velocity = (velEnd - velStart);
+#endif
+}

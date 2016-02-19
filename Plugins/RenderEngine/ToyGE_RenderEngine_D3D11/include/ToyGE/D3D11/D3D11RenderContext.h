@@ -3,77 +3,56 @@
 #define D3D11RENDERCONTEXT_H
 
 #include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 
 namespace ToyGE
 {
-	class Window;
-
 	class D3D11RenderContext : public RenderContext
 	{
-		typedef void(_stdcall SetSRVFunc)(ID3D11DeviceContext *, uint32_t offset, uint32_t numViews, ID3D11ShaderResourceView * const *);
-		typedef void(_stdcall SetUAVFunc)(ID3D11DeviceContext *, uint32_t offset, uint32_t numViews, ID3D11UnorderedAccessView * const *, const uint32_t *);
-		typedef void(_stdcall SetBufferFunc)(ID3D11DeviceContext *, uint32_t offset, uint32_t numBuffers, ID3D11Buffer * const *);
-		typedef void(_stdcall SetSamplerFunc)(ID3D11DeviceContext *, uint32_t offset, uint32_t numSamplers, ID3D11SamplerState * const *);
-
 	public:
-		D3D11RenderContext(const Ptr<Window> & window, const Ptr<ID3D11DeviceContext> & deviceContext);
-
-		void ResetRenderTargetAndDepthStencil();
 
 	private:
-		Ptr<Window> _window;
-		Ptr<ID3D11DeviceContext> _rawD3DDeviceContext;
+		virtual void DoSetViewport(const RenderViewport & viewport) override;
 
-		int32_t _cachedNumVBs;
+		virtual void DoSetVertexBuffer(const std::vector<Ptr<VertexBuffer>> & vertexBuffers, const std::vector<int32_t> & byteOffsets) override;
 
-		static std::map<ShaderType, std::function<SetSRVFunc>> _setSRVFuncMap;
-		static std::map<ShaderType, std::function<SetUAVFunc>> _setUAVFuncMap;
-		static std::map<ShaderType, std::function<SetBufferFunc>> _setBufferFuncMap;
-		static std::map<ShaderType, std::function<SetSamplerFunc>> _setSamplerFuncMap;
+		virtual void DoSetIndexBuffer(const Ptr<RenderBuffer> & indexBuffer, int32_t bytesOffset) override;
 
-		void DoClearRenderTargets(const std::vector<ResourceView> & renderTargets, const float4 & color) override;
+		virtual void DoSetVertexInputLayout(const Ptr<VertexInputLayout> & vertexInputLayout) override;
 
-		void DoClearDepthStencil(const ResourceView & depthStencil, float depth, uint8_t stencil) override;
+		virtual void DoSetPrimitiveTopology(PrimitiveTopology primitiveTopology) override;
 
-		void DoSetViewport(const RenderViewport & viewport) override;
+		virtual void DoSetRenderTargetsAndDepthStencil(const std::vector<Ptr<RenderTargetView>> & renderTargets, const Ptr<DepthStencilView> & depthStencil) override;
 
-		void DoSetRenderTargetsAndDepthStencil(const std::vector<ResourceView> & targets, const ResourceView & depthStencil) override;
+		virtual void DoSetShaderProgram(ShaderType shaderType, const Ptr<ShaderProgram> & program) override;
 
-		void DoSetRenderInput(const Ptr<RenderInput> & input) override;
+		virtual void DoSetSRVs(ShaderType shaderType, const std::vector<Ptr<ShaderResourceView>> & srvs, int32_t offset) override;
 
-		void DoSetShaderProgram(const Ptr<ShaderProgram> & program) override;
+		virtual void DoSetUAVs(ShaderType shaderType, const std::vector<Ptr<UnorderedAccessView>> & uavs, const std::vector<int32_t> & uavInitialCounts, int32_t offset) override;
 
-		void DoResetShaderProgram(ShaderType shaderType) override;
+		virtual void DoSetSamplers(ShaderType shaderType, const std::vector<Ptr<Sampler>> & samplers, int32_t offset) override;
 
-		void DoSetShaderResources(ShaderType shaderType, const std::vector<ResourceView> & resources, int32_t offset) override;
+		virtual void DoSetRTVsAndUAVs(const std::vector<Ptr<RenderTargetView>> & renderTargets, const Ptr<DepthStencilView> & depthStencil, const std::vector<Ptr<UnorderedAccessView>> & uavs, const std::vector<int32_t> & uavInitialCounts) override;
 
-		void DoSetRTsAndUAVs(const std::vector<ResourceView> & targets, const ResourceView & depthStencil, const std::vector<ResourceView> & uavs) override;
+		virtual void DoSetCBs(ShaderType shaderType, const std::vector<Ptr<RenderBuffer>> & buffers, int32_t offset) override;
 
-		void DoSetUAVs(ShaderType shaderType, const std::vector<ResourceView> & resources, int32_t offset) override;
+		virtual void DoSetBlendState(const Ptr<BlendState> & state, const float4 & blendFactors, uint32_t sampleMask) override;
 
-		void DoSetShaderBuffers(ShaderType shaderType, const std::vector<Ptr<RenderBuffer>> & buffers, int32_t offset) override;
+		virtual void DoSetDepthStencilState(const Ptr<DepthStencilState> & state, uint32_t steincilRef = 0) override;
 
-		void DoSetShaderSamplers(ShaderType shaderType, const std::vector<Ptr<Sampler>> & samplers, int32_t offset) override;
+		virtual void DoSetRasterizerState(const Ptr<RasterizerState> & state) override;
 
-		void DoSetBlendState(const Ptr<BlendState> & state, const std::vector<float> & blendFactors, uint32_t sampleMask) override;
+		virtual void DoDrawVertices(int32_t numVertices, int32_t vertexStart) override;
 
-		void DoSetDepthStencilState(const Ptr<DepthStencilState> & state, uint32_t steincilRef = 0) override;
+		virtual void DoDrawIndexed(int32_t numIndices, int32_t indexStart, int32_t indexBase) override;
 
-		void DoSetRasterizerState(const Ptr<RasterizerState> & state) override;
+		virtual void DoDrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset) override;
 
-		void DoDrawVertices(int32_t numVertices, int32_t vertexStart) override;
+		virtual void DoCompute(int32_t groupX, int32_t groupY, int32_t groupZ) override;
 
-		void DoDrawIndexed(int32_t numIndices, int32_t indexStart, int32_t indexBase) override;
+		virtual void DoClearRenderTarget(const Ptr<RenderTargetView> & renderTarget, const float4 & color) override;
 
-		void DoDrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset) override;
-
-		void DoCompute(int32_t groupX, int32_t groupY, int32_t groupZ) override;
-
-
-		void GetRawD3DRenderTargets(const std::vector<ResourceView> & renderTargets, std::vector<ID3D11RenderTargetView*> & outRenderTargets);
-
-		ID3D11DepthStencilView * GetRawD3DDepthStencil(const ResourceView & depthStencil);
+		virtual void DoClearDepthStencil(const Ptr<DepthStencilView> & depthStencil, float depth, uint8_t stencil) override;
 	};
 }
 

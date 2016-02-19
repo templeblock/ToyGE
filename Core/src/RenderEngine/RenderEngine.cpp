@@ -1,46 +1,138 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderAction.h"
-#include "ToyGE\RenderEngine\RenderFramework.h"
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
 #include "ToyGE\RenderEngine\TransientBuffer.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
+#include "ToyGE\RenderEngine\Scene.h"
+#include "ToyGE\RenderEngine\RenderView.h"
+#include "ToyGE\RenderEngine\SceneRenderer.h"
+#include "ToyGE\RenderEngine\DeferredSceneRenderer.h"
+#include "ToyGE\RenderEngine\OctreeCuller.h"
+#include "ToyGE\RenderEngine\Font\Font.h"
+#include "ToyGE\RenderEngine\Font\FontRenderer.h"
+#include "ToyGE\RenderEngine\Effects\FrameInfoRender.h"
+#include "ToyGE\RenderEngine\LightComponent.h"
+#include "ToyGE\RenderEngine\ShadowTechnique.h"
+#include "ToyGE\RenderEngine\Shader.h"
 
 namespace ToyGE
 {
-	RenderEngine::RenderEngine(const Ptr<Window> & window)
-		: _window(window)
-	{
+	DECLARE_SHADER(, GammaCorrectionPS, SHADER_PS, "GammaCorrection", "GammaCorrectionPS", SM_4);
 
-	}
+	ShaderModel RenderEngine::_shaderModel;
 
 	RenderEngine::~RenderEngine()
 	{
-		TwTerminate();
+		::TwTerminate();
 	}
 
-	void RenderEngine::Startup()
+	void RenderEngine::Init(const RenderEngineInitParams & initParams)
 	{
-		DoStartup();
+		if(!_sceneRender)
+			_sceneRender = std::make_shared<DeferredSceneRenderer>();
 
-		int32_t initNumTextChars = 1024;
-		int32_t charVertexSize = static_cast<int32_t>(sizeof(float) * (3 + 3));
-		_transientBufferMap[TRANSIENTBUFFER_TEXT_VERTEX] = GetRenderFactory()->CreateTransientBuffer(charVertexSize, initNumTextChars * 4, BUFFER_BIND_VERTEX);
-		_transientBufferMap[TRANSIENTBUFFER_TEXT_VERTEX]->Register();
-		_transientBufferMap[TRANSIENTBUFFER_TEXT_INDEX] = GetRenderFactory()->CreateTransientBuffer(sizeof(uint32_t), initNumTextChars * 6, BUFFER_BIND_INDEX);
-		_transientBufferMap[TRANSIENTBUFFER_TEXT_INDEX]->Register();
+		if(!_sceneRenderObjsCuller)
+			SetSceneRenderObjsCuller(std::make_shared<DefaultRenderObjectCuller>());
+
+		if (!_sceneRenderLightsCuller)
+			SetSceneRenderLightsCuller(std::make_shared<DefaultRenderLightCuller>());
 	}
 
-	void RenderEngine::RenderFrame()
+	void RenderEngine::Render()
 	{
-		if (_renderFramework)
-			_renderFramework->Render();
+		std::set<Ptr<LightComponent>> lightsWithShadow;
+		std::set<Ptr<LightComponent>> lightsWithShadowNoRelevantView;
+		std::set<Ptr<LightComponent>> lightsWithRSM;
+		std::set<Ptr<LightComponent>> lightsWithRSMNoRelevantView;
+
+		for (int32_t i = 0; i < Global::GetScene()->NumViews(); ++i)
+		{
+			auto view = Global::GetScene()->GetView(i);
+			view->PreRender();
+			for (auto & light : view->GetViewRenderContext()->lights)
+			{
+				if (light->IsCastShadow() && light->GetShadowTechnique())
+				{
+					if (light->GetShadowTechnique()->IsRelevantWithView())
+					{
+						light->GetShadowTechnique()->SetLight(light);
+						light->GetShadowTechnique()->PrepareShadow(view);
+					}
+					else
+					{
+						lightsWithShadowNoRelevantView.insert(light);
+					}
+
+					lightsWithShadow.insert(light);
+				}
+
+				if (light->IsCastLPV() && light->GetShadowTechnique())
+				{
+					if (light->GetShadowTechnique()->IsRelevantWithView())
+					{
+						light->GetShadowTechnique()->SetLight(light);
+						light->GetShadowTechnique()->PrepareRSM(view);
+					}
+					else
+					{
+						lightsWithRSMNoRelevantView.insert(light);
+					}
+
+					lightsWithRSM.insert(light);
+				}
+			}
+		}
+
+		for (auto & light : lightsWithShadowNoRelevantView)
+		{
+			light->GetShadowTechnique()->SetLight(light);
+			light->GetShadowTechnique()->PrepareShadow(nullptr);
+		}
+		for (auto & light : lightsWithRSMNoRelevantView)
+		{
+			light->GetShadowTechnique()->SetLight(light);
+			light->GetShadowTechnique()->PrepareRSM(nullptr);
+		}
+
+		for (int32_t i = 0; i < Global::GetScene()->NumViews(); ++i)
+		{
+			auto view = Global::GetScene()->GetView(i);
+			GetSceneRenderer()->Render(view);
+		}
+
+		for (int32_t i = 0; i < Global::GetScene()->NumViews(); ++i)
+		{
+			auto view = Global::GetScene()->GetView(i);
+			view->PostRender();
+		}
+
+		// Render info
+		FrameInfoRender::Render(_frameBuffer->GetRenderTargetView(0, 0, 1));
+
+		// GammaCorrection
+		auto gammaCorrectionPS = Shader::FindOrCreate<GammaCorrectionPS>();
+		gammaCorrectionPS->SetScalar("gamma", _gamma);
+		gammaCorrectionPS->SetSRV("inTex", _frameBuffer->GetShaderResourceView());
+		gammaCorrectionPS->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		gammaCorrectionPS->Flush();
+		DrawQuad({ _backBuffer->GetRenderTargetView(0, 0, 1) });
+
 		SwapChain();
+
+		for (auto & light : lightsWithShadow)
+		{
+			light->GetShadowTechnique()->ClearShadow();
+		}
+		for (auto & light : lightsWithRSM)
+		{
+			light->GetShadowTechnique()->ClearRSM();
+		}
 	}
 
-	void RenderEngine::PresentToBackBuffer(const ResourceView & resource)
+	void RenderEngine::SetFullScreen(bool bFullScreen)
 	{
-		Transform(resource, _defaultRenderTarget->CreateTextureView());
+		_bFullScreen = bFullScreen;
 	}
 }
 

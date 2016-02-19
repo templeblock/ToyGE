@@ -3,23 +3,33 @@
 #define DEFERREDSCENERENDERER_H
 
 #include "ToyGE\RenderEngine\SceneRenderer.h"
+#include "ToyGE\RenderEngine\Shader.h"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, DeferredRenderingBaseVS, SHADER_VS, "DeferredRenderingBase", "DeferredRenderingBaseVS", SM_4);
+	DECLARE_SHADER(, DeferredRenderingBasePS, SHADER_PS, "DeferredRenderingBase", "DeferredRenderingBasePS", SM_4);
+	DECLARE_SHADER(, DeferredRenderingLightingPS, SHADER_PS, "DeferredRenderingLightingPS", "DeferredRenderingLightingPS", SM_4);
+	DECLARE_SHADER(, IBLPS, SHADER_PS, "DeferredRenderingLightingPS", "IBLPS", SM_4);
+	DECLARE_SHADER(, DeferredRenderingShadingPS, SHADER_PS, "DeferredRenderingShadingPS", "DeferredRenderingShadingPS", SM_4);
+
 	class TOYGE_CORE_API DeferredSceneRenderer : public SceneRenderer
 	{
 	public:
-		DeferredSceneRenderer();
-
-		virtual void RenderBase(const Ptr<RenderView> & view) override;
-
-		virtual void RenderShading(const Ptr<RenderView> & view) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 	private:
-		Ptr<RenderAction> _baseRender;
-		Ptr<RenderAction> _ligtingRender;
-		Ptr<RenderAction> _shadingRender;
-		Ptr<RenderAction> _translucentRender;
+		void InitBuffers(const Ptr<RenderView> & view);
+
+		void RenderBase(const Ptr<RenderView> & view);
+
+		void RenderLighting(const Ptr<RenderView> & view);
+
+		void RenderShading(const Ptr<RenderView> & view);
+
+	private:
+		Ptr<class SkyBox> _skyBox;
+		Ptr<class TranslucentRendering> _translucentRendering;
 	};
 }
 

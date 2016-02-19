@@ -7,6 +7,10 @@
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, PPVolumeSetupPS, SHADER_PS, "PostProcessVolumetricLight", "PPVolumeSetupPS", SM_4);
+	DECLARE_SHADER(, RadialBlurPS, SHADER_PS, "PostProcessVolumetricLight", "RadialBlurPS", SM_4);
+	DECLARE_SHADER(, BlurVolumetricLightPS, SHADER_PS, "PostProcessVolumetricLight", "BlurVolumetricLightPS", SM_4);
+
 	class LightComponent;
 
 	class TOYGE_CORE_API PostProcessVolumetricLight : public RenderAction
@@ -14,7 +18,7 @@ namespace ToyGE
 	public:
 		PostProcessVolumetricLight();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_SET(Light, Ptr<LightComponent>, _light);
 		CLASS_GET(Light, Ptr<LightComponent>, _light);
@@ -29,20 +33,20 @@ namespace ToyGE
 		CLASS_GET(Decay, float, _decay);
 
 	private:
-		Ptr<RenderEffect> _fx;
 		Ptr<LightComponent> _light;
 		float _density;
 		float _intensity;
 		float _decay;
 
-		Ptr<Texture> Setup(const Ptr<Texture> & sceneTex, const Ptr<Texture> & linearDepthTex);
+		PooledTextureRef Setup(const Ptr<Texture> & sceneTex, const Ptr<Texture> & linearDepthTex);
 
-		Ptr<Texture> RenderVolumetricLight(const Ptr<Texture> & setupTex, const float2 & lightPosUV);
+		PooledTextureRef RenderVolumetricLight(const float2 & lightPosUV, const Ptr<Texture> & setupTex);
 
 		void BlurVolumetricLight(
-			const Ptr<Texture> & volumetricLightTex,
 			const float2 & lightPosUV,
-			const Ptr<Texture> & targetTex);
+			const Ptr<Texture> & linearDepthTex,
+			const Ptr<Texture> & volumetricLightTex,
+			const Ptr<RenderTargetView> & target);
 	};
 }
 

@@ -1,0 +1,352 @@
+#include "Common.tshader"
+#include "Lighting.tshader"
+
+#if LIGHT_TYPE != LIGHT_TYPE_DIRECTIONAL
+#include "MeshVertexInput.tshader"
+#endif
+
+#define POISSON_NUM_SAMPLES 1
+#include "Shadow.tshader"
+
+#define BLUR_RADIUS 2
+#include "BilateralFilter.tshader"
+
+Texture2D sceneLinearClipDepth;
+
+Buffer<float> dither;
+
+float pointLightRadius;
+float spotLightAngle;
+float dirLightDist;
+
+float attenuation;
+float scattering;
+float phaseFunctionParam;
+
+float4 targetSize;
+
+#define NUM_SAMPLES 48
+
+float PhaseFunction_HG(float g, float cosTheta)
+{
+  float g2 = g * g;
+  
+  return 1.0 / (4.0 * PI) * (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * cosTheta, 3.0/2.0);
+}
+
+
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+
+void RenderPointLightVolumePS(
+    MeshVertexVSOutputs vsOut,
+    out float3 color : SV_TARGET)
+{
+    float2 screenPos = vsOut.svPosition.xy;
+    
+    float linearClipDepth = sceneLinearClipDepth.Load(int3(screenPos, 0)).x;
+    float2 clipPosXY = GetClipPosXYFromScreen(screenPos, targetSize.xy);
+    float3 viewPosFromDepth = GetViewPosFromLinear(float3(clipPosXY, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPosFromDepth = mul(float4(viewPosFromDepth, 1.0), viewToWorldMatrix).xyz;
+    
+    // Compute start pos
+    float3 traceDir = normalize(viewWorldPosition - worldPosFromDepth);
+    float3 lightVec = lightPos - viewWorldPosition;
+    float r = pointLightRadius;
+    float dmid = length(cross(lightVec, traceDir));
+    float d = sqrt( r * r -  dmid * dmid);
+    float3 midPos = viewWorldPosition + traceDir * dot(lightVec, traceDir);
+    
+    float3 startPos = worldPosFromDepth;
+    if(length(lightPos - worldPosFromDepth) > pointLightRadius)
+    {
+        startPos = midPos - traceDir * d;
+    }
+    
+    // Compute end pos
+    float3 endPos = viewWorldPosition;
+    if(length(lightVec) > pointLightRadius)
+    {
+        endPos = midPos + traceDir * d;
+    }
+    
+    // Dither
+    float3 step = (endPos - startPos) / NUM_SAMPLES;
+    // uint2 ditherPos = uint2(screenPos) % 4;
+    // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
+    // float ditherOffset = dither.Load(ditherIndex);
+    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
+    startPos = startPos + step * (1 + ditherOffset);
+    step = (endPos - startPos) / NUM_SAMPLES;
+    
+    // Ray Matching
+    float stepLen = length(step);
+    
+    float3 lightAccum = 0.0;
+    
+    float3 p = startPos;
+    
+    float viewDist = length(endPos - p);
+    
+    [unroll] for(
+        int stepIndex = 0;
+        stepIndex < NUM_SAMPLES;
+        ++stepIndex, p += step, viewDist -= stepLen)
+    {
+        float shadow = ComputeShadow(p, 0.0);
+        float3 l_vec = lightPos - p;
+        float l_d = length(l_vec);
+        float3 l_in = GetRadiance(p) * exp(-l_d * attenuation) * shadow;
+        float cosTheta = dot( -l_vec / max(0.001f, l_d), traceDir);
+        float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+        l_i = l_i * exp(-viewDist * attenuation);
+        
+        lightAccum += l_i;
+    }
+    
+    color = lightAccum;
+}
+
+#endif
+
+bool IntersectionRayCone(
+    float3 coneOrigin,
+    float3 coneDir,
+    float  coneAngle,
+    float3 rayOrigin,
+    float3 rayDir,
+    out float t0,
+    out float t1)
+{
+    float cosTheta = cos(coneAngle);
+    float cosTheta2 = cosTheta * cosTheta;
+    float sinTheta = sin(coneAngle);
+    float sinTheta2 = sinTheta * sinTheta;
+    float3 pa = coneOrigin;
+    float3 va = coneDir;
+    float3 p = rayOrigin;
+    float3 v = rayDir;
+    float v_o_va = dot(v, va);
+    float3 dp = p - pa;
+    float dp_o_va = dot(dp, va);
+    float3 v_0 = v - v_o_va * va;
+    float3 v_1 = dp - dp_o_va * va;
+    float A = cosTheta2 * dot(v_0, v_0) - sinTheta2 * v_o_va * v_o_va;
+    float B = 2.0 * cosTheta2 * dot(v_0, v_1) - 2.0 * sinTheta2 * v_o_va * dp_o_va;
+    float C = cosTheta2 * dot(v_1, v_1) - sinTheta2 * dp_o_va * dp_o_va;
+    
+    float d = B * B - 4.0f * A * C;
+    
+    bool intersect;
+    
+    if(d < 0)
+    {
+        t0 = t1 = 0.0f;
+        intersect = false;
+    }
+    else if( A == 0)
+    {
+        t0 = t1 = -C / B;
+        intersect = true;
+    }
+    else if( A > 0 )
+    {
+        d = sqrt(d);
+        t0 = (-B - d) * 0.5f / A;
+        t1 = (-B + d) * 0.5f / A;
+        intersect = true;
+    }
+    else
+    {
+        d = sqrt(d);
+        t0 = (-B + d) * 0.5f / A;
+        t1 = (-B - d) * 0.5f / A;
+        intersect = true;
+    }
+    return intersect;
+}
+
+#define CONE_CLIP 1
+
+
+#if LIGHT_TYPE == LIGHT_TYPE_SPOT
+
+void RenderSpotLightVolumePS(
+    MeshVertexVSOutputs vsOut,
+    out float3 color : SV_TARGET)
+{
+    float2 screenPos = vsOut.svPosition.xy;
+    
+    float linearClipDepth = sceneLinearClipDepth.Load(int3(screenPos, 0)).x;
+    float2 clipPosXY = GetClipPosXYFromScreen(screenPos, targetSize.xy);
+    float3 viewPosFromDepth = GetViewPosFromLinear(float3(clipPosXY, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPosFromDepth = mul(float4(viewPosFromDepth, 1.0), viewToWorldMatrix).xyz;
+    
+    //Compute Start Pos
+    float3 startPos;
+    float3 endPos;
+    
+#if (CONE_CLIP == 1)
+
+    float3 traceDir = (viewWorldPosition - worldPosFromDepth);
+    float lenTraceVec = length(traceDir);
+    traceDir /= lenTraceVec;
+    float t0, t1;
+    bool intersect = IntersectionRayCone(lightPos, lightDir, spotLightAngle, worldPosFromDepth, traceDir, t0, t1);
+    
+    float3 v0 = worldPosFromDepth + traceDir * t0;
+    float3 v1 = worldPosFromDepth + traceDir * t1;
+    
+    if(!intersect)
+    t0 = t1 = -FLT_MAX;
+    
+    bool bV1Start = false;
+    
+    if( dot( normalize(worldPosFromDepth - lightPos), lightDir) >= cos(spotLightAngle) )
+    {
+        startPos = worldPosFromDepth;
+        endPos = startPos + min(min(lenTraceVec, t0 > 0.0 ? t0 : FLT_MAX), t1 > 0.0 ? t1 : FLT_MAX) * traceDir;
+    }
+    else
+    {
+        int idx = -1;
+        startPos = worldPosFromDepth;
+        if(t0 > 0 && t0 < lenTraceVec && dot(v0 - lightPos, lightDir) >= 0)
+        {
+        startPos = v0;
+        idx = 0;
+        }
+        else if(t1 > 0 && t1 < lenTraceVec && dot(v1 - lightPos, lightDir) >= 0)
+        {
+        startPos = v1;
+        idx = 1;
+        }
+        
+        if(idx == -1)
+        endPos = viewWorldPosition;
+        else if(idx == 0)
+        {
+        if(t1 > 0 && t1 < lenTraceVec && dot(v1 - lightPos, lightDir) >= 0)
+            endPos = v1;
+        else
+            endPos = viewWorldPosition;
+        }
+        else
+        {
+        endPos = viewWorldPosition;
+        }
+        
+    }
+    
+#else
+
+    float3 traceDir = normalize(viewWorldPosition - startPos);
+    startPos = worldPosFromDepth;
+    endPos = viewWorldPosition;
+    
+#endif
+
+    // Dither
+    float3 step = (endPos - startPos) / NUM_SAMPLES;
+    // uint2 ditherPos = uint2(screenPos) % 4;
+    // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
+    // float ditherOffset = dither.Load(ditherIndex);
+    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
+    startPos = startPos + step * (1 + ditherOffset);
+    step = (endPos - startPos) / NUM_SAMPLES;
+    
+    // Ray Matching
+    float stepLen = length(step);
+    float3 p = startPos;
+    
+    float viewDist = length(endPos - p);
+    
+    float3 lightAccum = 0.0;
+    
+    [unroll] for(
+        int stepIndex = 0;
+        stepIndex < NUM_SAMPLES;
+        ++stepIndex, p += step, viewDist -= stepLen)
+    {
+        float shadow = ComputeShadow(p, 0.0f);
+        float3 l_vec = lightPos - p;
+        float l_d = length(l_vec);
+        float3 l_in = GetRadiance(p) * exp(-l_d * attenuation) * shadow;
+        float cosTheta = dot( -l_vec / max(0.001f, l_d), traceDir);
+        float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+        l_i = l_i * exp(-viewDist * attenuation);
+        
+        lightAccum += l_i;
+    }
+    //lightAccum = 1.0f;
+    
+    color = lightAccum;
+}
+
+#endif
+
+
+#if LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+
+void RenderDirectionalLightVolumePS(
+    DrawQuadVSOut vsOut,
+    out float3 color : SV_TARGET)
+{
+    float2 screenPos = vsOut.pos.xy;
+    
+    float linearClipDepth = sceneLinearClipDepth.Load(int3(screenPos, 0)).x;
+    float2 clipPosXY = GetClipPosXYFromScreen(screenPos, targetSize.xy);
+    float3 viewPosFromDepth = GetViewPosFromLinear(float3(clipPosXY, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPosFromDepth = mul(float4(viewPosFromDepth, 1.0), viewToWorldMatrix).xyz;
+  
+    //Compute Start Pos
+    float3 startPos = worldPosFromDepth;
+    float3 traceDir = normalize(viewWorldPosition - startPos);
+    
+    //Compute End pos
+    float3 endPos = viewWorldPosition - traceDir / dot(traceDir, viewWorldDir) - traceDir * 0.1;
+        
+    
+    // Dither
+    float3 step = (endPos - startPos) / NUM_SAMPLES;
+    // uint2 ditherPos = uint2(screenPos) % 4;
+    // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
+    // float ditherOffset = dither.Load(ditherIndex);
+    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
+    startPos = startPos + step * (1 + ditherOffset);
+    step = (endPos - startPos) / NUM_SAMPLES;
+    
+    //Ray Matching
+    float stepLen = length(step);
+
+    float3 p = startPos;
+    
+    float3 stepV = mul(step, (float3x3)worldToViewMatrix).xyz;
+    float viewDepthStep = stepV.z;
+    float viewDepth = mul(float4(p, 1.0f), worldToViewMatrix).z;
+    
+    float viewDist = length(endPos - p);
+    
+    float3 lightAccum = 0.0;
+    
+    [unroll] for(
+        int stepIndex = 0;
+        stepIndex < NUM_SAMPLES;
+        ++stepIndex, p += step, viewDist -= stepLen, viewDepth += viewDepthStep)
+    {
+        float shadow = ComputeShadow(p, viewDepth, 0.0);
+        // if(viewDepth < cameraNearFar.x)
+        //     shadow = 0.0f;
+        float l_d = dirLightDist;
+        float3 l_in = GetRadiance(p) * exp(-l_d * attenuation) * shadow;
+        float cosTheta = dot( -lightDir, traceDir );
+        float3 l_i = l_in * scattering * stepLen * PhaseFunction_HG(phaseFunctionParam, cosTheta);
+        l_i = l_i * exp(-viewDist * attenuation);
+        
+        lightAccum += l_i;
+    }
+    //lightAccum = 1.0f;
+    
+    color = lightAccum;
+}
+
+#endif

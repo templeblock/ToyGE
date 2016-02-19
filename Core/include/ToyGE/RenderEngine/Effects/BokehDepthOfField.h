@@ -7,6 +7,14 @@
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, ComputeCoCPS, SHADER_PS, "BokehDepthOfField", "ComputeCoCPS", SM_4);
+	DECLARE_SHADER(, SplitLayersPS, SHADER_PS, "BokehDepthOfField", "SplitLayersPS", SM_4);
+	DECLARE_SHADER(, ComputeBokehPointsPS, SHADER_PS, "BokehDepthOfField", "ComputeBokehPointsPS", SM_4);
+	DECLARE_SHADER(, RenderBokehVS, SHADER_VS, "BokehDepthOfField", "RenderBokehVS", SM_4);
+	DECLARE_SHADER(, RenderBokehGS, SHADER_GS, "BokehDepthOfField", "RenderBokehGS", SM_4);
+	DECLARE_SHADER(, RenderBokehPS, SHADER_PS, "BokehDepthOfField", "RenderBokehPS", SM_4);
+	DECLARE_SHADER(, DOFCombinePS, SHADER_PS, "BokehDepthOfField", "DOFCombinePS", SM_4);
+
 	class Texture;
 	class Camera;
 	class RenderBuffer;
@@ -16,7 +24,7 @@ namespace ToyGE
 	public:
 		BokehDepthOfField();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_GET(BokehIlluminanceThrehold, float, _bokehIlluminanceThreshold);
 		CLASS_SET(BokehIlluminanceThrehold, float, _bokehIlluminanceThreshold);
@@ -49,7 +57,6 @@ namespace ToyGE
 		CLASS_SET(MaxCoC, float, _maxCoC);
 
 	private:
-		Ptr<RenderEffect> _fx;
 		Ptr<Texture> _bokehTex;
 		bool _bDiskBlur;
 		float _bokehIlluminanceThreshold;
@@ -63,25 +70,34 @@ namespace ToyGE
 		float _farAreaLength;
 		float _maxCoC;
 
-		Ptr<Texture> ComputeCoCPhy(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera);
+		PooledTextureRef ComputeCoC(
+			const Ptr<RenderView> & view,
+			const Ptr<Texture> & linearDepthTex,
+			const Ptr<Texture> & depthTex);
 
-		Ptr<Texture> ComputeCoC(const Ptr<Texture> & linearDepth, const Ptr<Texture> & rawDepth, const Ptr<Camera> & camera);
+		void ComputeBokehPoints(
+			const Ptr<Texture> & sceneTex,
+			const Ptr<Texture> & cocTex,
+			PooledBufferRef & outBokehPointsBuffer,
+			PooledTextureRef & outSceneTex);
 
-		std::pair<Ptr<Texture>, Ptr<Texture>> SplitLayers(const Ptr<Texture> & cocTex, const Ptr<Texture> & sceneTex);
 
-		Ptr<Texture> DownSample(const Ptr<Texture> & inputTex);
+		void SplitLayers(
+			const Ptr<Texture> & sceneTex,
+			const Ptr<Texture> & cocTex, 
+			PooledTextureRef & outNearLayerTex,
+			PooledTextureRef & outFarLayerTex);
 
-		Ptr<Texture> DOFDiskBlur(const Ptr<Texture> & inputTex);
+		void Combine(
+			const Ptr<Texture> & sceneTex,
+			const Ptr<Texture> & cocTex,
+			const Ptr<Texture> & nearBlurTex,
+			const Ptr<Texture> & farBlurTex,
+			const Ptr<RenderTargetView> & target);
 
-		std::pair<Ptr<RenderBuffer>, Ptr<Texture>> ComputeBokehPoints(const Ptr<Texture> & inputTex);
-
-		Ptr<Texture> RenderBokeh(const std::initializer_list<Ptr<Texture>> & targets, const Ptr<RenderBuffer> & bokehPointsBuffer);
-
-		void Recombine(
-			const std::vector<Ptr<Texture>> & nearBlurTex,
-			const std::vector<Ptr<Texture>> & farBlurTex,
-			const Ptr<Texture> & bokehTex,
-			const ResourceView & target);
+		void RenderBokeh(
+			const Ptr<RenderBuffer> & bokehPointsBuffer,
+			const Ptr<RenderTargetView> & target);
 	};
 }
 

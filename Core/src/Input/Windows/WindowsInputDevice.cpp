@@ -317,7 +317,7 @@ namespace ToyGE
 	{
 		POINT pos;
 		::GetCursorPos(&pos);
-		::ScreenToClient(Global::GetRenderEngine()->GetWindow()->WindowHandle(), &pos);
+		::ScreenToClient(Global::GetWindow()->WindowHandle(), &pos);
 		return int2(pos.x, pos.y);
 	}
 }
