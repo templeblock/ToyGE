@@ -1,0 +1,9 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+float4 fillColor;
+
+float4 FillPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return fillColor;
+}

@@ -3,16 +3,21 @@
 #define HDR_H
 
 #include "ToyGE\RenderEngine\RenderAction.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, ComputeIlluminaceInitialPS, SHADER_PS, "HDR", "ComputeIlluminaceInitialPS", SM_4);
+	DECLARE_SHADER(, ComputeIlluminaceReducePS, SHADER_PS, "HDR", "ComputeIlluminaceReducePS", SM_4);
+	DECLARE_SHADER(, ComputeAvgAndAdaptedIlumPS, SHADER_PS, "HDR", "ComputeAvgAndAdaptedIlumPS", SM_4);
+	DECLARE_SHADER(, BrightPassPS, SHADER_PS, "HDR", "BrightPassPS", SM_4);
+	DECLARE_SHADER(, HDRCombinePS, SHADER_PS, "HDR", "HDRCombinePS", SM_4);
+
 	class TOYGE_CORE_API HDR : public RenderAction
 	{
 	public:
 		HDR();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_GET(BrightPassThreshold, float, _brightPassThreshold);
 		CLASS_SET(BrightPassThreshold, float, _brightPassThreshold);
@@ -21,19 +26,18 @@ namespace ToyGE
 		CLASS_SET(BrightPassScaleParam, float, _brightPassScaleParam);
 
 	private:
-		Ptr<RenderEffect> _hdrFX;
-		Ptr<Texture> _prevAvgAdaptedIlumTex;
-		Ptr<Texture> _avgAdaptedIlumTex;
+		PooledTextureRef _prevAvgAdaptedIlumTexRef;
+		PooledTextureRef _avgAdaptedIlumTexRef;
 		float _brightPassThreshold;
 		float _brightPassScaleParam;
 
-		Ptr<Texture> SceneDownSample(const Ptr<Texture> & scene);
+		PooledTextureRef SceneDownSample(const Ptr<Texture> & scene);
 
-		void CalcIlluminace(const Ptr<Texture> & downSampleTex);
+		void ComputeIlluminace(const Ptr<Texture> & downSampleTex);
 
-		Ptr<Texture> BrightPass(const Ptr<Texture> & downSampleTex);
+		PooledTextureRef BrightPass(const Ptr<Texture> & downSampleTex);
 
-		Ptr<Texture> BloomDownSample(const Ptr<Texture> & inTex);
+		PooledTextureRef BloomDownSample(const Ptr<Texture> & inTex);
 
 		void BloomUpSample(const Ptr<Texture> & lowResTex, const Ptr<Texture> & highResTex);
 
@@ -41,7 +45,7 @@ namespace ToyGE
 			const Ptr<Texture> & scene,
 			const Ptr<Texture> & blurTex,
 			const Ptr<Texture> & streakTex,
-			const ResourceView & target);
+			const Ptr<RenderTargetView> & target);
 	};
 }
 

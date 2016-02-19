@@ -9,7 +9,7 @@ namespace ToyGE
 	class TOYGE_CORE_API TweakBarRenderer : public RenderAction
 	{
 	public:
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		void Render(const Ptr<RenderView> & view) override;
 	};
 }
 

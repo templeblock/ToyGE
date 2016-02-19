@@ -15,19 +15,19 @@ namespace ToyGE
 			queryDesc.MiscFlags = 0;
 
 			ID3D11Query * query;
-			d3dRE->RawD3DDevice()->CreateQuery(&queryDesc, &query);
+			D3D11RenderEngine::d3d11Device->CreateQuery(&queryDesc, &query);
 			/*if (!query)
 			{
 				return false;
 			}*/
 
-			d3dRE->RawD3DDeviceContex()->End(query);
+			D3D11RenderEngine::d3d11DeviceContext->End(query);
 
 			_query = MakeComShared(query);
 		}
 
 		BOOL bFrameFinished = FALSE;
-		d3dRE->RawD3DDeviceContex()->GetData(_query.get(), &bFrameFinished, sizeof(bFrameFinished), 0);
+		D3D11RenderEngine::d3d11DeviceContext->GetData(_query.get(), &bFrameFinished, sizeof(bFrameFinished), 0);
 
 		if (bFrameFinished == TRUE)
 			return true;
@@ -35,12 +35,6 @@ namespace ToyGE
 			return false;
 	}
 
-
-	D3D11TransientBuffer::D3D11TransientBuffer(int32_t elementSize, int32_t initNumElements, uint32_t bufferBindFlags)
-		: TransientBuffer(elementSize, initNumElements, bufferBindFlags)
-	{
-
-	}
 
 	RetiredFramePtr D3D11TransientBuffer::CreateRetiredFrame() const
 	{

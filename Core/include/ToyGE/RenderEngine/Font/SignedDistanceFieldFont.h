@@ -3,32 +3,38 @@
 #define SIGNEDDISTANCEFIELDFONT_H
 
 #include "ToyGE\RenderEngine\Font\BitmapFont.h"
-#include "ToyGE\Kernel\IOHelper.h"
+#include "ToyGE\RenderEngine\Shader.h"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, SignedDistanceFieldFontComputeGradientPS, SHADER_PS, "SignedDistanceFieldFont", "ComputeGradientPS", SM_4);
+	DECLARE_SHADER(, SignedDistanceFieldFontComputeSignedDistanceOffsetPS, SHADER_PS, "SignedDistanceFieldFont", "ComputeSignedDistanceOffsetPS", SM_4);
+	DECLARE_SHADER(, SignedDistanceFieldFontComputeSignedDistancePS, SHADER_PS, "SignedDistanceFieldFont", "ComputeSignedDistancePS", SM_4);
+
+
 	class SignedDistanceFieldFont : public BitmapFont
 	{
 	public:
-		static Ptr<SignedDistanceFieldFont> Load(const Ptr<File> & file);
-
-		void SaveBin(const Ptr<Writer> & writer);
-
 		virtual ~SignedDistanceFieldFont() = default;
 
-		void Init(int32_t glyphWidth, int32_t glyphHeight) override;
+		void Init() override;
 
-		bool IsBinLoaded() const
+		static const String & GetCacheExtension()
 		{
-			return _bLoadFromBin;
+			static String ex = ".tsdf";
+			return ex;
 		}
 
+		virtual void SaveCache() override;
+
+		Ptr<FontRenderer> CreateRenderer() override;
+
 	protected:
-		bool _bLoadFromBin;
+		bool _bNeedSaveCache = false;
 
-		SignedDistanceFieldFont(const Ptr<File> & file);
+		void InitDistanceData(int2 glyphSize, int3 glyphMapDims, std::shared_ptr<uint8_t> & data, std::vector<RenderDataDesc> & dataDescs);
 
-		void LoadSDFBin(const Ptr<Reader> & reader);
+		bool LoadCache();
 	};
 }
 

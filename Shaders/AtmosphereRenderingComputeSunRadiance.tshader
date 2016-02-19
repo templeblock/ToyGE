@@ -1,0 +1,17 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "AtmosphereRenderingCommon.tshader"
+
+float3 lightRadiance;
+float3 lightDirection;
+float computeSunRadianceHeight;
+
+float3 ComputeSunRadiancePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float cosTheta = dot(float3(0.0f, -1.0f, 0.0f), lightDirection);
+    float2 lutCoord = float2(computeSunRadianceHeight / atmosphereTopHeight, cosTheta * 0.5f + 0.5f);
+    float2 densityToSampleAccum = opticalDepthLUT.SampleLevel(linearSampler, lutCoord, 0).xy;
+    
+    float3 attenuationToSample = exp(- (attenuationR * densityToSampleAccum.x + attenuationM * densityToSampleAccum.y) );
+    return lightRadiance * attenuationToSample;
+}

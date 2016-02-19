@@ -26,12 +26,11 @@ namespace ToyGE
 
 	void WindowsWindow::Init()
 	{
-		//WString wName;
-		//ConvertStr_AToW(_name, wName);
-
 		HINSTANCE hInst = ::GetModuleHandle(nullptr);
 
-		//Register window class
+		auto u16Name = StringConvert<StringEncode::UTF_8, StringEncode::UTF_16>(_name);
+
+		// Register window class
 		WNDCLASSEX wcex;
 		wcex.cbSize = sizeof(WNDCLASSEX);
 		wcex.style = CS_HREDRAW | CS_VREDRAW;
@@ -43,7 +42,7 @@ namespace ToyGE
 		wcex.hCursor = ::LoadCursor(nullptr, IDC_ARROW);
 		wcex.hbrBackground = static_cast<HBRUSH>(::GetStockObject(BLACK_BRUSH));
 		wcex.lpszMenuName = nullptr;
-		wcex.lpszClassName = _name.c_str();
+		wcex.lpszClassName = reinterpret_cast<const wchar_t*>(u16Name.c_str());
 		wcex.hIconSm = 0;
 
 		::RegisterClassEx(&wcex);
@@ -51,16 +50,14 @@ namespace ToyGE
 		RECT rect = { 0, 0, _width, _height };
 		::AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW, false);
 
-		//Create window
-		_hwnd = ::CreateWindowW(_name.c_str(), _name.c_str(), WS_OVERLAPPEDWINDOW,
+		// Create window
+		_hwnd = ::CreateWindowW(wcex.lpszClassName, wcex.lpszClassName, WS_OVERLAPPEDWINDOW,
 			_x, _y,
 			rect.right - rect.left, rect.bottom - rect.top,
 			nullptr, nullptr, hInst, nullptr);
 
 		if (!_hwnd)
-		{
 			return;
-		}
 
 		::GetClientRect(_hwnd, &rect);
 		_x = _x;
@@ -68,13 +65,16 @@ namespace ToyGE
 		_width = rect.right - rect.left;
 		_height = rect.bottom - rect.top;
 
-		//Set window identifier
+		// Set window identifier
 		::SetWindowLongPtrW(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+
+		SetTitle(_title);
 	}
 
-	void WindowsWindow::SetTitle(const WString & tile)
+	void WindowsWindow::SetTitle(const String & title)
 	{
-		::SetWindowTextW(WindowHandle(), tile.c_str());
+		Window::SetTitle(title);
+		::SetWindowTextW(WindowHandle(), reinterpret_cast<const wchar_t*>(StringConvert<StringEncode::UTF_8, StringEncode::UTF_16>(_title).c_str()));
 	}
 
 	void WindowsWindow::Show()

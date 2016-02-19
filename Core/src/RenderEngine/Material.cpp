@@ -1,219 +1,112 @@
 #include "ToyGE\RenderEngine\Material.h"
 #include "ToyGE\Kernel\Global.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\Kernel\Image.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
-#include "ToyGE\Kernel\File.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\Texture.h"
+#include "ToyGE\Kernel\TextureAsset.h"
 
 namespace ToyGE
 {
-	Ptr<Material> Material::LoadBin(const Ptr<Reader> & reader, const WString & basePath)
-	{
-		auto mat = std::make_shared<Material>();
 
-		reader->ReadString(mat->_name);
-		int32_t texMapSize = reader->Read<int32_t>();
-		for (int32_t i = 0; i < texMapSize; ++i)
-		{
-			MaterialTextureType texType = static_cast<MaterialTextureType>( reader->Read<uint32_t>() );
-			int32_t numTex = reader->Read<int32_t>();
-			for (int32_t j = 0; j < numTex; ++j)
-			{
-				MaterialTexture tex;
-				tex.filePath = basePath;
-				reader->ReadString(tex.filePath);
-				tex.texCoordIndex = reader->Read<int8_t>();
-				mat->_textures[texType].push_back(std::move(tex));
-			}
-		}
-
-		mat->_baseColor = reader->Read<float3>();
-		mat->_roughness = reader->Read<float>();
-		mat->_metallic = reader->Read<float>();
-		mat->_bTranslucent = reader->Read<bool>();
-		mat->_opacity = reader->Read<float>();
-		mat->_bRefraction = reader->Read<bool>();
-		mat->_refractionIndex = reader->Read<float>();
-
-		return mat;
-	}
-
-	Material::Material()
-		:_baseColor(1.0f, 1.0f, 1.0f),
-		_roughness(1.0f),
-		_metallic(0.0f),
-		_emissive(0.0f),
-		_bTranslucent(false),
-		_opacity(1.0f),
-		_bRefraction(false),
-		_refractionIndex(1.0f),
-		_bDualFace(false),
-		_bPOM(false),
-		_pomScale(0.05f),
-		_bSubSurfaceScattering(false)
+	void Material::Init()
 	{
 
 	}
-	
-	void Material::SaveBin(const Ptr<Writer> & writer, const WString & skipPrefixPath)
+
+	void Material::BindMacros(std::map<String, String> & outMacros)
 	{
-		writer->WriteString(_name);
-		writer->Write<int32_t>(static_cast<int32_t>(_textures.size()));
-		for (auto & texList : _textures)
+		static const std::map<MaterialTextureType, String> matTexMacrosMap =
 		{
-			auto texType = texList.first;
-			writer->Write<uint32_t>(texType);
-			writer->Write<int32_t>(static_cast<int32_t>(texList.second.size()));
-			for (auto & tex : texList.second)
-			{
-				writer->WriteString(tex.filePath.substr(skipPrefixPath.size()));
-				writer->Write<int8_t>(tex.texCoordIndex);
-			}
-		}
-
-		writer->Write<float3>(_baseColor);
-		writer->Write<float>(_roughness);
-		writer->Write<float>(_metallic);
-		writer->Write<bool>(_bTranslucent);
-		writer->Write<float>(_opacity);
-		writer->Write<bool>(_bRefraction);
-		writer->Write<float>(_refractionIndex);
-	}
-
-	const Ptr<RenderMaterial> & Material::InitRenderData()
-	{
-		_renderData = std::make_shared<RenderMaterial>(shared_from_this());
-		return _renderData;
-	}
-
-	uint32_t Material::GetTypeFlags() const
-	{
-		uint32_t flags = 0;
-
-		for (uint32_t i = 0; i <= MaterialTextureTypeNum::value; ++i)
-		{
-			flags = flags | (static_cast<uint32_t>(NumTextures(static_cast<MaterialTextureType>(i)) > 0) << i);
-		}
-		return flags;
-	}
-
-	void Material::BindMacros(const Ptr<RenderEffect> & effect)
-	{
-		auto renderMat = AcquireRender();
-
-		static const std::vector<MaterialTextureType> matTexTypeList =
-		{
-			MATERIAL_TEXTURE_OPACITYMASK,
-			MATERIAL_TEXTURE_BASECOLOR,
-			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_BUMP,
-			MATERIAL_TEXTURE_EMISSIVE
-		};
-		static const std::vector<String> matTexMacroList =
-		{
-			"MAT_OPACITYMASK_TEX",
-			"MAT_BASECOLOR_TEX",
-			"MAT_ROUGHNESS_TEX",
-			/*"MAT_NORMAL_TEX",
-			"MAT_HEIGHT_TEX"*/
-			"MAT_BUMP_TEX",
-			"MAT_EMISSIVE_TEX"
+			{ MAT_TEX_BASECOLOR,	"MAT_TEX_BASECOLOR" },
+			{ MAT_TEX_ROUGHNESS,	"MAT_TEX_ROUGHNESS" },
+			{ MAT_TEX_METALLIC,		"MAT_TEX_METALLIC" },
+			{ MAT_TEX_BUMP,			"MAT_TEX_BUMP" },
+			{ MAT_TEX_OPACITYMASK,	"MAT_TEX_OPACITYMASK" },
+			{ MAT_TEX_EMISSIVE,		"MAT_TEX_EMISSIVE" }
 		};
 
-		for (size_t i = 0; i < matTexTypeList.size(); ++i)
+		for (auto & macroPair : matTexMacrosMap)
 		{
-			if (renderMat->NumTextures(matTexTypeList[i]) > 0)
-				effect->AddExtraMacro(matTexMacroList[i], "");
+			if (GetTexture(macroPair.first).size() > 0)
+			{
+				outMacros[macroPair.second] = "1";
+				outMacros[macroPair.second + "_TEXCOORDINDEX"] = std::to_string(GetTexture(macroPair.first)[0].texCoordIndex);
+			}
 			else
-				effect->RemoveExtraMacro(matTexMacroList[i]);
+			{
+				outMacros[macroPair.second] = "0";
+			}
 		}
 
 		if(IsPOM())
-			effect->AddExtraMacro("MAT_POM", "");
+			outMacros["MAT_POM"] = "1";
 		else
-			effect->RemoveExtraMacro("MAT_POM");
+			outMacros["MAT_POM"] = "0";
 	}
 
-	void Material::BindParams(const Ptr<RenderEffect> & effect)
+	void Material::BindShaderParams(const Ptr<Shader> & shader)
 	{
-		//std::vector<MacroDesc> macros = effect->GetExtraMacros();
-
-		auto renderMat = AcquireRender();
-
-		static const std::vector<MaterialTextureType> matTexTypeList = 
+		static const std::map<MaterialTextureType, String> matTexVarsMap =
 		{
-			MATERIAL_TEXTURE_OPACITYMASK,
-			MATERIAL_TEXTURE_BASECOLOR,
-			MATERIAL_TEXTURE_ROUGHNESS,
-			MATERIAL_TEXTURE_BUMP,
-			MATERIAL_TEXTURE_EMISSIVE
-		};
-		static const std::vector<String> matTexVarNameList =
-		{
-			"opacityMaskTex",
-			"baseColorTex",
-			"roughnessTex",
-			"bumpTex",
-			"emissiveTex"
+			{ MAT_TEX_BASECOLOR,	"baseColorTex" },
+			{ MAT_TEX_ROUGHNESS,	"roughnessTex" },
+			{ MAT_TEX_METALLIC,		"metallicTex" },
+			{ MAT_TEX_BUMP,			"bumpTex" },
+			{ MAT_TEX_OPACITYMASK,	"opacityMaskTex" },
+			{ MAT_TEX_EMISSIVE,		"emissiveTex" }
 		};
 
-		for (size_t i = 0; i < matTexTypeList.size(); ++i)
+		for (auto & varPair : matTexVarsMap)
 		{
-			if (renderMat->NumTextures(matTexTypeList[i]) > 0)
-				effect->VariableByName(matTexVarNameList[i])->AsShaderResource()
-					->SetValue(renderMat->GetTexture(matTexTypeList[i], 0)->CreateTextureView(0, 0));
-		}
-
-		effect->VariableByName("baseColor")->AsScalar()->SetValue(&_baseColor);
-		effect->VariableByName("roughness")->AsScalar()->SetValue(&_roughness);
-		effect->VariableByName("metallic")->AsScalar()->SetValue(&_metallic);
-		effect->VariableByName("emissive")->AsScalar()->SetValue(&_emissive);
-		effect->VariableByName("pomScale")->AsScalar()->SetValue(&_pomScale);
-		effect->VariableByName("opacity")->AsScalar()->SetValue(&_opacity);
-		effect->VariableByName("refractionIndex")->AsScalar()->SetValue(&_refractionIndex);
-	}
-
-
-	RenderMaterial::RenderMaterial(const Ptr<Material> & material)
-	{
-		auto textureManager = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>();
-		for (auto itr = material->_textures.begin(); itr != material->_textures.end(); ++itr)
-		{
-			for (auto & tex : itr->second)
+			if (GetTexture(varPair.first).size() > 0)
 			{
-				auto renderTex = textureManager->AcquireResource(tex.filePath);
-
-				if (renderTex->Desc().mipLevels == 1)
-				{
-					renderTex = renderTex->CreateMips();
-					textureManager->SetResource(renderTex, tex.filePath);
-				}
-
-				if (renderTex)
-				{
-					_textures[itr->first].push_back(renderTex);
-				}
+				auto tex = GetTexture(varPair.first)[0].texture;
+				shader->SetSRV(varPair.second, tex->GetShaderResourceView());
 			}
 		}
 
-		/*if (material->NumTextures(MATERIAL_TEXTURE_HEIGHT) > 0 && material->NumTextures(MATERIAL_TEXTURE_NORMAL) == 0)
-		{
-			for (auto & tex : _textures[MATERIAL_TEXTURE_HEIGHT])
-			{
-				auto normal = HeightToNormal(tex);
-				_textures[MATERIAL_TEXTURE_NORMAL].push_back(normal);
-			}
-		}*/
+		shader->SetScalar("matBaseColor", _baseColor);
+		shader->SetScalar("matRoughness", _roughness);
+		shader->SetScalar("matMetallic", _metallic);
+		shader->SetScalar("matEmissive", _emissive);
+		//shader->SetScalar("matPomScale", _pomScale);
+		shader->SetScalar("matOpacity", _opacity);
+		shader->SetScalar("matRefractionIndex", _refractionIndex);
+	}
 
-		if (material->NumTextures(MATERIAL_TEXTURE_SPECULAR) > 0 && material->NumTextures(MATERIAL_TEXTURE_ROUGHNESS) == 0)
+	void Material::BindDepthMacros(std::map<String, String> & outMacros)
+	{
+		static const std::map<MaterialTextureType, String> matTexMacrosMap =
 		{
-			for (auto & tex : _textures[MATERIAL_TEXTURE_SPECULAR])
+			{ MAT_TEX_OPACITYMASK,	"MAT_TEX_OPACITYMASK" }
+		};
+
+		for (auto & macroPair : matTexMacrosMap)
+		{
+			if (GetTexture(macroPair.first).size() > 0)
 			{
-				auto roughnessTex = SpecularToRoughness(tex);
-				_textures[MATERIAL_TEXTURE_ROUGHNESS].push_back(roughnessTex);
+				outMacros[macroPair.second] = "1";
+				outMacros[macroPair.second + "_TEXCOORDINDEX"] = std::to_string(GetTexture(macroPair.first)[0].texCoordIndex);
+			}
+			else
+			{
+				outMacros[macroPair.second] = "0";
+			}
+		}
+	}
+
+	void Material::BindDepthShaderParams(const Ptr<Shader> & shader)
+	{
+		static const std::map<MaterialTextureType, String> matTexVarsMap =
+		{
+			{ MAT_TEX_OPACITYMASK,	"opacityMaskTex" }
+		};
+
+		for (auto & varPair : matTexVarsMap)
+		{
+			if (GetTexture(varPair.first).size() > 0)
+			{
+				auto tex = GetTexture(varPair.first)[0].texture;
+				shader->SetSRV(varPair.second, tex->GetShaderResourceView());
 			}
 		}
 	}

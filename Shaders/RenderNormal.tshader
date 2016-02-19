@@ -1,0 +1,40 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+#ifndef COLOR_CHANNEL_0
+#define COLOR_CHANNEL_0 0
+#endif
+#ifndef COLOR_CHANNEL_1
+#define COLOR_CHANNEL_1 1
+#endif
+#ifndef COLOR_CHANNEL_2
+#define COLOR_CHANNEL_2 2
+#endif
+#ifndef COLOR_CHANNEL_3
+#define COLOR_CHANNEL_3 3
+#endif
+
+Texture2D srcTex;
+SamplerState linearSampler;
+
+int bDecode;
+
+float4 RenderNormalPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float4 colorSample = srcTex.SampleLevel(linearSampler, vsOut.uv, 0);
+    
+    float4 outColor = 0.0f;
+    
+    outColor.r = colorSample[COLOR_CHANNEL_0];
+    outColor.g = colorSample[COLOR_CHANNEL_1];
+    outColor.b = colorSample[COLOR_CHANNEL_2];
+    outColor.a = colorSample[COLOR_CHANNEL_3];
+    
+    if(bDecode)
+    {
+        outColor.xyz = DecodeNormal(outColor.xyz);
+        outColor.xyz = outColor.xyz * 0.5 + 0.5;
+    }
+    
+    return outColor;
+}

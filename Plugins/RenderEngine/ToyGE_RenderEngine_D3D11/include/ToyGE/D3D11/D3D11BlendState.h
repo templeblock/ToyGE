@@ -2,25 +2,29 @@
 #ifndef D3D11BLENDSTATE_H
 #define D3D11BLENDSTATE_H
 
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 #include "ToyGE\RenderEngine\BlendState.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
 
 namespace ToyGE
 {
 	class D3D11BlendState : public BlendState
 	{
 	public:
-		D3D11BlendState(const BlendStateDesc & desc);
+		virtual void Init() override;
 
-		const Ptr<ID3D11BlendState> & RawD3DBlendState() const
+		virtual void Release() override
 		{
-			return _rawD3DBlendState;
+			BlendState::Release();
+			_hardwareBlendState = nullptr;
+		}
+
+		const Ptr<ID3D11BlendState> & GetHardwareBlendState() const
+		{
+			return _hardwareBlendState;
 		}
 
 	private:
-		Ptr<ID3D11BlendState> _rawD3DBlendState;
-
-		void CreateD3DBlendStateDesc(const BlendStateDesc & desc, D3D11_BLEND_DESC & d3dBlendStateDesc);
+		Ptr<ID3D11BlendState> _hardwareBlendState;
 	};
 }
 

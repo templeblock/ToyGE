@@ -1,0 +1,94 @@
+#ifndef SCREENSPACETRACING_H
+#define SCREENSPACETRACING_H
+
+#include "Common.tshader"
+
+float4 SampleTexDepth(Texture2D depthTex, SamplerState depthSampler, float4 sampleUV0, float4 sampleUV1, float level)
+{
+    float z0 = depthTex.SampleLevel(depthSampler, sampleUV0.xy, level).x;
+    float z1 = depthTex.SampleLevel(depthSampler, sampleUV0.zw, level).x;
+    float z2 = depthTex.SampleLevel(depthSampler, sampleUV1.xy, level).x;
+    float z3 = depthTex.SampleLevel(depthSampler, sampleUV1.zw, level).x;
+    
+    return float4(z0, z1, z2, z3);
+}
+
+float4 RayTracing(
+    Texture2D depthTex,
+    SamplerState depthSampler,
+    float3 rayStartUVZ, 
+    float3 rayDirUVZ,
+    // float roughness, 
+    int numSamples, 
+    // float3 rayStartClip, 
+    // float3 rayStartUVZ, 
+    float offset)
+{
+    // float3 rayStartView = startPosView;
+    // float3 rayEndView = startPosView + traceDirView;
+    // 
+    // float4 rayStartClip = mul(float4(rayEndView, 1.0f), viewToClipMatrix);
+    // rayStartClip.xyz /= rayEndClip.w; 
+    // 
+    // float4 rayEndClip = mul(float4(rayEndView, 1.0f), viewToClipMatrix);
+    // rayEndClip.xyz /= rayEndClip.w;
+    
+    float rayStepUVBorderScale = 0.9 / max(1e-5, length(rayDirUVZ.xy));
+    float rayStepZBorderScale  = abs(rayDirUVZ.z) < 1e-4 ? FLT_MAX : (0.5 * (sign(rayDirUVZ.z) + 1) - rayStartUVZ.z) / rayDirUVZ.z;
+    float rayStepScale = min(rayStepUVBorderScale, rayStepZBorderScale);
+    float3 rayStepUVZ = rayDirUVZ * rayStepScale;
+    rayStepUVZ /= float(numSamples + 1);
+    
+    // float3 rayStepUVZ = float3(rayStepClip.xy * float2(0.5, -0.5), rayStepClip.z);
+    
+    const float depthTolerance = abs( rayStepUVZ.z ) * 1.0;
+    
+    float lastDepthDiff = abs(rayStepUVZ.z);
+    float3 hitUVz = 0.0f;
+    float hitPos = 0.0f;
+    
+    float4 samplePos = float4(1, 2, 3, 4) + offset;
+    float level = 0.0f;
+    
+    [unroll] for(int i = 0; i < numSamples; i += 4)
+    {
+        float4 sampleUV0 = rayStartUVZ.xyxy + samplePos.xxyy * rayStepUVZ.xyxy;
+        float4 sampleUV1 = rayStartUVZ.xyxy + samplePos.zzww * rayStepUVZ.xyxy;
+        float4 sampleRayDepth = ( rayStartUVZ.z + samplePos * rayStepUVZ.z );
+        
+        float4 sampleTexDepth = SampleTexDepth(depthTex, depthSampler, sampleUV0, sampleUV1, level);
+        
+        float4 depthDiffCur = sampleRayDepth - sampleTexDepth;
+        //bool4 hit = abs(-depthDiffCur - depthTolerance) < depthTolerance;
+        bool4 hit = abs(depthDiffCur - depthTolerance) < depthTolerance;
+        //bool4 hit = depthDiffCur > 0.0f;
+        
+        [branch] if( any(hit) )
+        {
+            float4 depthDiffPre = float4(lastDepthDiff, depthDiffCur.xyz);
+            //float4 hitPos4 = samplePos + saturate( -depthDiffCur / (depthDiffCur - depthDiffPre) );
+            //hitPos4 = hit ? hitPos4 : -FLT_MAX;
+            
+            //hitPos = max( max(hitPos4.x, hitPos4.y), max(hitPos4.z, hitPos4.w) );
+            
+            float4 hitPos4 = samplePos - saturate( depthDiffCur / max(1e-5, depthDiffCur - depthDiffPre) );
+            hitPos4 = hit ? hitPos4 : FLT_MAX;
+            
+            hitPos = min( min(hitPos4.x, hitPos4.y), min(hitPos4.z, hitPos4.w) );
+            
+            //bHit = true;
+            hitUVz = rayStartUVZ + hitPos * rayStepUVZ;
+            
+            break;
+        }
+        
+        lastDepthDiff = depthDiffCur.w;
+        
+        samplePos += 4;
+        //level += 9 * roughness / numSamples;
+    }
+    
+    return float4(hitUVz, hitPos / (numSamples + 1));
+}
+
+#endif

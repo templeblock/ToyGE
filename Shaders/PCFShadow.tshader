@@ -1,0 +1,159 @@
+#ifndef PCFSHADOW_TSHADER
+#define PCFSHADOW_TSHADER
+
+#include "Common.tshader"
+#include "ShadowCommon.tshader"
+
+#ifndef POISSON_NUM_SAMPLES
+#define POISSON_NUM_SAMPLES 7
+#endif
+
+#include "PoissonSampling.tshader"
+
+cbuffer cb_pcf
+{
+    float4 pcfFilterSize[(CASCADED_MAX_SPLITS * 2 + 3)/4];
+};
+
+SamplerComparisonState pcfSampler;
+
+float2 ComputePCFBias(float3 posDx, float3 posDy)
+{
+    float3 bias = cross(posDy, posDx);
+    if( abs(bias.z) != 0)
+        bias.xy /= abs(bias.z);
+    else
+        bias.xy = 0.0f;
+    return bias.xy;
+}
+
+float ComputePCFShadow(
+    Texture2DArray shadowMap,
+    uint shadowMapIndex,
+    float2 shadowUV,
+    float reciever,
+    float3 shadowPosDx,
+    float3 shadowPosDy,
+    float shadowNoise,
+    float2 filterSize)
+{
+    float shadow = 0.0f;
+    
+#if POISSON_NUM_SAMPLES > 1
+
+    shadowNoise *= 2 * PI;
+    float2 sinCos = float2(sin(shadowNoise), cos(shadowNoise));
+    float2x2 rotation = float2x2(
+             sinCos.x, sinCos.y,
+            -sinCos.y, sinCos.x);
+            
+    float2 bias = (ComputePCFBias(shadowPosDx, shadowPosDy));
+    float biasClamp = 1.0 / shadowViewLength;
+    
+    reciever -= 0.2 / shadowViewLength; 
+    
+    float fractionalSamplingError = min(biasClamp, dot(1 * shadowInvViewSize, abs(bias)));
+    reciever -= max(fractionalSamplingError, 0.1 / shadowViewLength);
+    
+    //float2 filterSize = pcfFilterSize;
+    
+    [unroll] for(int i = 0; i < POISSON_NUM_SAMPLES; ++i)
+    {
+        float2 sampleOffset = mul(GetPoissonSample(i), rotation) * filterSize * shadowInvViewSize;
+        
+        float sampleReciever = reciever + clamp(dot(sampleOffset, bias), -biasClamp, biasClamp);
+        
+        float2 sampleUV = shadowUV + sampleOffset;
+        
+        shadow += shadowMap.SampleCmpLevelZero(pcfSampler, float3(sampleUV, shadowMapIndex), sampleReciever);
+    }
+    shadow /= POISSON_NUM_SAMPLES;
+    
+#else
+
+    reciever -= 0.1 / shadowViewLength;
+        
+    shadow += shadowMap.SampleCmpLevelZero(pcfSampler, float3(shadowUV, shadowMapIndex), reciever);
+    
+#endif
+    
+    return shadow;
+}
+
+float ComputeSpotLightShadow(float3 recieveWorldPos, float shadowNoise)
+{
+    float4 recieveShadowClipPos = mul(float4(recieveWorldPos, 1.0), shadowWorldToClipMatrix[0]);
+    float shadowViewDepth = recieveShadowClipPos.w;
+    recieveShadowClipPos /= recieveShadowClipPos.w;
+    
+    float2 shadowUV = recieveShadowClipPos.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+    float reciever = (shadowViewDepth - shadowViewNear) / shadowViewLength;
+    
+    float3 shadowPosDx = ddx_fine(float3(shadowUV, reciever));
+    float3 shadowPosDy = ddy_fine(float3(shadowUV, reciever));
+    
+    return ComputePCFShadow(shadowMap, 0, shadowUV, reciever, shadowPosDx, shadowPosDy, shadowNoise, pcfFilterSize[0].xy);
+}
+
+float ComputePointLightShadow(float3 recieveWorldPos, float shadowNoise)
+{
+    float3 dir = recieveWorldPos - shadowPointLightPos;
+    float len = length(dir); 
+    float3 absDir = abs(dir);
+    
+    float maxAbsDir = max(max(absDir.x, absDir.y), absDir.z);
+    int faceIndex = 0;
+    if(maxAbsDir == absDir.x)
+        faceIndex = dir.x > 0 ? 0 : 1;
+    else if(maxAbsDir == absDir.y)
+        faceIndex = dir.y > 0 ? 2 : 3;
+    else
+        faceIndex = dir.z > 0 ? 4 : 5;
+    
+    float4 recieveShadowClipPos = mul(float4(recieveWorldPos, 1.0), shadowWorldToClipMatrix[faceIndex]);
+    float shadowViewDepth = recieveShadowClipPos.w;
+    recieveShadowClipPos /= recieveShadowClipPos.w;
+    
+    float2 shadowUV = recieveShadowClipPos.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+    float reciever = (shadowViewDepth - shadowViewNear) / shadowViewLength;
+    
+    float3 shadowPosDx = ddx_fine(float3(shadowUV, reciever));
+    float3 shadowPosDy = ddy_fine(float3(shadowUV, reciever));
+    
+    return ComputePCFShadow(shadowMap, faceIndex, shadowUV, reciever, shadowPosDx, shadowPosDy, shadowNoise, pcfFilterSize[0].xy);
+}
+
+float ComputeDirectionalLightShadow(float3 recieveWorldPos, float viewDepth, float shadowNoise)
+{
+    int cascadedSplitIndex = GetCascadedSplitIndex(viewDepth);
+    
+    float shadow;
+    if(cascadedSplitIndex == -1)
+        shadow = 1.0;
+    else
+    {
+        float4 recieveShadowClipPos = mul(float4(recieveWorldPos, 1.0), shadowWorldToClipMatrix[cascadedSplitIndex]);
+        //float shadowViewDepth = recieveShadowClipPos.w;
+        //recieveShadowClipPos /= recieveShadowClipPos.w;
+        
+        float viewLengths[CASCADED_MAX_SPLITS] = (float[CASCADED_MAX_SPLITS])cascadedShadowViewLength; 
+        float viewNears[CASCADED_MAX_SPLITS] = (float[CASCADED_MAX_SPLITS])cascadedShadowViewNear;
+        
+        float2 shadowUV = recieveShadowClipPos.xy * float2(0.5, -0.5) + float2(0.5, 0.5);
+        float reciever = recieveShadowClipPos.z * viewLengths[cascadedSplitIndex] + viewNears[cascadedSplitIndex];
+        
+        float3 shadowPosDx = ddx_fine(float3(shadowUV, reciever));
+        float3 shadowPosDy = ddy_fine(float3(shadowUV, reciever));
+        
+        shadowPosDx.z /= viewLengths[cascadedSplitIndex];
+        shadowPosDy.z /= viewLengths[cascadedSplitIndex];
+        reciever = (reciever - viewNears[cascadedSplitIndex]) / viewLengths[cascadedSplitIndex];
+        
+        float2 filterSize[CASCADED_MAX_SPLITS] = (float2[CASCADED_MAX_SPLITS])pcfFilterSize; 
+        
+        shadow = ComputePCFShadow(shadowMap, cascadedSplitIndex, shadowUV, reciever, shadowPosDx, shadowPosDy, shadowNoise, filterSize[cascadedSplitIndex]);
+    }
+    return shadow;
+}
+
+#endif

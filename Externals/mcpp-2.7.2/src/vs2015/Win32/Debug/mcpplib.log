@@ -1,0 +1,162 @@
+﻿C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V140\Microsoft.CppBuild.targets(368,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+  directive.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\directive.c(131): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\directive.c(761): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+  eval.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(547): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(761): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(766): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(771): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(1321): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\eval.c(1529): warning C4146: unary minus operator applied to unsigned type, result still unsigned
+  expand.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(420): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(423): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(440): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(472): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(477): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(713): warning C4133: '=': incompatible types - from 'LOCATION *' to 'char *'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(938): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(943): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1291): warning C4018: '>=': signed/unsigned mismatch
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1277): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1751): warning C4101: 'arg': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1976): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\expand.c(1978): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+  main.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(392): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(404): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(475): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(493): warning C4013: 'mcpp_use_mem_buffers' undefined; assuming extern returning int
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(495): warning C4013: 'mcpp_lib_main' undefined; assuming extern returning int
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(498): warning C4013: 'mcpp_get_mem_buffer' undefined; assuming extern returning int
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(498): warning C4047: '=': 'char *' differs in levels of indirection from 'int'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(502): warning C4047: '=': 'char *' differs in levels of indirection from 'int'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(477): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _strdup. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(552): note: see declaration of 'strdup'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\main.c(851): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+  mbchar.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\mbchar.c(383): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+  preproc.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\preproc.c(3): warning C4068: unknown pragma
+f:\workspace\toyge\externals\mcpp-2.7.2\src\preproc.c(8): warning C4068: unknown pragma
+  support.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(919): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(930): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1590): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1596): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1600): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1810): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(1687): warning C4102: 'com_start': unreferenced label
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2178): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2319): warning C4090: 'function': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2313): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2319): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\support.c(2579): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+  system.c
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(456): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1303): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1334): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1336): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(427): warning C4101: 'defp': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1644): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1647): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(90): note: see declaration of 'strcat'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1712): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1719): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(90): note: see declaration of 'strcat'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1908): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1952): warning C4996: 'ctime': This function or variable may be unsafe. Consider using ctime_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\time.h(475): note: see declaration of 'ctime'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1953): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1959): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1967): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(1976): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2031): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2071): warning C4996: 'getenv': This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdlib.h(1183): note: see declaration of 'getenv'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2073): warning C4996: 'getenv': This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdlib.h(1183): note: see declaration of 'getenv'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2075): warning C4996: 'getenv': This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdlib.h(1183): note: see declaration of 'getenv'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2177): warning C4996: 'getenv': This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdlib.h(1183): note: see declaration of 'getenv'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2180): warning C4996: 'getenv': This function or variable may be unsafe. Consider using _dupenv_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdlib.h(1183): note: see declaration of 'getenv'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2465): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2475): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C and C++ conformant name: _strdup. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(552): note: see declaration of 'strdup'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2477): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(90): note: see declaration of 'strcat'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2532): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2626): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2660): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2661): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(90): note: see declaration of 'strcat'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(2970): warning C4018: '>=': signed/unsigned mismatch
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3016): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3017): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3031): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3425): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3426): warning C4996: 'strcat': This function or variable may be unsafe. Consider using strcat_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(90): note: see declaration of 'strcat'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3431): warning C4102: 'search': unreferenced label
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3595): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(3930): warning C4996: 'sprintf': This function or variable may be unsafe. Consider using sprintf_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(1769): note: see declaration of 'sprintf'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4254): warning C4090: '=': different 'const' qualifiers
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4650): warning C4996: 'strcpy': This function or variable may be unsafe. Consider using strcpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\string.h(119): note: see declaration of 'strcpy'
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4765): warning C4101: 'i': unreferenced local variable
+f:\workspace\toyge\externals\mcpp-2.7.2\src\system.c(4965): warning C4996: 'fopen': This function or variable may be unsafe. Consider using fopen_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  c:\program files (x86)\windows kits\10\include\10.0.10240.0\ucrt\stdio.h(205): note: see declaration of 'fopen'
+  Generating Code...
+  mcpplib.vcxproj -> F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2015\\..\..\lib\Win32\VS2015\mcpp_d.lib

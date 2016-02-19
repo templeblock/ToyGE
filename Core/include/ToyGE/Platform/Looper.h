@@ -2,8 +2,8 @@
 #ifndef LOOPER_H
 #define LOOPER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\Kernel\Timer.h"
 #include "boost\signals2.hpp"
 
@@ -25,12 +25,14 @@ namespace ToyGE
 			return _frameEvent;
 		}
 
-	protected:
-		void Frame();
+		CLASS_SET(Exit, bool, _bExit);
 
-	private:
+	protected:
 		Timer _timer;
+		bool _bExit = false;
 		boost::signals2::signal<FrameEventType> _frameEvent;
+
+		void Frame();
 	};
 }
 

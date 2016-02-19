@@ -1,8 +1,8 @@
 #include "ToyGE\Platform\Looper.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\GlobalInfo.h"
-#include "ToyGE\Kernel\App.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
+#include "ToyGE\RenderEngine\RenderResource.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
 
 namespace ToyGE
 {
@@ -16,10 +16,10 @@ namespace ToyGE
 		float elapsedTime = 0.0f;
 		elapsedTime = _timer.ElapsedSecondsTime();
 
-		//Update Info
-		auto globalInfo = Global::GetInfo();
+		// Update Info
+		//auto globalInfo = Global::GetInfo();
 
-		//Calculate FPS
+		// Calculate FPS
 		static float _elapsedTimeAccum = 0.0f;
 		static int32_t _frameAccum = 0;
 
@@ -27,21 +27,27 @@ namespace ToyGE
 		_elapsedTimeAccum += elapsedTime;
 		if (_elapsedTimeAccum >= 1.0f)
 		{
-			globalInfo->SetFPS(static_cast<float>(_frameAccum) / _elapsedTimeAccum);
+			Global::GetInfo()->fps = (static_cast<float>(_frameAccum) / _elapsedTimeAccum);
 			_elapsedTimeAccum = _elapsedTimeAccum - std::floor(_elapsedTimeAccum);
 			_frameAccum = 0;
 		}
 
-		globalInfo->SetElapsedTime(elapsedTime);
-		globalInfo->SetFrameCount(globalInfo->GetFrameCount() + 1);
+		Global::GetInfo()->elapsedTime = elapsedTime;
+		++Global::GetInfo()->frameCount;
 
-		//Update App
+		// Update App
 		Global::GetApp()->Update(elapsedTime);
 
-		//Render Frame
-		Global::GetRenderEngine()->RenderFrame();
+		// Render Frame
+		Global::GetRenderEngine()->Render();
 
-		//Frame Event
+		RenderResource::ClearExpiredResources();
+
+		// Tick resource pool
+		TexturePool::Instance().Tick();
+		BufferPool::Instance().Tick();
+
+		// Frame Event
 		_frameEvent();
 	}
 }

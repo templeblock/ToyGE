@@ -1,0 +1,44 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+#include "VSMCommon.tshader"
+
+Texture2D<float> depthTex;
+SamplerState pointSampler;
+
+float2 EVSM2ConvertWithLinearizePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float depth = depthTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float linearDepth = GetDepthFromPespectiveClip(viewNear, viewFar, depth);
+    linearDepth = (linearDepth - viewNear) / viewLength;
+    
+    float depthWarp = WarpDepth2(linearDepth);
+	return float2(depthWarp, depthWarp * depthWarp);
+}
+
+float2 EVSM2ConvertPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float depth = depthTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float depthWarp = WarpDepth2(depth);
+	return float2(depthWarp, depthWarp * depthWarp);
+}
+
+
+float4 EVSM4ConvertWithLinearizePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float depth = depthTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float linearDepth = GetDepthFromPespectiveClip(viewNear, viewFar, depth);
+    linearDepth = (linearDepth - viewNear) / viewLength;
+    
+    float2 depthWarp = WarpDepth4(linearDepth);
+    float2 depthWarp2 = depthWarp * depthWarp;
+	return float4(depthWarp.x, depthWarp2.x, depthWarp.y, depthWarp2.y);
+}
+
+float4 EVSM4ConvertPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float depth = depthTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float2 depthWarp = WarpDepth4(depth);
+	float2 depthWarp2 = depthWarp * depthWarp;
+	return float4(depthWarp.x, depthWarp2.x, depthWarp.y, depthWarp2.y);
+}

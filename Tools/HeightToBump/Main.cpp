@@ -1,93 +1,99 @@
-#include "ToyGE\ToyGE.h"
-#include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\Kernel\ImageHelper.h"
+#include "ToyGE\Kernel\Core.h"
+#include "ToyGE\Kernel\TextureAsset.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
-#include <iostream>
 
 using namespace ToyGE;
 
-void GetParams(
-	const std::vector<String> & args,
-	WString & srcPath,
-	WString & dstPath,
-	bool & bCompress,
-	float & scale)
+String srcPath;
+float scale = 1.0f;
+
+void PrintHelp()
 {
-	bCompress = false;
-	scale = 1.0f;
+	printf("HeightToBump srcPath [-s <scale>] [-f] \n");
+}
 
-	size_t argIndex = 0;
-	while (argIndex < args.size())
+bool ProcessCmd(int nArgs, const char ** args)
+{
+	if (nArgs <= 1)
 	{
-		auto & argStr = args[argIndex];
+		printf("incorrect params\n");
+		return false;
+	}
 
-		if (argStr[0] != '-')
+	srcPath = args[1];
+	if (srcPath == "?")
+	{
+		PrintHelp();
+		return false;
+	}
+
+	for (int i = 2; i < nArgs; ++i)
+	{
+		std::string param = args[i];
+		if (param == "-s")
 		{
-			if (srcPath.size() == 0)
-			{
-				ConvertStr_AToW(argStr, srcPath);
-				++argIndex; continue;
-			}
+			if (i < nArgs - 1)
+				scale = std::stof(args[i + 1]);
 			else
-			{
-				ConvertStr_AToW(argStr, dstPath);
-				++argIndex; continue;
-			}
-		}
-		else
-		{
-			if (argStr[1] == 'c')
-			{
-				bCompress = true;
-				++argIndex; continue;
-			}
-			else if (argStr[1] == 's')
-			{
-				scale = std::stof(args[argIndex + 1]);
-				argIndex += 2; continue;
-			}
+				PrintHelp();
 		}
 	}
 
-	if (dstPath.size() == 0)
-		dstPath = srcPath.substr(0, srcPath.rfind('.')) + L"_bump.dds";
+	return true;
 }
 
-int main(int nArgs, const char ** inArgs)
+class HeightToBump : public App
 {
-	//Init Params
-	std::vector<String> args;
-	for (int i = 1; i < nArgs; ++i)
-		args.push_back(inArgs[i]);
+public:
+	HeightToBump()
+	{
 
-	WString heightImagePath;
-	WString bumpImagePath;
-	bool bCompress;
-	float scale;
-	GetParams(args, heightImagePath, bumpImagePath, bCompress, scale);
+	}
 
-	//Startup Engine
-	File::SetCurrentPathToProgram();
-	Config config;
-	Config::Load(L"../../../Media/Config.xml", config);
-	EngineDriver::StartUp(config, nullptr);
+	virtual void Init() override
+	{
+		srcPath = IdenticalPath(Global::GetPlatform()->GetPathFullName(srcPath));
+		Asset::SetAssetsBasePath(ParentPath(srcPath));
 
-	//Load Height Image
-	auto heightTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTextureFromFile(heightImagePath, TEXTURE_BIND_SHADER_RESOURCE, 0);
+		auto texAsset = std::make_shared<TextureAsset>();
 
-	//Height To Bump
-	auto bumpTex = HeightToBump(heightTex, scale);
+		texAsset->SetPath(srcPath);
+		texAsset->Load();
+		texAsset->Init();
 
-	Ptr<Image> outImage = bumpTex->CreateImage(true);
+		auto heightTex = texAsset->GetTexture();
+		auto bumpTex = ToyGE::HeightToBumpTex(heightTex, scale);
 
-	//Compress
-	if (bCompress)
-		outImage = BlockCompress(outImage, RENDER_FORMAT_BC3_UNORM);
+		auto dstPath = srcPath.substr(0, srcPath.rfind('.')) + "_bump" + TextureAsset::GetExtension();
 
-	//Save DDS File
-	auto outFile = std::make_shared<File>(bumpImagePath, FILE_OPEN_WRITE);
-	outFile->MakeParentPathDirectory();
-	SaveDDSImage(outFile, outImage);
+		auto bumpTexAsset = std::make_shared<TextureAsset>();
+		bumpTexAsset->SetTexture(bumpTex);
+		bumpTex->SetDirty(true);
+		bumpTexAsset->SetPath(dstPath);
+		bumpTexAsset->Save();
+
+		Global::GetLooper()->SetExit(true);
+	}
+
+	virtual void Update(float elapsedTime) override
+	{
+
+	}
+
+	virtual void Destroy() override
+	{
+
+	}
+
+};
+
+int main(int nArgs, const char ** args)
+{
+	if (!ProcessCmd(nArgs, args))
+		return -1;
+
+	EngineDriver::Init(std::make_shared<HeightToBump>());
+	EngineDriver::Run();
 
 	return 0;
 }

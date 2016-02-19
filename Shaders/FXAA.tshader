@@ -1,0 +1,65 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+#define FXAA_PC 1
+#define FXAA_HLSL_5 1
+#define FXAA_QUALITY__PRESET 12
+
+#pragma warning(disable: 4000)
+#include "FXAA3_11.tshader"
+
+Texture2D fxaaInTex;
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float2 fxaaQualityRcpFrame;
+float4 fxaaConsoleRcpFrameOpt;
+float4 fxaaConsoleRcpFrameOpt2;
+float4 fxaaConsole360RcpFrameOpt2;
+
+float fxaaQualitySubpix;
+float fxaaQualityEdgeThreshold;
+float fxaaQualityEdgeThresholdMin;
+float fxaaConsoleEdgeSharpness;
+float fxaaConsoleEdgeThreshold;
+float fxaaConsoleEdgeThresholdMin;
+
+
+float4 FXAASetupPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float3 color = fxaaInTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+    float luma = GetIlluminance(color);
+    return float4(color, luma);
+}
+
+float4 FXAAPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 uv = vsOut.uv;
+    float4 corners = float4(uv - 0.5 * fxaaQualityRcpFrame, uv + 0.5 * fxaaQualityRcpFrame);
+    //float4 corners = float4(uv - 0.5, uv + 0.5);
+    
+    FxaaTex fxaaTex;
+    fxaaTex.tex = fxaaInTex;
+    fxaaTex.smpl = linearSampler;
+    
+    float3 fxaaColor = FxaaPixelShader(
+        uv,
+        corners,
+        fxaaTex,
+        fxaaTex,
+        fxaaTex,
+        fxaaQualityRcpFrame,
+        fxaaConsoleRcpFrameOpt,
+        fxaaConsoleRcpFrameOpt2,
+        fxaaConsole360RcpFrameOpt2,
+        fxaaQualitySubpix,
+        fxaaQualityEdgeThreshold,
+        fxaaQualityEdgeThresholdMin,
+        fxaaConsoleEdgeSharpness,
+        fxaaConsoleEdgeThreshold,
+        fxaaConsoleEdgeThresholdMin,
+        float4(1.0, -1.0, 0.25, -0.25)
+    ).xyz;
+    
+    return float4(fxaaColor, 1.0f);
+}

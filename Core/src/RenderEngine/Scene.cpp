@@ -4,8 +4,7 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\RenderEngine\LightComponent.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
+//#include "ToyGE\RenderEngine\LightComponent.h"
 
 namespace ToyGE
 {
@@ -51,32 +50,5 @@ namespace ToyGE
 		_views.push_back(view);
 		view->SetScene(shared_from_this());
 	}
-
-
-	void Scene::BindParams(const Ptr<RenderEffect> & fx)
-	{
-		fx->VariableByName("ambientColor")->AsScalar()->SetValue(&_ambientColor);
-	}
-
-	//void Scene::InitViews()
-	//{
-	//	auto lightCuller = Global::GetRenderEngine()->GetSceneLightCuller();
-	//	std::set<Ptr<LightComponent>> lightsAll;
-	//	for (auto & view : _views)
-	//	{
-	//		view->InitForRender();
-	//		auto camera = view->GetCamera();
-	//		std::vector<Ptr<Cullable>> lightsCull;
-	//		lightCuller->Cull(camera->GetFrustum(), lightsCull);
-	//		std::vector<Ptr<LightComponent>> lightsView;
-	//		for (auto & elem : lightsCull)
-	//		{
-	//			auto light = std::static_pointer_cast<LightComponent>(elem);
-	//			lightsView.push_back(light);
-	//			lightsAll.insert(light);
-	//		}
-	//		view->SetRenderLightElements(lightsView);
-	//	}
-	//}
 
 }

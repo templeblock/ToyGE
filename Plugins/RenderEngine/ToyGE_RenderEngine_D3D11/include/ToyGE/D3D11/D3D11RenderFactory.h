@@ -3,7 +3,7 @@
 #define D3D11RENDERFACTORY_H
 
 #include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 #include "ToyGE\D3D11\D3D11ShaderProgram.h"
 
 namespace ToyGE
@@ -13,47 +13,37 @@ namespace ToyGE
 	public:
 		D3D11RenderFactory();
 
-		Ptr<RenderInput> CreateRenderInput() override;
-
-		/*ShaderPtr
-			CreateShader
-			(ShaderType shaderType, const void *pData, size_t dataSize, const String & entryName) override;
-		ShaderPtr
-			CreateShaderFromBin
-			(ShaderType shaderType, const std::shared_ptr<uint8_t> & pData, size_t dataSize) override;*/
-
-		virtual Ptr<ShaderProgram> CompileShaderProgram(
-			ShaderType shaderType,
-			const String & shaderText,
-			const String & entryName) override;
-
-		virtual Ptr<ShaderProgram> CreateShaderShaderProgram(
-			ShaderType shaderType,
-			const std::shared_ptr<uint8_t> & compiledData,
-			size_t dataSize) override;
-
 		virtual Ptr<ShaderProgram> CreateShaderShaderProgram(ShaderType shaderType) override;
 
-		Ptr<Texture> CreateTexture(const TextureDesc & desc) override;
+		virtual Ptr<Texture> CreateTexture(TextureType type) override;
 
-		Ptr<Texture> CreateTexture(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList) override;
+		virtual Ptr<RenderBuffer> CreateBuffer() override;
 
-		Ptr<RenderBuffer> CreateBuffer(const RenderBufferDesc & desc, const void * pInitData) override;
+		virtual Ptr<VertexBuffer> CreateVertexBuffer() override;
 
-		/*Ptr<RenderBuffer> CreateBuffer(const RenderBufferDesc & desc, const void * pInitData,
-			VertexBufferType vertexBufferType, const std::vector<VertexElementDesc> & vertexElementDesc) override;*/
+		virtual Ptr<VertexInputLayout> CreateVertexInputLayout() override;
 
-		Ptr<TransientBuffer> CreateTransientBuffer(int32_t elementSize, int32_t initNumElements, uint32_t bufferBindFlags) override;
+		virtual Ptr<TransientBuffer> CreateTransientBuffer() override;
 
-		Ptr<BlendState> CreateBlendState(const BlendStateDesc & desc) override;
+		virtual Ptr<BlendState> CreateBlendState() override;
 
-		Ptr<DepthStencilState> CreateDepthStencilState(const DepthStencilStateDesc & desc) override;
+		virtual Ptr<DepthStencilState> CreateDepthStencilState() override;
 
-		Ptr<RasterizerState> CreateRasterizerState(const RasterizerStateDesc & desc) override;
+		virtual Ptr<RasterizerState> CreateRasterizerState() override;
 
-		Ptr<Sampler> CreateSampler(const SamplerDesc & desc) override;
+		virtual Ptr<Sampler> CreateSampler() override;
 
-		void InitShaderProgramReflectInfo(const Ptr<ShaderProgram> & shaderProgram) override;
+		virtual bool CompileShader(
+			ShaderType shaderType,
+			const String & shaderCode,
+			const String & entryName,
+			std::shared_ptr<uint8_t> & outCompiledData,
+			int32_t & outDataSize) override;
+
+		virtual bool GetShaderProgramResourceMap(
+			const std::shared_ptr<const uint8_t> & compiledData,
+			int32_t dataSize,
+			ShaderProgramResourceMap & outResourceMap) override;
 
 	private:
 		D3DCompileFunc _compileFunc;

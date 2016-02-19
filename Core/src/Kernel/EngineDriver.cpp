@@ -1,175 +1,194 @@
 #include "ToyGE\Kernel\EngineDriver.h"
-#include "ToyGE\Platform\PlatformFactory.h"
-#include "ToyGE\Platform\Windows\WindowsPlatformFactory.h"
-#include "ToyGE\RenderEngine\RenderEngineCreateDef.h"
-#include "ToyGE\Platform\DllObj.h"
-#include "ToyGE\Kernel\App.h"
-#include "ToyGE\Kernel\Assert.h"
-#include "ToyGE\RenderEngine\Font\Font.h"
-#include "ToyGE\Platform\Looper.h"
-#include "ToyGE\Kernel\Logger.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\Model.h"
-#include "ToyGE\RenderEngine\Effects\DebugInfoRender.h"
 #include "ToyGE\Kernel\Global.h"
+#include "ToyGE\Kernel\App.h"
+#include "ToyGE\Kernel\Assertion.h"
+#include "ToyGE\Kernel\Logger.h"
+#include "ToyGE\Kernel\Asset.h"
+#include "ToyGE\Kernel\Config.h"
+#include "ToyGE\Platform\Platform.h"
+#include "ToyGE\Platform\File.h"
+#include "ToyGE\Platform\DllObj.h"
+#include "ToyGE\Platform\Looper.h"
 #include "ToyGE\Platform\Window.h"
+#include "ToyGE\Platform\Windows\WindowsPlatform.h"
 #include "ToyGE\Input\InputEngine.h"
 #include "ToyGE\Input\Windows\WindowsInputEngine.h"
-#include "ToyGE\RenderEngine\OctreeCuller.h"
-#include "ToyGE\RenderEngine\DeferredRenderFramework.h"
+#include "ToyGE\RenderEngine\RenderEngine.h"
+#include "ToyGE\RenderEngine\Font\Font.h"
 #include "ToyGE\RenderEngine\Font\BitmapFontFactory.h"
-#include "ToyGE\RenderEngine\Font\BitmapFont.h"
 #include "ToyGE\RenderEngine\Font\SignedDistanceFieldFontFactory.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\RenderFactory.h"
+#include "ToyGE\RenderEngine\TransientBuffer.h"
+#include "ToyGE\RenderEngine\ReflectionMap.h"
 
 namespace ToyGE
 {
-	void EngineDriver::StartUp(const Config & config, const Ptr<App> & app)
+	void EngineDriver::Init(const Ptr<App> & app)
 	{
+		// Platform
+#ifdef TOYGE_PLATFORM_WINDOWS
+		Global::SetPlatform(std::make_shared<WindowsPlatform>());
+#endif
+		Global::GetPlatform()->Init();
+
+		// Logger
 		Logger::Init();
 
-		/*if (!app)
+		// Init working path
+		auto workingDir = ParentPath( Global::GetPlatform()->GetCurentProgramPath() );
+		while ( !Global::GetPlatform()->IsPathDirectory(workingDir + "/" + "Config") )
 		{
-			Logger::LogLine("error> app null");
-			Logger::LogLine("fatal error> abort");
-			abort();
-		}*/
+			workingDir = ParentPath(workingDir);
+			if (workingDir.back() == ':')
+			{
+				ToyGE_LOG(LT_ERROR, "Cannot find base working path!");
+				ToyGE_ASSERT_FAIL("Engine init fatal error!");
+			}
+		}
+		Global::GetPlatform()->SetWorkingDirectory(workingDir);
 
-		//Create PlatformFactory
-#ifdef PLATFORM_WINDOWS
-		Global::SetPlatformFactory(std::make_shared<WindowsPlatformFactory>());
-#endif
-		//Create Window
-		WindowCreateParams windowParams;
-		windowParams.name = config.windowTitle;
-		windowParams.width = config.windowWidth;
-		windowParams.height = config.windowHeight;
-		windowParams.x = config.windowX;
-		windowParams.y = config.windowY;
-		auto window = Global::GetPlatformFactory()->CreateRenderWindow(windowParams);
-		window->Init();
-		if (!window)
+		Shader::SetShaderFilesBasePath("Shaders");
+		Asset::SetAssetsBasePath("Assets");
+
+		if (!app)
 		{
-			Logger::LogLine("error> can not create window");
-			Logger::LogLine("fatal error> abort");
-			exit(0);
+			ToyGE_LOG(LT_ERROR, "App is null!");
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
 		}
 
-		auto looper = Global::GetPlatformFactory()->CreateLooper();
+		// Load config
+		auto config = Config::Load("Config/Config.xml");
+		if (!config)
+		{
+			ToyGE_LOG(LT_ERROR, "Cannot open config file!");
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
+		}
+		Global::SetConfig(config);
+
+		// Create Window
+		WindowCreateParams windowParams;
+		windowParams.name = config->windowTitle;
+		windowParams.width = config->windowWidth;
+		windowParams.height = config->windowHeight;
+		windowParams.x = config->windowX;
+		windowParams.y = config->windowY;
+		auto window = Global::GetPlatform()->CreatePlatformWindow(windowParams);
+		if (!window)
+		{
+			ToyGE_LOG(LT_ERROR, "Cannot open create window! width=%d height=%d x=%d y=%d", windowParams.width, windowParams.height, windowParams.x, windowParams.y);
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
+		}
+		window->Init();
+		Global::SetWindow(window);
+
+		// Create Looper
+		auto looper = Global::GetPlatform()->CreateLooper();
 		Global::SetLooper(looper);
 
-		//Create InputEngine
-#ifdef PLATFORM_WINDOWS
+		// Init input
+#ifdef TOYGE_PLATFORM_WINDOWS
 		auto inputEngine = std::make_shared<WindowsInputEngine>();
-		
 #endif
 		inputEngine->SetWindow(window);
 		inputEngine->RefreshInputDevices();
 		Global::SetInputEngine(inputEngine);
 
-		//Create RenderEngine
-		String reDllPath = "ToyGE_RenderEngine_D3D11.dll";
-		auto reDll = Global::GetPlatformFactory()->AcquireDll(reDllPath);
+		// Init render engine
+#ifdef TOYGE_PLATFORM_WINDOWS
+		String reDllName = "ToyGE_RenderEngine_D3D11.dll";
+#endif
+		ToyGE_LOG(LT_INFO, "Begin init render engine! module=%s", reDllName.c_str());
+		auto reDll = Global::GetPlatform()->FindDll(reDllName);
 		if (!reDll)
 		{
-			Logger::LogLine("error> can not load render engine ['%s']", reDllPath);
-			Logger::LogLine("fatal error> abort");
-			exit(0);
+			ToyGE_LOG(LT_ERROR, "Cannot load render engine! module=%s", reDllName.c_str());
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
 		}
 
-		auto engineCreateFunc = reinterpret_cast<CreateRenderEngineFunc>( reDll->GetProcAddress(CREATE_RE_FUNC_NAME) );
-		if (!engineCreateFunc)
+		auto reCreateFunc = reinterpret_cast<CreateRenderEngineFunc>( reDll->GetProcAddress("CreateRenderEngine") );
+		if (!reCreateFunc)
 		{
-			Logger::LogLine("error> can not find render engine create function ['%s']", reDllPath);
-			Logger::LogLine("fatal error> abort");
-			exit(0);
+			ToyGE_LOG(LT_ERROR, "Cannot find render engine create function! module=%s", reDllName.c_str());
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
 		}
 
-		RenderEngine *pRe = nullptr;
-		engineCreateFunc(window, &pRe);
+		RenderEngine * pRe = nullptr;
+		reCreateFunc(&pRe);
 		if (!pRe)
 		{
-			Logger::LogLine("error> can not create render engine ['%s']", reDllPath);
-			Logger::LogLine("fatal error> abort");
-			exit(0);
+			ToyGE_LOG(LT_ERROR, "Cannot create render engine! module=%s", reDllName.c_str());
+			ToyGE_ASSERT_FAIL("Engine init fatal error!");
 		}
 		Global::SetRenderEngine( std::shared_ptr<RenderEngine>(pRe) );
-		Logger::LogLine("info> render engine startup");
-		Global::GetRenderEngine()->Startup();
+		RenderEngineInitParams reInitParams;
+		reInitParams.adapterIndex = config->adapterIndex;
+		reInitParams.adapterSelectKey = config->adapterSelectKey;
+		reInitParams.bGrapicsEngineDebug = config->bGraphicsEngineDebug;
+		Global::GetRenderEngine()->Init(reInitParams);
+		ToyGE_LOG(LT_INFO, "End init render engine! module=%s", reDllName.c_str());
 
-		//Init Font
-		Logger::LogLine("info> init font");
-		FreetypeFont::InitLibrary();
-		Global::GetRenderEngine()->SetFontFactory(std::make_shared<SignedDistanceFieldFontFactory>());
-		//Font::Init();
+		// Init transient buffer
+		int32_t initNumTextChars = 1024;
+		int32_t charVertexSize = static_cast<int32_t>(sizeof(float) * (3 + 3));
+		auto tb = Global::GetRenderEngine()->GetRenderFactory()->CreateTransientBuffer();
+		tb->Init(charVertexSize, initNumTextChars * 4, BUFFER_BIND_VERTEX);
+		tb->Register();
+		Global::SetTransientBuffer(TRANSIENTBUFFER_TEXT_VERTEX, tb);
 
-		//Init ResourceManagers
-		std::map<uint32_t, Ptr<ResourceManagerBase>> defaultResMap =
-		{
-			{ RESOURCE_EFFECT, std::make_shared<EffectManager>() },
-			{ RESOURCE_TEXTURE, std::make_shared<TextureManager>() },
-			{ RESOURCE_MODEL, std::make_shared<ModelManager>() },
-			{ RESOURCE_MESH, std::make_shared<MeshManager>() },
-			{ RESOURCE_MATERIAL, std::make_shared<MaterialManager>() },
-			{ RESOURCE_FONT, std::make_shared<FontManager>() }
-		};
+		tb = Global::GetRenderEngine()->GetRenderFactory()->CreateTransientBuffer();
+		tb->Init(sizeof(uint32_t), initNumTextChars * 6, BUFFER_BIND_INDEX);
+		tb->Register();
+		Global::SetTransientBuffer(TRANSIENTBUFFER_TEXT_INDEX, tb);
 
-		for (auto & res : config.resourceMap)
-		{
-			if (res.first == "Effect")
-			{
-				defaultResMap[RESOURCE_EFFECT]->As<EffectManager>()->SetBasePath(res.second);
-			}
-			else if (res.first == "Texture")
-			{
-				defaultResMap[RESOURCE_TEXTURE]->As<TextureManager>()->SetBasePath(res.second);
-			}
-			else if (res.first == "Model")
-			{
-				defaultResMap[RESOURCE_MODEL]->As<ModelManager>()->SetBasePath(res.second);
-			}
-			else if (res.first == "Font")
-			{
-				defaultResMap[RESOURCE_FONT]->As<FontManager>()->SetBasePath(res.second);
-			}
-		}
-		for (auto & defaultRes : defaultResMap)
-		{
-			Global::SetResourceManager(defaultRes.first, defaultRes.second);
-		}
+		// Init fonts
+		FontAsset::InitLibrary();
+		Global::SetFontFactory(std::make_shared<SignedDistanceFieldFontFactory>());
+		Global::SetFont( Font::Find("Fonts/STZHONGS.TTF") );
 
-		//Set Cullers
-		pRe->SetSceneRenderObjsCuller(std::make_shared<DefaultRenderObjectCuller>());
-		pRe->SetSceneRenderLightsCuller(std::make_shared<DefaultRenderLightCuller>());
+		// Init relfection map brdf lut
+		ReflectionMap::InitLUT();
 
-		//Set RenderFramework
-		pRe->SetRenderFramework(std::make_shared<DeferredRenderFramework>());
-		pRe->GetRenderFramework()->Init();
-
-		//auto renderActionQueue = std::make_shared<RenderActionQueue>();
-		//renderActionQueue->AddRenderAction(std::make_shared<ForwardRenderFrame>());
-		//renderActionQueue->AddRenderAction(std::make_shared<DebugInfoRender>());
-		//Global::GetRenderEngine()->SetRenderActionQueue(renderActionQueue);
-
-		//App Init
-		if (app)
-		{
-			Global::SetApp(app);
-			Logger::LogLine("info> app startup");
-			app->Startup();
-		}
+		// App Init
+		Global::SetApp(app);
+		ToyGE_LOG(LT_INFO, "Begin app init");
+		app->Init();
 	}
 
 	void EngineDriver::Run()
 	{
+		// Show window
+		Global::GetWindow()->Show();
+
+		// Begin loop
 		auto looper = Global::GetLooper();
-		Logger::LogLine("info> enter loop");
-		Global::GetRenderEngine()->GetWindow()->Show();
+		ToyGE_LOG(LT_INFO, "Begin loop");
 		looper->EnterLoop();
-		Logger::LogLine("info> exit loop");
-		Logger::LogLine("info> clear");
+		ToyGE_LOG(LT_INFO, "End loop");
+
+		// Save dirty meshes
+		for (auto & assetPair : Asset::GetAssetsMap())
+		{
+			if (assetPair.second->IsDirty())
+				assetPair.second->Save();
+		}
+
+		// Save shader cache
+		for (auto & shaderMeta : ShaderMetaType::GetShaderMetaTypeList())
+			shaderMeta->UpdateFileCache();
+
+		// Clear
+		for (auto & resource : RenderResource::GetRenderResourceList())
+		{
+			if(!resource.expired())
+				resource.lock()->Release();
+		}
 		Global::Clear();
-		FreetypeFont::ClearLibrary();
-		Logger::LogLine("info> system exit");
+
+		FontAsset::ClearLibrary();
+
+		// End
+		ToyGE_LOG(LT_INFO, "System exit");
+		Logger::Release();
 	}
 }

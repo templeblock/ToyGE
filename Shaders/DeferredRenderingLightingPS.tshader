@@ -1,0 +1,75 @@
+#include "DrawQuad.tshader"
+#include "GBuffer.tshader"
+#include "Lighting.tshader"
+#include "BRDF.tshader"
+#include "View.tshader"
+#include "Shadow.tshader"
+#include "IBL.tshader"
+
+Texture2D gbuffer0;
+Texture2D gbuffer1;
+Texture2D gbuffer2;
+Texture2D<float> sceneLinearClipDepth;
+
+SamplerState pointSampler;
+
+void DeferredRenderingLightingPS(
+    DrawQuadVSOut vsOut,
+    out float3 lighting0 : SV_TARGET0,
+    out float3 lighting1 : SV_TARGET1
+)
+{
+    GBuffer gbuf;
+    
+    gbuf.gbuf0 = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0);
+    gbuf.gbuf1 = gbuffer1.SampleLevel(pointSampler, vsOut.uv, 0);
+    gbuf.gbuf2 = gbuffer2.SampleLevel(pointSampler, vsOut.uv, 0);
+    
+    Material mat = GBufferToMaterial(gbuf);
+    
+    float linearClipDepth = sceneLinearClipDepth.SampleLevel(pointSampler, vsOut.uv, 0);
+    float2 clipPos_xy = GetClipPosXYFromScreen(vsOut.pos.xy, viewSize);
+    float3 viewPos = GetViewPosFromLinear(float3(clipPos_xy, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPos = mul(float4(viewPos, 1.0), viewToWorldMatrix).xyz; 
+    
+    float3 n = mat.normal;
+    float3 l = GetPosToLightDir(worldPos);
+    float3 v = normalize(viewWorldPosition - worldPos);
+    
+    float3 irradiance = GetIrradiance(worldPos, n);
+    
+#if ENABLE_SHADOW == 1
+    float shadowNoise = InterleavedGradientNoise(vsOut.pos.xy, 0.5) + 0.5;
+    float shadow = ComputeShadow(worldPos, viewPos.z, shadowNoise);
+    irradiance *= shadow;
+#endif
+    
+    lighting0 = irradiance / PI;
+    
+    lighting1 = irradiance * BRDF(n, l, v, mat.specularColor, mat.roughness);
+    lighting1 += mat.emissive;
+}
+
+float3 IBLPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    GBuffer gbuf;
+    
+    gbuf.gbuf0 = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0);
+    gbuf.gbuf1 = gbuffer1.SampleLevel(pointSampler, vsOut.uv, 0);
+    gbuf.gbuf2 = gbuffer2.SampleLevel(pointSampler, vsOut.uv, 0);
+    
+    Material mat = GBufferToMaterial(gbuf);
+    
+    float linearClipDepth = sceneLinearClipDepth.SampleLevel(pointSampler, vsOut.uv, 0);
+    float2 clipPos_xy = GetClipPosXYFromScreen(vsOut.pos.xy, viewSize);
+    float3 viewPos = GetViewPosFromLinear(float3(clipPos_xy, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPos = mul(float4(viewPos, 1.0), viewToWorldMatrix).xyz; 
+    
+    float3 n = mat.normal;
+    float3 v = normalize(viewWorldPosition - worldPos);
+    float3 r = reflect(-v, n);
+    
+    float n_dot_v = max( 0.0, dot(n, v) );
+    
+    return ComputeIBL(r, mat.roughness, n_dot_v, mat.specularColor, mat.diffuseColor);
+}

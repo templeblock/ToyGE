@@ -2,24 +2,27 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {
 	class TOYGE_CORE_API Config
 	{
 	public:
-		WString windowTitle;
-		int32_t windowWidth;
-		int32_t windowHeight;
-		int32_t windowX;
-		int32_t windowY;
+		String  windowTitle;
+		int32_t windowWidth = 0;
+		int32_t windowHeight = 0;
+		int32_t windowX = 0;
+		int32_t windowY = 0;
 
-		std::map<String, WString> resourceMap;
+		int32_t adapterIndex = -1;
+		String adapterSelectKey;
+		bool bGraphicsEngineDebug = false;
 
 		Config();
-		static bool Load(const WString & path, Config & outConfig);
+
+		static Ptr<Config> Load(const String & path);
 	};
 }
 

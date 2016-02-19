@@ -6,18 +6,7 @@
 
 namespace ToyGE
 {
-	D3D11DepthStencilState::D3D11DepthStencilState(const DepthStencilStateDesc & desc)
-		: DepthStencilState(desc)
-	{
-		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
-		D3D11_DEPTH_STENCIL_DESC d3dDepthStencilDesc;
-		CreateD3DDepthStencilDesc(desc, d3dDepthStencilDesc);
-		ID3D11DepthStencilState *pD3DDepthStecilState = nullptr;
-		re->RawD3DDevice()->CreateDepthStencilState(&d3dDepthStencilDesc, &pD3DDepthStecilState);
-		_rawD3DDepthStencilState = MakeComShared(pD3DDepthStecilState);
-	}
-
-	void D3D11DepthStencilState::CreateD3DDepthStencilDesc(const DepthStencilStateDesc & desc, D3D11_DEPTH_STENCIL_DESC & d3dDesc)
+	static void CreateD3DDepthStencilDesc(const DepthStencilStateDesc & desc, D3D11_DEPTH_STENCIL_DESC & d3dDesc)
 	{
 		d3dDesc.DepthEnable = desc.depthEnable;
 		d3dDesc.DepthWriteMask = GetD3DDepthWriteMask(desc.depthWriteMask);
@@ -35,6 +24,22 @@ namespace ToyGE
 		d3dDesc.FrontFace.StencilDepthFailOp = GetD3DStencilOP(desc.frontFace.stencilDepthFailOp);
 		d3dDesc.FrontFace.StencilPassOp = GetD3DStencilOP(desc.frontFace.stencilPassOp);
 		d3dDesc.FrontFace.StencilFunc = GetD3DComparisonFunc(desc.frontFace.stencilFunc);
-		
+
 	}
+
+	void D3D11DepthStencilState::Init()
+	{
+		DepthStencilState::Init();
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		D3D11_DEPTH_STENCIL_DESC d3dDepthStencilDesc;
+		CreateD3DDepthStencilDesc(_desc, d3dDepthStencilDesc);
+
+		ID3D11DepthStencilState *pD3DDepthStecilState = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateDepthStencilState(&d3dDepthStencilDesc, &pD3DDepthStecilState);
+		_hardwareDepthStencilState = MakeComShared(pD3DDepthStecilState);
+	}
+
+	
 }

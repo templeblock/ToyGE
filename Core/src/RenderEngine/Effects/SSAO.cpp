@@ -1,146 +1,119 @@
 #include "ToyGE\RenderEngine\Effects\SSAO.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\RenderEngine\DeferredRenderFramework.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Texture.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
 #include "ToyGE\RenderEngine\Blur.h"
 
 namespace ToyGE
 {
 	SSAO::SSAO()
-		: _aoRadius(0.05f),
-		_aoPower(10.0f),
+		: _aoRadius(0.1f),
+		_aoPower(20.0f),
 		_aoIntensity(0.5f)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SSAO.xml");
 	}
 
-	void SSAO::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void SSAO::Render(const Ptr<RenderView> & view)
 	{
-		auto linearDepthTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
-		auto gbuffer1 = sharedEnviroment->ParamByName(CommonRenderShareName::GBuffer(1))->As<SharedParam<Ptr<Texture>>>()->GetValue();
-
-		sharedEnviroment->GetView()->BindParams(_fx);
-
-		auto camera = std::static_pointer_cast<PerspectiveCamera>(sharedEnviroment->GetView()->GetCamera());
-		float invViewRatio = 1.0f / camera->AspectRatio();
-		_fx->VariableByName("invViewRatio")->AsScalar()->SetValue(&invViewRatio);
-
-		_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&_aoRadius);
+		auto gbuffer1 = view->GetViewRenderContext()->sharedResources["GBuffer1"].Cast<Texture>();
+		auto sceneLinearDepthTex = view->GetViewRenderContext()->sharedResources["SceneLinearClipDepth"].Cast<Texture>();
 
 		int32_t numMips = 2;
 
-		std::vector<Ptr<Texture>> normalTexs(numMips);
+		std::vector<PooledTextureRef> normalTexs(numMips);
 		normalTexs[0] = gbuffer1;
-		std::vector<Ptr<Texture>> depthTexs(numMips);
-		depthTexs[0] = linearDepthTex;
+		std::vector<PooledTextureRef> depthTexs(numMips);
+		depthTexs[0] = sceneLinearDepthTex;
 
 		for (int32_t i = 1; i < numMips; ++i)
 		{
-			DownSampleNormalDepth(normalTexs[i - 1], depthTexs[i - 1], normalTexs[i], depthTexs[i]);
+			DownSampleNormalDepth(
+				view,
+				normalTexs[i - 1]->Get()->Cast<Texture>(), 
+				depthTexs[i - 1]->Get()->Cast<Texture>(), 
+				normalTexs[i], 
+				depthTexs[i]);
 		}
 
-		std::vector<Ptr<Texture>> aoTexs(numMips);
+		std::vector<PooledTextureRef> aoTexs(numMips);
+
 		float radius = _aoRadius * static_cast<float>(1 << (numMips - 1));
-		_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&radius);
-		aoTexs.back() = RenderAOTex(normalTexs.back(), depthTexs.back(), nullptr, nullptr, nullptr, false, numMips == 1);
+
+		aoTexs.back() = RenderAOTex(
+			radius, 
+			view, 
+			normalTexs.back()->Get()->Cast<Texture>(), 
+			depthTexs.back()->Get()->Cast<Texture>(), 
+			nullptr, 
+			nullptr, 
+			nullptr, 
+			false, 
+			numMips == 1);
 
 		for (int32_t i = numMips - 2; i >= 0; --i)
 		{
-			aoTexs[i] = RenderAOTex(normalTexs[i], depthTexs[i], aoTexs[i + 1], normalTexs[i + 1], depthTexs[i + 1], true, i == 0);
 			float radius = _aoRadius * static_cast<float>(1 << i);
-			_fx->VariableByName("aoRadius")->AsScalar()->SetValue(&radius);
+
+			aoTexs[i] = RenderAOTex(
+				radius,
+				view,
+				normalTexs[i]->Get()->Cast<Texture>(),
+				depthTexs[i]->Get()->Cast<Texture>(), 
+				aoTexs[i + 1]->Get()->Cast<Texture>(),
+				normalTexs[i + 1]->Get()->Cast<Texture>(),
+				depthTexs[i + 1]->Get()->Cast<Texture>(),
+				true, 
+				i == 0);
 		}
 
-		/*float depthDiffScale = (cameraNearFar.y - cameraNearFar.x) * 0.01f;
+		CrossBilateralBlur(view, aoTexs[0]->Get()->Cast<Texture>(), sceneLinearDepthTex->Get()->Cast<Texture>());
 
-		auto texDesc = aoTexMip1->Desc();
-		texDesc.width *= 2;
-		texDesc.height *= 2;
-		auto aoTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		BilateralUpSampling(
-			aoTexMip1->CreateTextureView(),
-			depthTexMip1->CreateTextureView(),
-			linearDepthTex->CreateTextureView(),
-			aoTex->CreateTextureView(), depthDiffScale);*/
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		CrossBilateralBlur(aoTexs[0], linearDepthTex);
+		CombineAO(aoTexs[0]->Get()->Cast<Texture>(), sceneTex);
 
-		CombineAO(aoTexs[0], sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView());
-		//Transform(aoTexs[0]->CreateTextureView(), sharedEnviroment->GetRenderTarget(), COLOR_WRITE_R);
-
-		sharedEnviroment->SetParam("AOTex", std::make_shared<SharedParam<Ptr<Texture>>>(aoTexs[0]));
-
-		/*normalTexMip1->Release();
-		depthTexMip1->Release();
-		aoTexMip1->Release();
-		aoTex->Release();*/
-		for (auto & i : normalTexs)
-			i->Release();
-		for (auto & i : depthTexs)
-			i->Release();
-		for (size_t i = 1; i < aoTexs.size(); ++i)
-			aoTexs[i]->Release();
+		view->GetViewRenderContext()->SetSharedResource("AmbientOcclusion", aoTexs[0]);
 	}
 
 	void SSAO::DownSampleNormalDepth(
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & inNormalTex,
 		const Ptr<Texture> & inDepthTex,
-		Ptr<Texture> & outNormalTex,
-		Ptr<Texture> & outDepthTex)
+		PooledTextureRef & outNormalTex,
+		PooledTextureRef & outDepthTex)
 	{
-		auto texDesc = inNormalTex->Desc();
+		auto texDesc = inNormalTex->GetDesc();
 		texDesc.width /= 2;
 		texDesc.height /= 2;
 
-		outNormalTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		outNormalTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		texDesc.format = inDepthTex->Desc().format;
-		outDepthTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		texDesc.format = inDepthTex->GetDesc().format;
+		outDepthTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
 		float w = static_cast<float>(texDesc.width);
 		float h = static_cast<float>(texDesc.height);
 		float4 texSize = float4(w, h, 1.0f / w, 1.0f / h);
-		_fx->VariableByName("texSize")->AsScalar()->SetValue(&texSize);
 
-		_fx->VariableByName("normalTex")->AsShaderResource()->SetValue(inNormalTex->CreateTextureView());
-		_fx->VariableByName("depthTex")->AsShaderResource()->SetValue(inDepthTex->CreateTextureView());
+		auto ps = Shader::FindOrCreate<DownSampleNormalDepthPS>();
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		view->BindShaderParams(ps);
 
-		rc->SetRenderTargets({ outNormalTex->CreateTextureView(), outDepthTex->CreateTextureView() }, 0);
+		ps->SetScalar("texSize", texSize);
+		ps->SetSRV("normalTex", inNormalTex->GetShaderResourceView());
+		ps->SetSRV("depthTex", inDepthTex->GetShaderResourceView());
+		ps->SetSampler("pointClampSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		RenderQuad(_fx->TechniqueByName("DownSampleNormalDepth"), 0, 0, texDesc.width, texDesc.height);
+		ps->Flush();
+
+		DrawQuad({
+			outNormalTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+			outDepthTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
 	}
 
-	/*Ptr<Texture> SSAO::BilateralUpSampling(const Ptr<Texture> & aoTex, const Ptr<Texture> & lowResDepthTex, const Ptr<Texture> & highResDepthTex)
-	{
-		auto texDesc = aoTex->Desc();
-		texDesc.width *= 2;
-		texDesc.height *= 2;
-
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		_fx->VariableByName("upSamplingInTex")->AsShaderResource()->SetValue(aoTex->CreateTextureView());
-		_fx->VariableByName("lowResDepthTex")->AsShaderResource()->SetValue(lowResDepthTex->CreateTextureView());
-		_fx->VariableByName("highResDepthTex")->AsShaderResource()->SetValue(highResDepthTex->CreateTextureView());
-
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-
-		RenderQuad(_fx->TechniqueByName("BilateralUpSampling"), 0, 0, texDesc.width, texDesc.height);
-
-		return resultTex;
-	}*/
-
-	Ptr<Texture> SSAO::RenderAOTex(
+	PooledTextureRef SSAO::RenderAOTex(
+		float aoRadius,
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & normalTex,
 		const Ptr<Texture> & depthTex,
 		const Ptr<Texture> & preMipAOTex,
@@ -149,88 +122,99 @@ namespace ToyGE
 		bool bUpSampling,
 		bool bFullRes)
 	{
-		float w = static_cast<float>(depthTex->Desc().width);
-		float h = static_cast<float>(depthTex->Desc().height);
-		float4 texSize = float4(w, h, 1.0f / w, 1.0f / h);
-		_fx->VariableByName("texSize")->AsScalar()->SetValue(&texSize);
-
-		_fx->VariableByName("aoPower")->AsScalar()->SetValue(&_aoPower);
-		_fx->VariableByName("aoIntensity")->AsScalar()->SetValue(&_aoIntensity);
-
-		_fx->VariableByName("depthTex")->AsShaderResource()->SetValue(depthTex->CreateTextureView());
-		_fx->VariableByName("normalTex")->AsShaderResource()->SetValue(normalTex->CreateTextureView());
-
-		_fx->VariableByName("aoTex")->AsShaderResource()->SetValue(preMipAOTex ? preMipAOTex->CreateTextureView() : ResourceView());
-		_fx->VariableByName("preMipNormalTex")->AsShaderResource()->SetValue(preMipNormalTex ? preMipNormalTex->CreateTextureView() : ResourceView());
-		_fx->VariableByName("preMipDepthTex")->AsShaderResource()->SetValue(preMipDepthTex ? preMipDepthTex->CreateTextureView() : ResourceView());
-
-		auto texDesc = depthTex->Desc();
-		texDesc.format = RENDER_FORMAT_R8_UNORM;
-		auto aoTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		rc->SetRenderTargets({ aoTex->CreateTextureView() }, 0);
-
-		std::vector<MacroDesc> macros;
+		std::map<String, String> macros;
 		if (bUpSampling)
-			macros.push_back({ "UPSAMPLING", "" });
+			macros["AO_UPSAMPLING"] = "";
 		if (bFullRes)
-			macros.push_back({ "FULL_RES", "" });
+			macros["AO_FULL_RES"] = "";
 
-		_fx->SetExtraMacros(macros);
-		/*String techName = "RenderAO";
-		if (bUpSampling)
+		auto ps = Shader::FindOrCreate<RenderAOPS>(macros);
+
+		view->BindShaderParams(ps);
+
+		auto camera = std::static_pointer_cast<PerspectiveCamera>(view->GetCamera());
+		float invViewRatio = 1.0f / camera->GetAspectRatio();
+		ps->SetScalar("invViewRatio", invViewRatio);
+
+		ps->SetScalar("texSize", normalTex->GetTexSize());
+
+		ps->SetScalar("aoPower", _aoPower);
+		ps->SetScalar("aoIntensity", _aoIntensity);
+		ps->SetScalar("aoRadius", aoRadius);
+
+		ps->SetSRV("depthTex", depthTex->GetShaderResourceView());
+		ps->SetSRV("normalTex", normalTex->GetShaderResourceView());
+		if(preMipAOTex)
+			ps->SetSRV("aoTex", preMipAOTex->GetShaderResourceView());
+		if(preMipNormalTex)
+			ps->SetSRV("preMipNormalTex", preMipNormalTex->GetShaderResourceView());
+		if(preMipDepthTex)
+			ps->SetSRV("preMipDepthTex", preMipDepthTex->GetShaderResourceView());
+
+		//ps->SetSampler("pointClampSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		auto texDesc = depthTex->GetDesc();
+		texDesc.format = RENDER_FORMAT_R8_UNORM;
+		auto aoTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+		DrawQuad({ aoTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+
+		return aoTexRef;
+	}
+
+	void SSAO::CrossBilateralBlur(const Ptr<RenderView> & view, const Ptr<Texture> & aoTex, const Ptr<Texture> & depthTex)
+	{
+		auto texDesc = aoTex->GetDesc();
+		auto tmpTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+		float4 texSize = depthTex->GetTexSize();
+
 		{
-			if (bFullRes)
-				techName = "RenderAOFullResUpSampling";
-			else
-				techName = "RenderAOUpSampling";
+			auto ps = Shader::FindOrCreate<CrossBilateralBlurXPS>();
+
+			view->BindShaderParams(ps);
+
+			ps->SetScalar("texSize", texSize);
+
+			ps->SetSRV("depthTex", depthTex->GetShaderResourceView());
+			ps->SetSRV("blurInTex", aoTex->GetShaderResourceView());
+			ps->SetSampler("pointClampSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+			ps->Flush();
+
+			DrawQuad({ tmpTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
 		}
-		else if (bFullRes)
-			techName = "RenderAOFullRes";*/
 
-		RenderQuad(_fx->TechniqueByName("RenderAO"), 0, 0, texDesc.width, texDesc.height);
+		{
+			auto ps = Shader::FindOrCreate<CrossBilateralBlurYPS>();
 
-		return aoTex;
+			view->BindShaderParams(ps);
+
+			ps->SetScalar("texSize", texSize);
+
+			ps->SetSRV("depthTex", depthTex->GetShaderResourceView());
+			ps->SetSRV("blurInTex", tmpTexRef->Get()->Cast<Texture>()->GetShaderResourceView());
+			ps->SetSampler("pointClampSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+			ps->Flush();
+
+			DrawQuad({ aoTex->GetRenderTargetView(0, 0, 1) });
+		}
 	}
 
-	void SSAO::CrossBilateralBlur(const Ptr<Texture> & aoTex, const Ptr<Texture> & depthTex)
+	void SSAO::CombineAO(const Ptr<Texture> & aoTex, const Ptr<Texture> & target)
 	{
-		auto texDesc = aoTex->Desc();
-		auto tmpTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto ps = Shader::FindOrCreate<CombineAOPS>();
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		ps->SetSRV("aoTex", aoTex->GetShaderResourceView());
+		ps->Flush();
 
-		float w = static_cast<float>(depthTex->Desc().width);
-		float h = static_cast<float>(depthTex->Desc().height);
-		float4 texSize = float4(w, h, 1.0f / w, 1.0f / h);
-		_fx->VariableByName("texSize")->AsScalar()->SetValue(&texSize);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(
+			BlendStateTemplate<false, false, true, BLEND_PARAM_ZERO, BLEND_PARAM_SRC_ALPHA>::Get());
 
-		auto & gaussWeightsTable = Blur::GaussTable(3);
-		//_fx->VariableByName("gaussWeightsTable")->AsScalar()->SetValue(&gaussWeightsTable[0], sizeof(gaussWeightsTable[0]) * gaussWeightsTable.size());
+		DrawQuad({ target->GetRenderTargetView(0, 0, 1) });
 
-		_fx->VariableByName("depthTex")->AsShaderResource()->SetValue(depthTex->CreateTextureView());
-
-		_fx->VariableByName("blurInTex")->AsShaderResource()->SetValue(aoTex->CreateTextureView());
-		rc->SetRenderTargets({ tmpTex->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("CrossBilateralBlurX"), 0, 0, texDesc.width, texDesc.height);
-
-		_fx->VariableByName("blurInTex")->AsShaderResource()->SetValue(tmpTex->CreateTextureView());
-		rc->SetRenderTargets({ aoTex->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("CrossBilateralBlurY"), 0, 0, texDesc.width, texDesc.height);
-
-		tmpTex->Release();
-	}
-
-	void SSAO::CombineAO(const Ptr<Texture> & aoTex, const ResourceView & target)
-	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		_fx->VariableByName("aoTex")->AsShaderResource()->SetValue(aoTex->CreateTextureView());
-
-		rc->SetRenderTargets({ target }, 0);
-
-		RenderQuad(_fx->TechniqueByName("CombineAO"), 0, 0, aoTex->Desc().width, aoTex->Desc().height);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
 	}
 }

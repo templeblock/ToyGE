@@ -2,9 +2,8 @@
 #ifndef ENGINEDRIVER_H
 #define ENGINEDRIVER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
-#include "ToyGE\Kernel\Config.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {
@@ -13,7 +12,7 @@ namespace ToyGE
 	class TOYGE_CORE_API EngineDriver
 	{
 	public:
-		static void StartUp(const Config & config, const Ptr<App> & app);
+		static void Init(const Ptr<App> & app);
 
 		static void Run();
 	};

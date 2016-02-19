@@ -6,20 +6,7 @@
 
 namespace ToyGE
 {
-	D3D11BlendState::D3D11BlendState(const BlendStateDesc & desc)
-		: BlendState(desc)
-	{
-		auto re = std::static_pointer_cast<D3D11RenderEngine>( Global::GetRenderEngine() );
-		D3D11_BLEND_DESC d3dBlendStateDesc;
-		CreateD3DBlendStateDesc(desc, d3dBlendStateDesc);
-		ID3D11BlendState *pD3DBlendState = nullptr;
-		re->RawD3DDevice()->CreateBlendState(&d3dBlendStateDesc, &pD3DBlendState);
-		_rawD3DBlendState = MakeComShared(pD3DBlendState);
-	}
-
-
-
-	void D3D11BlendState::CreateD3DBlendStateDesc(const BlendStateDesc & desc, D3D11_BLEND_DESC & d3dBlendStateDesc)
+	static void CreateD3DBlendStateDesc(const BlendStateDesc & desc, D3D11_BLEND_DESC & d3dBlendStateDesc)
 	{
 		d3dBlendStateDesc.AlphaToCoverageEnable = desc.alphaToCoverageEnable;
 		d3dBlendStateDesc.IndependentBlendEnable = desc.independentBlendEnable;
@@ -37,5 +24,19 @@ namespace ToyGE
 			d3dRTDesc.BlendOpAlpha = GetD3DBlendOP(rtDesc.blendOPAlpha);
 			d3dRTDesc.RenderTargetWriteMask = GetD3DColorWriteMask(rtDesc.renderTargetWriteMask);
 		}
+	}
+
+	void D3D11BlendState::Init()
+	{
+		BlendState::Init();
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+
+		D3D11_BLEND_DESC d3dBlendStateDesc;
+		CreateD3DBlendStateDesc(_desc, d3dBlendStateDesc);
+
+		ID3D11BlendState *pD3DBlendState = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateBlendState(&d3dBlendStateDesc, &pD3DBlendState);
+		_hardwareBlendState = MakeComShared(pD3DBlendState);
 	}
 }

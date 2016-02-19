@@ -2,25 +2,29 @@
 #ifndef D3D11DEPTHSTENCILSTATE_H
 #define D3D11DEPTHSTENCILSTATE_H
 
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 #include "ToyGE\RenderEngine\DepthStencilState.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
 
 namespace ToyGE
 {
 	class D3D11DepthStencilState : public DepthStencilState
 	{
 	public:
-		D3D11DepthStencilState(const DepthStencilStateDesc & desc);
+		virtual void Init() override;
 
-		const Ptr<ID3D11DepthStencilState> & RawD3DDepthStencilState() const
+		virtual void Release() override
 		{
-			return _rawD3DDepthStencilState;
+			DepthStencilState::Release();
+			_hardwareDepthStencilState = nullptr;
+		}
+
+		const Ptr<ID3D11DepthStencilState> & GetHardwareDepthStencilState() const
+		{
+			return _hardwareDepthStencilState;
 		}
 
 	private:
-		Ptr<ID3D11DepthStencilState> _rawD3DDepthStencilState;
-
-		void CreateD3DDepthStencilDesc(const DepthStencilStateDesc & desc, D3D11_DEPTH_STENCIL_DESC & d3dDesc);
+		Ptr<ID3D11DepthStencilState> _hardwareDepthStencilState;
 	};
 }
 

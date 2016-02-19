@@ -2,361 +2,272 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
+#include "ToyGE\Kernel\PreInclude.h"
+
 namespace ToyGE
 {
-	enum VECTOR_VALUE
+	template <typename T, int N>
+	class Vector
 	{
-		VEC_X = 0,
-		VEC_Y = 1,
-		VEC_Z = 2,
-		VEC_W = 3
-	};
-
-	template <class T>
-	class Vector2
-	{
-		friend Vector2<T> operator*(const Vector2<T> & lhs, const Vector2<T> & rhs)
-		{
-			Vector2<T> ret = lhs;
-			ret *= rhs;
-			return ret;
-		}
-
-		friend Vector2<T> operator-(const Vector2<T> & lhs, const Vector2<T> & rhs)
-		{
-			Vector2<T> ret = lhs;
-			ret -= rhs;
-			return ret;
-		}
-
-		friend Vector2<T> operator+(const Vector2<T> & lhs, const Vector2<T> & rhs)
-		{
-			Vector2<T> ret = lhs;
-			ret += rhs;
-			return ret;
-		}
-
-		friend Vector2<T> operator/(const Vector2<T> & lhs, const Vector2<T> & rhs)
-		{
-			Vector2<T> ret = lhs;
-			ret /= rhs;
-			return ret;
-		}
-
 	public:
-		T x, y;
+		T value[N];
 
-		Vector2(){}
-		Vector2(const T & _x, const T & _y) : x(_x), y(_y) {}
-		Vector2(const T & v) : x(v), y(v) {}
-
-		Vector2<T> v(VECTOR_VALUE v0, VECTOR_VALUE v1)
+		Vector()
 		{
-			return Vector2<T>(reinterpret_cast<T*>(this)[v0], reinterpret_cast<T*>(this)[v1]);
 		}
 
-		T & operator[](size_t i)
+		Vector(const T & v0, const T & v1)
+			: Vector({ v0, v1 })
 		{
-			return reinterpret_cast<T*>(this)[i];
+		}
+		Vector(const T & v0, const T & v1, const T & v2)
+			: Vector({ v0, v1, v2 })
+		{
+		}
+		Vector(const T & v0, const T & v1, const T & v2, const T & v3)
+			: Vector({ v0, v1, v2, v3 })
+		{
 		}
 
-		const T & operator[](size_t i) const
+		Vector(const T & v)
 		{
-			return reinterpret_cast<const T*>(this)[i];
+			for (auto & i : value)
+				i = v;
 		}
 
-		Vector2<T> & operator+=(const Vector2<T> & rhs)
+		Vector(const std::initializer_list<T> & v)
 		{
-			x += rhs.x;
-			y += rhs.y;
+			auto itr = v.begin();
+			for (int i = 0; i < N && itr != v.end(); ++i)
+				value[i] = *(itr++);
+		}
+
+		template <typename RT>
+		Vector(const RT & v)
+		{
+			for (auto & i : value)
+				i = static_cast<RT>(v);
+		}
+
+		template <typename RT>
+		Vector(const std::initializer_list<RT> & v)
+		{
+			auto itr = v.begin();
+			for (int i = 0; i < N && itr != v.end(); ++i)
+				value[i] = static_cast<RT>(*(itr++));
+		}
+
+		Vector(const Vector<T, N> & rhs)
+		{
+			*this = rhs;
+		}
+
+		template <typename RT>
+		Vector(const Vector<RT, N> & rhs)
+		{
+			for (int i = 0; i < N; ++i)
+				value[i] = static_cast<RT>(rhs.value[i]);
+		}
+
+		const T & operator[](int index) const
+		{
+			return value[index];
+		}
+		T & operator[](int index)
+		{
+			return value[index];
+		}
+
+		const T & operator()(int index) const
+		{
+			return value[index];
+		}
+		T & operator()(int index)
+		{
+			return value[index];
+		}
+
+		Vector<T, N> & operator=(const Vector<T, N> & rhs)
+		{
+			std::copy(std::begin(rhs.value), std::end(rhs.value), std::begin(value));
 			return *this;
 		}
 
-		Vector2<T> & operator-=(const Vector2<T> & rhs)
+		Vector<T, N> & operator+=(const Vector<T, N> & rhs)
 		{
-			x -= rhs.x;
-			y -= rhs.y;
+			for (int i = 0; i < N; ++i)
+				value[i] += rhs.value[i];
+			return *this;
+		}
+		Vector<T, N> & operator-=(const Vector<T, N> & rhs)
+		{
+			for (int i = 0; i < N; ++i)
+				value[i] -= rhs.value[i];
+			return *this;
+		}
+		Vector<T, N> & operator*=(const Vector<T, N> & rhs)
+		{
+			for (int i = 0; i < N; ++i)
+				value[i] *= rhs.value[i];
+			return *this;
+		}
+		Vector<T, N> & operator/=(const Vector<T, N> & rhs)
+		{
+			for (int i = 0; i < N; ++i)
+				value[i] /= rhs.value[i];
 			return *this;
 		}
 
-		Vector2<T> & operator*=(const Vector2<T> & rhs)
+		Vector<bool, N> operator<(const Vector<T, N> & rhs) const
 		{
-			x *= rhs.x;
-			y *= rhs.y;
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] < rhs.value[i];
+			return r;
+		}
+		Vector<bool, N> operator<=(const Vector<T, N> & rhs) const
+		{
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] <= rhs.value[i];
+			return r;
+		}
+		Vector<bool, N> operator>(const Vector<T, N> & rhs) const
+		{
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] > rhs.value[i];
+			return r;
+		}
+		Vector<bool, N> operator>=(const Vector<T, N> & rhs) const
+		{
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] >= rhs.value[i];
+			return r;
+		}
+		Vector<bool, N> operator==(const Vector<T, N> & rhs) const
+		{
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] == rhs.value[i];
+			return r;
+		}
+		Vector<bool, N> operator!=(const Vector<T, N> & rhs) const
+		{
+			Vector<bool, N> r;
+			for (int i = 0; i < N; ++i)
+				r[i] = value[i] != rhs.value[i];
+			return r;
+		}
+
+		Vector<T, N> operator+() const
+		{
 			return *this;
 		}
-
-		Vector2<T> & operator/=(const Vector2<T> & rhs)
+		Vector<T, N> operator-() const
 		{
-			x /= rhs.x;
-			y /= rhs.y;
-			return *this;
+			return (*this) * -1;
 		}
 
-		bool operator==(const Vector2<T> & rhs)
+		void swap(const Vector<T, N> & rhs)
 		{
-			return x == rhs.x  && y == rhs.y;
+			using std::swap;
+			for (int i = 0; i < N; ++i)
+				swap(value[i], rhs.value[i]);
 		}
 
-		bool operator<(const Vector2<T> & rhs)
+		friend Vector<T, N> operator+(const Vector<T, N> & lhs, const Vector<T, N> & rhs)
 		{
-			return x < rhs.x && y < rhs.y;
+			Vector<T, N> r = lhs;
+			return (r += rhs);
+		}
+		friend Vector<T, N> operator-(const Vector<T, N> & lhs, const Vector<T, N> & rhs)
+		{
+			Vector<T, N> r = lhs;
+			return (r -= rhs);
+		}
+		friend Vector<T, N> operator*(const Vector<T, N> & lhs, const Vector<T, N> & rhs)
+		{
+			Vector<T, N> r = lhs;
+			return (r *= rhs);
+		}
+		friend Vector<T, N> operator/(const Vector<T, N> & lhs, const Vector<T, N> & rhs)
+		{
+			Vector<T, N> r = lhs;
+			return (r /= rhs);
 		}
 
-		bool operator<=(const Vector2<T> & rhs)
+
+		const T & x() const
 		{
-			return x <= rhs.x && y <= rhs.y;
+			return (*this)[0];
+		}
+		T & x()
+		{
+			return (*this)[0];
+		}
+		const T & r() const
+		{
+			return (*this)[0];
+		}
+		T & r()
+		{
+			return (*this)[0];
 		}
 
-		bool operator>(const Vector2<T> & rhs)
+		const T & y() const
 		{
-			return x > rhs.x && y > rhs.y;
+			return (*this)[1];
+		}
+		T & y()
+		{
+			return (*this)[1];
+		}
+		const T & g() const
+		{
+			return (*this)[1];
+		}
+		T & g()
+		{
+			return (*this)[1];
 		}
 
-		bool operator>=(const Vector2<T> & rhs)
+		const T & z() const
 		{
-			return x >= rhs.x && y >= rhs.y;
+			return (*this)[2];
+		}
+		T & z()
+		{
+			return (*this)[2];
+		}
+		const T & b() const
+		{
+			return (*this)[2];
+		}
+		T & b()
+		{
+			return (*this)[2];
+		}
+
+		const T & w() const
+		{
+			return (*this)[3];
+		}
+		T & w()
+		{
+			return (*this)[3];
+		}
+		const T & a() const
+		{
+			return (*this)[3];
+		}
+		T & a()
+		{
+			return (*this)[3];
 		}
 	};
 
-	template <class T>
-	class Vector3 : public Vector2 < T >
-	{
-		friend Vector3<T> operator*(const Vector3<T> & lhs, const Vector3<T> & rhs)
-		{
-			Vector3<T> ret = lhs;
-			ret *= rhs;
-			return ret;
-		}
-
-	public:
-		T z;
-
-		Vector3(){}
-		Vector3(const T & _x, const T & _y, const T & _z) : Vector2<T>(_x, _y), z(_z) {}
-		Vector3(const T & v) : Vector2<T>(v), z(v) {}
-
-		using Vector2<T>::v;
-
-		Vector3<T> v(VECTOR_VALUE v0, VECTOR_VALUE v1, VECTOR_VALUE v2)
-		{
-			return Vector3<T>(reinterpret_cast<T*>(this)[v0], reinterpret_cast<T*>(this)[v1], reinterpret_cast<T*>(this)[v2]);
-		}
-
-		Vector3<T> & operator+=(const Vector3<T> & rhs)
-		{
-			Vector2<T>::operator+=(rhs);
-			z += rhs.z;
-			return *this;
-		}
-
-		Vector3<T> & operator-=(const Vector3<T> & rhs)
-		{
-			Vector2<T>::operator-=(rhs);
-			z -= rhs.z;
-			return *this;
-		}
-
-		Vector3<T> & operator*=(const Vector3<T> & rhs)
-		{
-			Vector2<T>::operator*=(rhs);
-			z *= rhs.z;
-			return *this;
-		}
-
-		Vector3<T> & operator/=(const Vector3<T> & rhs)
-		{
-			Vector2<T>::operator/=(rhs);
-			z /= rhs.z;
-			return *this;
-		}
-
-		bool operator==(const Vector3<T> & rhs)
-		{
-			return Vector2<T>::operator==(rhs) && z == rhs.z;
-		}
-
-		bool operator<(const Vector3<T> & rhs)
-		{
-			return Vector2<T>::operator<(rhs) && z < rhs.z;
-		}
-
-		bool operator<=(const Vector3<T> & rhs)
-		{
-			return Vector2<T>::operator<=(rhs) && z <= rhs.z;
-		}
-
-		bool operator>(const Vector3<T> & rhs)
-		{
-			return Vector2<T>::operator>(rhs) && z > rhs.z;
-		}
-
-		bool operator>=(const Vector3<T> & rhs)
-		{
-			return Vector2<T>::operator>=(rhs) && z >= rhs.z;
-		}
-
-	};
-
-	template <class T>
-	class Vector4 : public Vector3 < T >
-	{
-		friend Vector4<T> operator*(const Vector4<T> & lhs, const Vector4<T> & rhs)
-		{
-			Vector4<T> ret = lhs;
-			ret *= rhs;
-			return ret;
-		}
-
-	public:
-		T w;
-
-		Vector4(){}
-		Vector4(const T & _x, const T & _y, const T & _z, const T & _w) : Vector3<T>(_x, _y, _z), w(_w) {}
-		Vector4(const T & v) : Vector3<T>(v), w(v){}
-
-		using Vector3<T>::v;
-
-		Vector4<T> v(VECTOR_VALUE v0, VECTOR_VALUE v1, VECTOR_VALUE v2, VECTOR_VALUE v3)
-		{
-			return Vector4<T>(reinterpret_cast<T*>(this)[v0], reinterpret_cast<T*>(this)[v1], reinterpret_cast<T*>(this)[v2], reinterpret_cast<T*>(this)[v3]);
-		}
-
-		Vector4<T> & operator+=(const Vector4<T> & rhs)
-		{
-			Vector3<T>::operator+=(rhs);
-			w += rhs.w;
-			return *this;
-		}
-
-		Vector4<T> & operator-=(const Vector4<T> & rhs)
-		{
-			Vector3<T>::operator-=(rhs);
-			w -= rhs.w;
-			return *this;
-		}
-
-
-		Vector4<T> & operator*=(const Vector4<T> & rhs)
-		{
-			Vector3<T>::operator*=(rhs);
-			w *= rhs.w;
-			return *this;
-		}
-
-		Vector4<T> & operator/=(const Vector4<T> & rhs)
-		{
-			Vector3<T>::operator/=(rhs);
-			w /= rhs.w;
-			return *this;
-		}
-
-		bool operator==(const Vector4<T> & rhs)
-		{
-			return Vector3<T>::operator==(rhs) && w == rhs.w;
-		}
-	};
-
-	template <class T>
-	Vector2<T> operator+(const Vector2<T> & lhs, const Vector2<T> & rhs)
-	{
-		Vector2<T> ret(lhs);
-		ret += rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector2<T> operator-(const Vector2<T> & lhs, const Vector2<T> & rhs)
-	{
-		Vector2<T> ret(lhs);
-		ret -= rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector2<T> operator*(const Vector2<T> & lhs, const Vector2<T> & rhs)
-	{
-		Vector2<T> ret(lhs);
-		ret *= rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector2<T> operator/(const Vector2<T> & lhs, const Vector2<T> & rhs)
-	{
-		Vector2<T> ret(lhs);
-		ret /= rhs;
-		return ret;
-	}
-
-
-	template <class T>
-	Vector3<T> operator+(const Vector3<T> & lhs, const Vector3<T> & rhs)
-	{
-		Vector3<T> ret(lhs);
-		ret += rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector3<T> operator-(const Vector3<T> & lhs, const Vector3<T> & rhs)
-	{
-		Vector3<T> ret(lhs);
-		ret -= rhs;
-		return ret;
-	}
-	template <class T>
-	Vector3<T> operator*(const Vector3<T> & lhs, const Vector3<T> & rhs)
-	{
-		Vector3<T> ret(lhs);
-		ret *= rhs;
-		return ret;
-	}
-	template <class T>
-	Vector3<T> operator/(const Vector3<T> & lhs, const Vector3<T> & rhs)
-	{
-		Vector3<T> ret(lhs);
-		ret /= rhs;
-		return ret;
-	}
-	template <class T>
-	Vector3<T> operator/(const Vector3<T> & lhs, const T & rhs)
-	{
-		return lhs / Vector3<T>(rhs);
-	}
-
-
-	template <class T>
-	Vector4<T> operator+(const Vector4<T> & lhs, const Vector4<T> & rhs)
-	{
-		Vector4<T> ret(lhs);
-		ret += rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector4<T> operator-(const Vector4<T> & lhs, const Vector4<T> & rhs)
-	{
-		Vector4<T> ret(lhs);
-		ret -= rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector4<T> operator*(const Vector4<T> & lhs, const Vector4<T> & rhs)
-	{
-		Vector4<T> ret(lhs);
-		ret *= rhs;
-		return ret;
-	}
-
-	template <class T>
-	Vector4<T> operator/(const Vector4<T> & lhs, const Vector4<T> & rhs)
-	{
-		Vector4<T> ret(lhs);
-		ret += rhs;
-		return ret;
-	}
 }
 
 #endif

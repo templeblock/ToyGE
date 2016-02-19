@@ -2,8 +2,8 @@
 #ifndef INPUTENGINE_H
 #define INPUTENGINE_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 #include "ToyGE\Platform\Window.h"
 #include "ToyGE\Input\InputDevice.h"

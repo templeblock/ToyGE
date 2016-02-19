@@ -2,8 +2,8 @@
 #ifndef DLLOBJ_H
 #define DLLOBJ_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "boost\noncopyable.hpp"
 
 namespace ToyGE

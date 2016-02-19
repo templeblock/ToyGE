@@ -2,197 +2,141 @@
 #ifndef MESH_H
 #define MESH_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\MeshAsset.h"
 #include "ToyGE\Math\Math.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
-#include "ToyGE\Kernel\IOHelper.h"
 
 namespace ToyGE
 {
-	class RenderInput;
 	class Material;
 	class Scene;
-	class RenderComponent;
-
-	struct StandardVertex
-	{
-		using pos_type = float3;
-		using texCoord_type = float3;
-		using normal_type = float3;
-		using tangent_type = float3;
-
-		float3 pos;
-		std::array<float3, 8> texCoord;
-		float3 normal;
-		float3 tangent;
-	};
-
-	class VertexDataDesc
-	{
-	public:
-		std::shared_ptr<uint8_t> pData;
-		int32_t numVertices;
-		int32_t vertexByteSize;
-		std::vector<VertexElementDesc> elementsDesc;
-
-		VertexDataDesc()
-			: pData(nullptr),
-			numVertices(0),
-			vertexByteSize(0)
-		{
-		}
-
-		int32_t FindElementDesc(const String & name) const
-		{
-			int32_t index = 0;
-			for (auto & elem : elementsDesc)
-			{
-				if (elem.name == name)
-					return index;
-				++index;
-			}
-			return -1;
-		}
-
-		template <typename T>
-		T & GetElement(int32_t vertexIndex, const VertexElementDesc & elemDesc)
-		{
-			return *(reinterpret_cast<T*>(pData.get() + vertexIndex * vertexByteSize + elemDesc.bytesOffset));
-		}
-	};
-
-	class VertexDataBuildHelp
-	{
-	public:
-		VertexDataDesc vertexDataDesc;
-
-		VertexDataBuildHelp();
-
-		void AddElementDesc(const String & name, int32_t index, RenderFormat format, int32_t instanceRate);
-
-		void SetNumVertices(int32_t numVertices);
-
-		void Start();
-
-		template <typename T>
-		void Add(const T & value)
-		{
-			memcpy(_pBufferData, &value, sizeof(T));
-			_pBufferData += sizeof(T);
-		}
-
-		void Finish();
-
-	private:
-		std::shared_ptr<uint8_t> _buffer;
-		uint8_t * _pBufferData;
-		int32_t _bytesOffset;
-	};
-
-	class StandardVertexElementName
-	{
-	public:
-		static String Position();
-
-		static String TextureCoord();
-
-		static String Normal();
-
-		static String Tangent();
-	};
+	class RenderMeshComponent;
 
 	class TOYGE_CORE_API Mesh : public std::enable_shared_from_this<Mesh>
 	{
-		friend class RenderMesh;
+		friend class MeshAsset;
 	public:
-		void SaveBin(const Ptr<Writer> & writer, const std::map<Ptr<Material>, int> & materials);
+		/** Init from data */
+		void Init();
 
-		static Ptr<Mesh> LoadBin(const Ptr<Reader> & reader, const std::vector<Ptr<Material>> & materials);
-
-		void SetName(const WString & name)
+		void SetData(const std::vector<Ptr<MeshElement>> & data) 
+		{ 
+			_data = data; 
+			_bDirty = true;
+		}
+		const std::vector<Ptr<MeshElement>> & GetData() const
 		{
-			_name = name;
+			return _data;
 		}
 
-		const WString & Name() const
-		{
-			return _name;
-		}
-
-		int32_t AddVertexData(const VertexDataDesc & vertexData)
-		{
-			_vertexDatas.push_back(vertexData);
-			return static_cast<int32_t>(_vertexDatas.size() - 1);
-		}
-
-		int32_t NumVertexSlots() const
-		{
-			return static_cast<int32_t>(_vertexDatas.size());
-		}
-
-		VertexDataDesc & GetVertexData(int32_t slotIndex)
-		{
-			return _vertexDatas[slotIndex];
-		}
-
-		void AddIndex(uint32_t index)
-		{
-			_indices.push_back(index);
-		}
-
-		int32_t NumIndices() const
-		{
-			return static_cast<uint32_t>(_indices.size());
-		}
-
-		uint32_t GetIndex(int32_t i)
-		{
-			return _indices[i];
-		}
-
-		const Ptr<RenderMesh> & InitRenderData();
-
-		const Ptr<RenderMesh> & GetRender() const
+		const Ptr<class MeshRenderData> & GetRenderData() const
 		{
 			return _renderData;
 		}
 
-		const Ptr<RenderMesh> & AcquireRender()
+		void SetAsset(const Ptr<MeshAsset> & asset)
 		{
-			if (!_renderData)
-				return InitRenderData();
-			else
-				return GetRender();
+			if (_asset.lock() != asset)
+			{
+				_asset = asset;
+				_bDirty = true;
+			}
+		}
+		Ptr<MeshAsset> GetAsset() const
+		{
+			return _asset.lock();
 		}
 
-		Ptr<RenderComponent> AddInstanceToScene(
+		Ptr<RenderMeshComponent> AddInstanceToScene(
 			const Ptr<Scene> & scene,
 			const XMFLOAT3 & pos = XMFLOAT3(0.0f, 0.0f, 0.0f),
 			const XMFLOAT3 & scale = XMFLOAT3(1.0f, 1.0f, 1.0f),
 			const XMFLOAT4 & orientation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
 
-		Ptr<Mesh> Copy() const;
+		void SetDirty(bool bDirty)
+		{
+			_bDirty = bDirty;
+		}
+		bool IsDirty() const;
+
+		void UpdateFromRenderData();
 
 	private:
-		WString _name;
-		std::vector<VertexDataDesc> _vertexDatas;
-		std::vector<uint32_t> _indices;
-		Ptr<RenderMesh> _renderData;
+		std::vector<Ptr<MeshElement>> _data;
+		Ptr<class MeshRenderData> _renderData;
+
+		std::weak_ptr<MeshAsset> _asset;
+		bool _bDirty = false;
+
+		void InitDepthRenderData();
 	};
 
-	class TOYGE_CORE_API RenderMesh
+	class TOYGE_CORE_API MeshElementRenderData
 	{
+		friend class Mesh;
 	public:
-		RenderMesh(const Ptr<Mesh> & mesh);
-
-		const Ptr<RenderInput> & GetRenderInput() const
+		Ptr<MeshElement> GetElementData() const
 		{
-			return _input;
+			return _meshElementData.lock();
+		}
+
+		CLASS_GET(VertexBuffer, std::vector< Ptr<class VertexBuffer> >, _vertexBuffers);
+
+		CLASS_GET(DepthVertexBuffer, std::vector< Ptr<class VertexBuffer> >, _depthVertexBuffer);
+
+		CLASS_GET(IndexBuffer, Ptr<class RenderBuffer>, _indexBuffer);
+
+		CLASS_GET(WeightBuffer, Ptr<class VertexBuffer>, _weightBuffer);
+
+		void SetMaterial(const Ptr<class Material> & material)
+		{
+			_material = material;
+			_bDirty = true;
+		}
+		CLASS_GET(Material, Ptr<class Material>, _material);
+
+		CLASS_SET(Dirty, bool, _bDirty);
+		bool IsDirty() const;
+
+		void BindMacros(std::map<String, String> & outMacros);
+
+		void BindShaderParams(const Ptr<class Shader> & shader);
+
+		void Draw();
+
+		void BindDepthMacros(bool bWithOpacityMask, std::map<String, String> & outMacros);
+
+		void BindDepthShaderParams(const Ptr<class Shader> & shader, bool bWithOpacityMask);
+
+		void DrawDepth(bool bWithOpacityMask);
+
+		void InitWeightBuffer();
+
+	private:
+		std::weak_ptr<MeshElement> _meshElementData;
+		std::vector< Ptr<class VertexBuffer> > _vertexBuffers;
+		std::vector< Ptr<class VertexBuffer> > _depthVertexBuffer;
+		Ptr<class VertexBuffer> _weightBuffer;
+		Ptr<class RenderBuffer> _indexBuffer;
+		Ptr<class Material> _material;
+		bool _bDirty = false;
+	};
+
+	class TOYGE_CORE_API MeshRenderData
+	{
+		friend class Mesh;
+	public:
+		CLASS_GET(MeshElements, std::vector<Ptr<MeshElementRenderData>>, _meshElements);
+
+		bool IsDirty() const
+		{
+			for (auto & element : _meshElements)
+				if (element->IsDirty())
+					return true;
+			return false;
 		}
 
 	private:
-		Ptr<RenderInput> _input;
+		std::vector<Ptr<MeshElementRenderData>> _meshElements;
 	};
 
 	class TOYGE_CORE_API CommonMesh

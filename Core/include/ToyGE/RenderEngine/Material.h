@@ -2,247 +2,161 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
-#include "ToyGE\Math\Math.h"
-#include "ToyGE\Kernel\IOHelper.h"
+#include "ToyGE\Kernel\MaterialAsset.h"
 
 namespace ToyGE
 {
-	class RenderEffect;
 	class Texture;
-
-	enum MaterialTextureType : uint32_t
-	{
-		MATERIAL_TEXTURE_BASECOLOR = 0UL,
-		MATERIAL_TEXTURE_SPECULAR = 1UL,
-		MATERIAL_TEXTURE_SHININESS = 2UL,
-		MATERIAL_TEXTURE_ROUGHNESS = 3UL,
-		MATERIAL_TEXTURE_BUMP = 4UL,
-		MATERIAL_TEXTURE_OPACITYMASK = 5UL,
-		MATERIAL_TEXTURE_EMISSIVE = 6UL
-	};
-
-	namespace MaterialTextureTypeNum
-	{
-		enum MaterialTextureTypeNumDef : uint32_t
-		{
-			value = MATERIAL_TEXTURE_EMISSIVE + 1
-		};
-	}
+	class Shader;
 
 	struct MaterialTexture
 	{
-		WString filePath;
-		int8_t texCoordIndex;
+		Ptr<Texture> texture;
+		uint8_t texCoordIndex;
 	};
 
 	class TOYGE_CORE_API Material : public std::enable_shared_from_this<Material>
 	{
-		friend class RenderMaterial;
-
+		friend class MaterialAsset;
 	public:
-		static Ptr<Material> LoadBin(const Ptr<Reader> & reader, const WString & basePath);
+		void Init();
 
-		Material();
-
-		void SaveBin(const Ptr<Writer> & writer, const WString & skipPrefixPath);
-
-		void SetName(const WString & name)
-		{
-			_name = name;
+		void SetBaseColor(const float3 & baseColor) 
+		{ 
+			_baseColor = baseColor; 
+			_bDirty = true; 
 		}
+		const float3 & GetBaseColor() const { return _baseColor; }
 
-		const WString & Name() const
-		{
-			return _name;
+		void SetRoughness(float roughtness) 
+		{ 
+			_roughness = roughtness; 
+			_bDirty = true; 
 		}
+		const float & GetRoughness() const { return _roughness; }
 
-		void AddTexture(MaterialTextureType texType, const WString & filePath, int8_t texCoordIndex)
-		{
-			_textures[texType].push_back({ filePath, texCoordIndex });
+		void SetMetallic(float metallic) 
+		{ 
+			_metallic = metallic;
+			_bDirty = true; 
 		}
+		const float & GetMetallic() const { return _metallic; }
 
-		int32_t NumTextures(MaterialTextureType texType) const
-		{
-			auto itr = _textures.find(texType);
-			if (itr != _textures.end())
-				return static_cast<int32_t>(itr->second.size());
-			else
-				return 0;
+		void SetEmissive(const float3 & emissive) 
+		{ 
+			_emissive = emissive; 
+			_bDirty = true;
 		}
+		const float3 & GetEmissive() const { return _emissive; }
 
-		WString GetTexture(MaterialTextureType texType, int32_t index) const
+		void SetTranslucent(bool bTranslucent) 
 		{
-			auto itr = _textures.find(texType);
-			if (itr != _textures.end())
+			_bTranslucent = bTranslucent; 
+			_bDirty = true;
+		}
+		bool IsTranslucent() const { return _bTranslucent; }
+
+		void SetOpcacity(float opacity) 
+		{ 
+			_opacity = opacity; 
+			_bDirty = true;
+		}
+		float GetOpacity() const { return _opacity; }
+
+		void SetRefraction(bool bRefraction) 
+		{ 
+			_bRefraction = bRefraction; 
+			_bDirty = true;
+		}
+		bool IsRefraction() const { return _bRefraction; }
+
+		void SetRefractionIndex(float refractionIndex) 
+		{ 
+			_refractionIndex = refractionIndex; 
+			_bDirty = true;
+		}
+		float GetRefractionIndex() const { return _refractionIndex; }
+
+		void SetDualFace(bool bDualFace) 
+		{ 
+			_bDualFace = bDualFace; 
+			_bDirty = true;
+		}
+		bool IsDualFace() const { return _bDualFace; }
+
+		void SetPOM(bool bPOM) 
+		{ 
+			_bPOM = bPOM; 
+			_bDirty = true;
+		}
+		bool IsPOM() const { return _bPOM; }
+
+		void SetPOMScale(float pomScale) 
+		{ 
+			_pomScale = pomScale; 
+			_bDirty = true;
+		}
+		float GetPOMScale() const { return _pomScale; }
+
+		void SetSubsurfaceScattering(bool bSubsurfaceScattering) 
+		{ 
+			_bSubsurfaceScattering = bSubsurfaceScattering; 
+			_bDirty = true;
+		}
+		bool IsSubsurfaceScattering() const { return _bSubsurfaceScattering; }
+
+		void AddTexture(MaterialTextureType matTexType, const Ptr<Texture> & texture, uint8_t texCoordIndex) 
+		{ 
+			_textures[matTexType].push_back({ texture, texCoordIndex });
+			_bDirty = true;
+		}
+		const std::vector<MaterialTexture> & GetTexture(MaterialTextureType matTexType) { return _textures[matTexType]; }
+
+		void SetAsset(const Ptr<MaterialAsset> & asset)
+		{
+			if (_asset.lock() != asset)
 			{
-				return itr->second[index].filePath;
+				_asset = asset;
+				_bDirty = true;
 			}
-			else
-				return WString();
+		}
+		Ptr<class MaterialAsset> GetAsset() const
+		{
+			return _asset.lock();
 		}
 
-		CLASS_GET(BaseColor, float3, _baseColor);
-		CLASS_SET(BaseColor, float3, _baseColor);
+		void BindMacros(std::map<String, String> & outMacros);
 
-		CLASS_GET(Roughness, float, _roughness);
-		CLASS_SET(Roughness, float, _roughness);
+		void BindShaderParams(const Ptr<Shader> & shader);
 
-		CLASS_GET(Metallic, float, _metallic);
-		CLASS_SET(Metallic, float, _metallic);
+		void BindDepthMacros(std::map<String, String> & outMacros);
 
-		CLASS_GET(Emissive, float3, _emissive);
-		CLASS_SET(Emissive, float3, _emissive);
+		void BindDepthShaderParams(const Ptr<Shader> & shader);
 
-		const Ptr<RenderMaterial> & InitRenderData();
-
-		const Ptr<RenderMaterial> & GetRender() const
+		CLASS_SET(Dirty, bool, _bDirty);
+		bool IsDirty() const
 		{
-			return _renderData;
-		}
-
-		const Ptr<RenderMaterial> & AcquireRender()
-		{
-			if (!_renderData)
-				return InitRenderData();
-			else
-				return GetRender();
-		}
-
-		uint32_t GetTypeFlags() const;
-
-		void SetTranslucent(bool bTranslucent)
-		{
-			_bTranslucent = bTranslucent;
-		}
-
-		bool IsTranslucent() const
-		{
-			return _bTranslucent;
-		}
-
-		void SetOpacity(float opacity)
-		{
-			_opacity = std::min<float>(1.0f, std::max<float>(opacity, 0.0f));
-		}
-
-		float GetOpacity() const
-		{
-			return _opacity;
-		}
-
-		void SetRefraction(bool bRefraction)
-		{
-			_bRefraction = bRefraction;
-		}
-
-		bool IsRefraction() const
-		{
-			return _bRefraction;
-		}
-
-		void SetRefractionIndex(float index)
-		{
-			_refractionIndex = index;
-		}
-
-		float GetRefractionIndex() const
-		{
-			return _refractionIndex;
-		}
-
-		void SetDualFace(bool bDualFace)
-		{
-			_bDualFace = bDualFace;
-		}
-
-		bool IsDualFace() const
-		{
-			return _bDualFace;
-		}
-
-		void SetPOM(bool bPOM)
-		{
-			_bPOM = bPOM;
-		}
-
-		bool IsPOM() const
-		{
-			return _bPOM;
-		}
-
-		void SetPOMScale(float scale)
-		{
-			_pomScale = scale;
-		}
-
-		float GetPOMScale() const
-		{
-			return _pomScale;
-		}
-
-		void SetSubSurfaceScattering(bool bSubSurface)
-		{
-			_bSubSurfaceScattering = bSubSurface;
-		}
-
-		bool IsSubSurfaceScattering() const
-		{
-			return _bSubSurfaceScattering;
-		}
-
-		void BindMacros(const Ptr<RenderEffect> & effect);
-
-		void BindParams(const Ptr<RenderEffect> & effect);
-
-	private:
-		WString _name;
-		std::map<MaterialTextureType, std::vector<MaterialTexture> > _textures;
-		float3 _baseColor;
-		float _roughness;
-		float _metallic;
-		float3 _emissive;
-		bool _bTranslucent;
-		float _opacity;
-		bool _bRefraction;
-		float _refractionIndex;
-		bool _bDualFace;
-		bool _bPOM;
-		float _pomScale;
-		bool _bSubSurfaceScattering;
-		Ptr<RenderMaterial> _renderData;
-	};
-
-	class TOYGE_CORE_API RenderMaterial
-	{
-	public:
-		RenderMaterial(const Ptr<Material> & material);
-
-		int32_t NumTextures(MaterialTextureType texType) const
-		{
-			auto itr = _textures.find(texType);
-			if (itr != _textures.end())
-				return static_cast<int32_t>(itr->second.size());
-			else
-				return 0;
-		}
-
-		Ptr<Texture> GetTexture(MaterialTextureType texType, int32_t index) const
-		{
-			auto itr = _textures.find(texType);
-			if (itr != _textures.end())
-			{
-				return itr->second[index];
-			}
-			else
-			{
-				return Ptr<Texture>();
-			}
+			return _bDirty;
 		}
 
 	private:
-		std::map < MaterialTextureType, std::vector<Ptr<Texture>> >  _textures;
+		float3	_baseColor = 1.0f;
+		float	_roughness = 1.0f;
+		float	_metallic = 0.0f;
+		float3	_emissive = 0.0f;
+		bool	_bTranslucent = false;
+		float	_opacity = 1.0f;
+		bool	_bRefraction = false;
+		float	_refractionIndex = 1.0f;
+		bool	_bDualFace = false;
+		bool	_bPOM = false;
+		float	_pomScale = 0.0f;
+		bool	_bSubsurfaceScattering = false;
+
+		std::array<std::vector<MaterialTexture>, MaterialTextureTypeNum::NUM> _textures;
+
+		std::weak_ptr<MaterialAsset> _asset;
+		bool _bDirty = false;
 	};
 }
 

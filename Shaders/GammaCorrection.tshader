@@ -1,0 +1,12 @@
+#include "DrawQuad.tshader"
+#include "GammaCorrectionCommon.tshader"
+
+Texture2D inTex;
+SamplerState pointSampler;
+
+float4 GammaCorrectionPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+  float4 sample = inTex.SampleLevel(pointSampler, vsOut.uv, 0);
+  sample.xyz = GammaCorrectOut(sample.xyz);
+  return sample;
+}

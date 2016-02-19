@@ -1,0 +1,57 @@
+﻿Build started 2016/1/31 13:14:05.
+     1>Project "F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2013\mcpplib.vcxproj" on node 2 (Build target(s)).
+     1>C:\Program Files (x86)\MSBuild\Microsoft.Cpp\v4.0\V120\Microsoft.CppBuild.targets(364,5): warning MSB8004: Output Directory does not end with a trailing slash.  This build instance will add the slash as it is required to allow proper evaluation of the Output Directory.
+     1>ClCompile:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\CL.exe /c /Zi /nologo /W3 /WX- /O2 /Oi /D MCPP_LIB=1 /D WIN32 /D _CRT_SECURE_NO_WARNINGS=1 /D NDEBUG /D _LIB /D _UNICODE /D UNICODE /Gm- /EHsc /MD /GS /Gy /fp:precise /Zc:wchar_t /Zc:forScope /Fo"x64\Release\\" /Fd"F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2013\\..\..\lib\Win64\VS2013\mcpp_64.pdb" /Gd /TC /errorReport:prompt ..\directive.c ..\eval.c ..\expand.c ..\main.c ..\mbchar.c ..\preproc.c ..\support.c ..\system.c
+         directive.c
+         eval.c
+     1>..\eval.c(1529): warning C4146: unary minus operator applied to unsigned type, result still unsigned
+         expand.c
+     1>..\expand.c(713): warning C4133: '=' : incompatible types - from 'LOCATION *' to 'char *'
+     1>..\expand.c(1751): warning C4101: 'arg' : unreferenced local variable
+     1>..\expand.c(1976): warning C4090: '=' : different 'const' qualifiers
+         main.c
+     1>..\main.c(475): warning C4090: '=' : different 'const' qualifiers
+     1>..\main.c(477): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name: _strdup. See online help for details.
+                 C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\include\string.h(245) : see declaration of 'strdup'
+     1>..\main.c(780): warning C4244: '=' : conversion from '__int64' to 'int', possible loss of data
+         mbchar.c
+         preproc.c
+     1>..\preproc.c(3): warning C4068: unknown pragma
+     1>..\preproc.c(8): warning C4068: unknown pragma
+         support.c
+     1>..\support.c(1590): warning C4090: 'function' : different 'const' qualifiers
+     1>..\support.c(1596): warning C4090: 'function' : different 'const' qualifiers
+     1>..\support.c(1600): warning C4090: '=' : different 'const' qualifiers
+     1>..\support.c(1687): warning C4102: 'com_start' : unreferenced label
+     1>..\support.c(1963): warning C4267: '=' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\support.c(1991): warning C4267: '=' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\support.c(2092): warning C4267: '=' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\support.c(2319): warning C4090: 'function' : different 'const' qualifiers
+     1>..\support.c(2418): warning C4244: '=' : conversion from '__int64' to 'long', possible loss of data
+         system.c
+     1>..\system.c(427): warning C4101: 'defp' : unreferenced local variable
+     1>..\system.c(2466): warning C4267: '=' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\system.c(2475): warning C4996: 'strdup': The POSIX name for this item is deprecated. Instead, use the ISO C++ conformant name: _strdup. See online help for details.
+                 C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\include\string.h(245) : see declaration of 'strdup'
+     1>..\system.c(2530): warning C4267: '=' : conversion from 'size_t' to 'int', possible loss of data
+     1>..\system.c(3431): warning C4102: 'search' : unreferenced label
+     1>..\system.c(4254): warning C4090: '=' : different 'const' qualifiers
+     1>..\system.c(4765): warning C4101: 'i' : unreferenced local variable
+     1>..\system.c(5050): warning C4244: 'return' : conversion from '__int64' to 'int', possible loss of data
+         Generating Code...
+       Lib:
+         C:\Program Files (x86)\Microsoft Visual Studio 12.0\VC\bin\x86_amd64\Lib.exe /OUT:"F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2013\\..\..\lib\Win64\VS2013\mcpp_64.lib" /NOLOGO /MACHINE:X64 /LTCG x64\Release\directive.obj
+         x64\Release\eval.obj
+         x64\Release\expand.obj
+         x64\Release\main.obj
+         x64\Release\mbchar.obj
+         x64\Release\preproc.obj
+         x64\Release\support.obj
+         x64\Release\system.obj
+         mcpplib.vcxproj -> F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2013\\..\..\lib\Win64\VS2013\mcpp_64.lib
+     1>Done Building Project "F:\Workspace\ToyGE\Externals\mcpp-2.7.2\src\vs2013\mcpplib.vcxproj" (Build target(s)).
+
+Build succeeded.
+
+Time Elapsed 00:00:01.80

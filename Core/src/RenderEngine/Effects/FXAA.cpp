@@ -1,14 +1,5 @@
 #include "ToyGE\RenderEngine\Effects\FXAA.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\Kernel\Core.h"
 
 namespace ToyGE
 {
@@ -21,60 +12,59 @@ namespace ToyGE
 		_fxaaConsoleEdgeThreshold(0.125f),
 		_fxaaConsoleEdgeThresholdMin(0.05f)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"FXAA.xml");
 	}
 
-	void FXAA::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void FXAA::Render(const Ptr<RenderView> & view)
 	{
-		//auto targetTex = std::static_pointer_cast<Texture>(sharedEnviroment->GetView()->GetRenderTarget().resource);
+		auto targetTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		auto targetTex = sharedEnviroment->GetView()->GetRenderTarget();
+		auto fxaaInTexRef = SetupFXAAInTex(targetTex);
 
-		auto fxaaInTex = SetupFXAAInTex(sharedEnviroment->GetView()->GetRenderResult());
-
-		float targetWidth = static_cast<float>(targetTex->Desc().width);
-		float targetHeight = static_cast<float>(targetTex->Desc().height);
+		float targetWidth = static_cast<float>(targetTex->GetDesc().width);
+		float targetHeight = static_cast<float>(targetTex->GetDesc().height);
 		float2 fxaaQualityRcpFrame = float2(1.0f / targetWidth, 1.0f / targetHeight);
-		float4 fxaaConsoleRcpFrameOpt = _fxaaConsoleRcpFrameOpt_N * float4(-fxaaQualityRcpFrame.x, -fxaaQualityRcpFrame.y, fxaaQualityRcpFrame.x, fxaaQualityRcpFrame.y);
-		float4 fxaaConsoleRcpFrameOpt2 = 2.0f * float4(-fxaaQualityRcpFrame.x, -fxaaQualityRcpFrame.y, fxaaQualityRcpFrame.x, fxaaQualityRcpFrame.y);
-		float4 fxaaConsole360RcpFrameOpt2 = 4.0f * float4(2.0f * fxaaQualityRcpFrame.x, 2.0f * fxaaQualityRcpFrame.y, -fxaaQualityRcpFrame.x, -fxaaQualityRcpFrame.y);
+		float4 fxaaConsoleRcpFrameOpt = _fxaaConsoleRcpFrameOpt_N * float4(-fxaaQualityRcpFrame.x(), -fxaaQualityRcpFrame.y(), fxaaQualityRcpFrame.x(), fxaaQualityRcpFrame.y());
+		float4 fxaaConsoleRcpFrameOpt2 = 2.0f * float4(-fxaaQualityRcpFrame.x(), -fxaaQualityRcpFrame.y(), fxaaQualityRcpFrame.x(), fxaaQualityRcpFrame.y());
+		float4 fxaaConsole360RcpFrameOpt2 = 4.0f * float4(2.0f * fxaaQualityRcpFrame.x(), 2.0f * fxaaQualityRcpFrame.y(), -fxaaQualityRcpFrame.x(), -fxaaQualityRcpFrame.y());
 
-		_fx->VariableByName("fxaaQualityRcpFrame")->AsScalar()->SetValue(&fxaaQualityRcpFrame);
-		_fx->VariableByName("fxaaConsoleRcpFrameOpt")->AsScalar()->SetValue(&fxaaConsoleRcpFrameOpt);
-		_fx->VariableByName("fxaaConsoleRcpFrameOpt2")->AsScalar()->SetValue(&fxaaConsoleRcpFrameOpt2);
-		_fx->VariableByName("fxaaConsole360RcpFrameOpt2")->AsScalar()->SetValue(&fxaaConsole360RcpFrameOpt2);
+		auto ps = Shader::FindOrCreate<FXAAPS>();
 
-		_fx->VariableByName("fxaaQualitySubpix")->AsScalar()->SetValue(&_fxaaQualitySubpix);
-		_fx->VariableByName("fxaaQualityEdgeThreshold")->AsScalar()->SetValue(&_fxaaQualityEdgeThreshold);
-		_fx->VariableByName("fxaaQualityEdgeThresholdMin")->AsScalar()->SetValue(&_fxaaQualityEdgeThresholdMin);
-		_fx->VariableByName("fxaaConsoleEdgeSharpness")->AsScalar()->SetValue(&_fxaaConsoleEdgeSharpness);
-		_fx->VariableByName("fxaaConsoleEdgeThreshold")->AsScalar()->SetValue(&_fxaaConsoleEdgeThreshold);
-		_fx->VariableByName("fxaaConsoleEdgeThresholdMin")->AsScalar()->SetValue(&_fxaaConsoleEdgeThresholdMin);
+		ps->SetScalar("fxaaQualityRcpFrame", fxaaQualityRcpFrame);
+		ps->SetScalar("fxaaConsoleRcpFrameOpt", fxaaConsoleRcpFrameOpt);
+		ps->SetScalar("fxaaConsoleRcpFrameOpt2", fxaaConsoleRcpFrameOpt2);
+		ps->SetScalar("fxaaConsole360RcpFrameOpt2", fxaaConsole360RcpFrameOpt2);
 
-		_fx->VariableByName("fxaaInTex")->AsShaderResource()->SetValue(fxaaInTex->CreateTextureView());
+		ps->SetScalar("fxaaQualitySubpix", _fxaaQualitySubpix);
+		ps->SetScalar("fxaaQualityEdgeThreshold", _fxaaQualityEdgeThreshold);
+		ps->SetScalar("fxaaQualityEdgeThresholdMin", _fxaaQualityEdgeThresholdMin);
+		ps->SetScalar("fxaaConsoleEdgeSharpness", _fxaaConsoleEdgeSharpness);
+		ps->SetScalar("fxaaConsoleEdgeThreshold", _fxaaConsoleEdgeThreshold);
+		ps->SetScalar("fxaaConsoleEdgeThresholdMin", _fxaaConsoleEdgeThresholdMin);
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-		rc->SetRenderTargets({ targetTex->CreateTextureView() }, 0);
+		ps->SetSRV("fxaaInTex", fxaaInTexRef->Get()->Cast<Texture>()->GetShaderResourceView());
 
-		RenderQuad(_fx->TechniqueByName("FXAA"), 0, 0, targetTex->Desc().width, targetTex->Desc().height);
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
 
-		sharedEnviroment->GetView()->FlipRenderTarget();
+		ps->Flush();
 
-		fxaaInTex->Release();
+		DrawQuad({ targetTex->GetRenderTargetView(0, 0, 1) });
 	}
 
-	Ptr<Texture> FXAA::SetupFXAAInTex(const Ptr<Texture> & inTex)
+	PooledTextureRef FXAA::SetupFXAAInTex(const Ptr<Texture> & inTex)
 	{
-		auto resultTexDesc = inTex->Desc();
-		resultTexDesc.format = RENDER_FORMAT_R8G8B8A8_UNORM;
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(resultTexDesc);
+		auto resultTexDesc = inTex->GetDesc();
+		resultTexDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, resultTexDesc });
 
-		_fx->VariableByName("fxaaInTex")->AsShaderResource()->SetValue(inTex->CreateTextureView());
+		auto ps = Shader::FindOrCreate<FXAASetupPS>();
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
+		ps->SetSRV("fxaaInTex", inTex->GetShaderResourceView());
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		RenderQuad(_fx->TechniqueByName("FXAASetup"), 0, 0, inTex->Desc().width, inTex->Desc().height);
+		ps->Flush();
 
-		return resultTex;
+		DrawQuad({ resultTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+
+		return resultTexRef;
 	}
 }

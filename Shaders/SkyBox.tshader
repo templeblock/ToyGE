@@ -1,0 +1,26 @@
+#include "Common.tshader"
+    
+cbuffer cb_skybox
+{
+    float4x4 transform;
+};
+
+TextureCube skyBoxTex;
+SamplerState linearSampler; 
+    
+void SkyBoxVS(
+    float3 pos : POSITION,
+    out float4 clipPos : SV_POSITION,
+    out float3 dir : DIRECTION)
+{
+    clipPos = mul(float4(pos, 1.0f), transform);
+    clipPos.z = clipPos.w;
+    dir = pos;
+}
+    
+float4 SkyBoxPS(
+    float4 clipPos : SV_POSITION,
+    float3 dir : DIRECTION) : SV_TARGET
+{
+    return skyBoxTex.Sample(linearSampler, dir);
+}

@@ -2,73 +2,119 @@
 #ifndef RENDERUTIL_H
 #define RENDERUTIL_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
+#include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\RenderViewport.h"
 #include "ToyGE\Math\Math.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
 
 namespace ToyGE
 {
 	class Texture;
 	class RenderTechnique;
+	class RenderView;
+	class RenderTargetView;
+	class DepthStencilView;
 
 	TOYGE_CORE_API uint32_t GetRenderFormatNumBits(RenderFormat fmt);
 
 	TOYGE_CORE_API bool IsCompress(RenderFormat fmt);
 
-	template <typename T>
-	bool CheckRenderConfig(const Ptr<RenderSharedEnviroment> & sharedEnviron, const String & paramName, const T & value)
-	{
-		auto param = sharedEnviron->ParamByName(paramName);
-		if (param && param->As<SharedParam<T>>()->GetValue() == value)
-			return true;
-		return false;
-	}
+	TOYGE_CORE_API void ComputeMipsSize(
+		int32_t width,
+		int32_t heigth,
+		int32_t depth,
+		std::vector<int3> & outMipsSize);
 
-	TOYGE_CORE_API Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale = 1.0f);
+	TOYGE_CORE_API const std::vector<float> & GetGaussTable(int32_t numSamples);
 
-	TOYGE_CORE_API Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex);
+	TOYGE_CORE_API RenderViewport GetTextureQuadViewport(const Ptr<Texture> & tex);
 
-	TOYGE_CORE_API void Transform(
-		const ResourceView & src,
-		const ResourceView & dst,
-		//uint32_t colorMask = COLOR_WRITE_ALL,
-		const Vector4<ColorWriteMask> & colorWriteMask = Vector4<ColorWriteMask>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
-		const int4 & dstRect = -1);
-	
-	TOYGE_CORE_API Ptr<Texture> SAT(const Ptr<Texture> & tex);
+	TOYGE_CORE_API RenderViewport GetQuadViewport();
 
-	TOYGE_CORE_API Ptr<Texture> DownSample(const ResourceView & texView, float2 scale);
 
-	TOYGE_CORE_API void RenderQuad(
-		const Ptr<RenderTechnique> & tech,
-		int32_t topLeftX = 0,
-		int32_t topLeftY = 0,
-		int32_t width = 0,
-		int32_t height = 0,
+	DECLARE_SHADER(, HeightToBumpPS, SHADER_PS, "HeightToBump", "HeightToBumpPS", SM_4);
+
+	TOYGE_CORE_API Ptr<Texture> HeightToBumpTex(const Ptr<Texture> & heightTex, float scale = 1.0f);
+
+
+	DECLARE_SHADER(, DrawQuadVS, SHADER_VS, "DrawQuad", "DrawQuadVS", SM_4);
+
+	TOYGE_CORE_API void DrawQuad(
+		const std::vector< Ptr<RenderTargetView> > & rtvs,
+		float topLeftX = 0.0f,
+		float topLeftY = 0.0f,
+		float width = 0.0f,
+		float height = 0.0f,
 		float topLeftU = 0.0f,
 		float topLeftV = 0.0f,
 		float uvWidth = 1.0f,
 		float uvHeight = 1.0f,
-		const ResourceView & depthStencil = ResourceView());
+		const Ptr<DepthStencilView> & dsv = nullptr);
+
+	DECLARE_SHADER(, FillPS, SHADER_PS, "FillPS", "FillPS", SM_4);
+
+	TOYGE_CORE_API void Fill(
+		const float4 & color,
+		const std::vector< Ptr<RenderTargetView> > & rtvs,
+		float topLeftX = 0.0f,
+		float topLeftY = 0.0f,
+		float width = 0.0f,
+		float height = 0.0f,
+		float topLeftU = 0.0f,
+		float topLeftV = 0.0f,
+		float uvWidth = 1.0f,
+		float uvHeight = 1.0f,
+		const Ptr<DepthStencilView> & dsv = nullptr);
+
+
+	DECLARE_SHADER(, TransformPS, SHADER_PS, "TransformPS", "TransformPS", SM_4);
+
+	TOYGE_CORE_API void Transform(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		const Vector<ColorWriteMask, 4> & colorWriteMask = Vector<ColorWriteMask, 4>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
+		const float4 & srcRect = 0.0f,
+		const float4 & dstRect = 0.0f,
+		const Ptr<class Sampler> & sampler = nullptr);
+
+
+	DECLARE_SHADER(, FilterVS, SHADER_VS, "FilterVS", "FilterVS", SM_4);
+	DECLARE_SHADER(, FilterPS, SHADER_PS, "FilterPS", "FilterPS", SM_4);
 
 	TOYGE_CORE_API void TextureFilter(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t numSamples,
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
 		const std::vector<float2> & uvOffsets, 
-		const std::vector<float> & weights);
+		const std::vector<float> & weights,
+		const Ptr<class Sampler> & sampler = nullptr);
+
+
+	DECLARE_SHADER(, BilateralBlurXPS, SHADER_PS, "BilateralFilter", "BilateralBlurXPS", SM_4);
+	DECLARE_SHADER(, BilateralBlurYPS, SHADER_PS, "BilateralFilter", "BilateralBlurYPS", SM_4);
+
+	TOYGE_CORE_API void BilateralBlur(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst, 
+		const Ptr<ShaderResourceView> & depthTex,
+		const std::vector<float> & weights,
+		float depthDiffThreshold);
+
+
+	DECLARE_SHADER(, BilateralUpSamplingPS, SHADER_PS, "BilateralFilter", "BilateralUpSamplingPS", SM_4);
 
 	TOYGE_CORE_API void BilateralUpSampling(
-		const ResourceView & src,
-		const ResourceView & lowResDepthTex,
-		const ResourceView & highResDepthTex,
-		const ResourceView & dst,
-		float depthDiffScale);
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		const Ptr<ShaderResourceView> & lowResDepthTex,
+		const Ptr<ShaderResourceView> & highResDepthTex,
+		float depthDiffThreshold);
+
+
+	DECLARE_SHADER(, LinearizeDepthPS, SHADER_PS, "LinearizeDepth", "LinearizeDepthPS", SM_4);
+
+	TOYGE_CORE_API void LinearizeDepth(const Ptr<ShaderResourceView> & depth, const Ptr<RenderView> & view, const Ptr<RenderTargetView> & target);
+
 }
 #endif

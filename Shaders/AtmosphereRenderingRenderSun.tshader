@@ -1,0 +1,35 @@
+#include "AtmosphereRenderingCommon.tshader"
+#include "View.tshader"
+
+float3 sunRadiance;
+float sunRadius;
+float2 lightClipPos;
+
+void RenderSunVS(
+    uint vertexID : SV_VertexID,
+    out float4 pos : SV_POSITION,
+    out float2 posH : POSITION)
+{
+    float2 sunRadiusH = sunRadius * float2(viewToClipMatrix[0][0], viewToClipMatrix[1][1]);
+    float4 sunMinMax = lightClipPos.xyxy + sunRadiusH.xyxy * float4(-1.0f, -1.0f, 1.0f, 1.0f);
+    
+    float4 posMap[4] = 
+    {
+        float4(sunMinMax.xw, 0.0f, 1.0f),
+        float4(sunMinMax.zw, 0.0f, 1.0f),
+        float4(sunMinMax.xy, 0.0f, 1.0f),
+        float4(sunMinMax.zy, 0.0f, 1.0f)
+    };
+    
+    pos = posMap[vertexID];
+    posH = pos.xy;
+}
+
+float4 RenderSunPS(
+    float4 pos : SV_POSITION,
+    float2 posH : POSITION) : SV_TARGET
+{
+    float2 sunRadiusH = sunRadius * float2(viewToClipMatrix[0][0], viewToClipMatrix[1][1]);
+    float2 dist = (posH - lightClipPos) / sunRadiusH;
+    return float4(sunRadiance, saturate(1.0 - dot(dist, dist)));
+}

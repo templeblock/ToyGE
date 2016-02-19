@@ -1,0 +1,188 @@
+#ifndef LIGHTING_TSHADER
+#define LIGHTING_TSHADER
+
+#include "Common.tshader"
+
+#define LIGHT_TYPE_POINT        0
+#define LIGHT_TYPE_SPOT         1
+#define LIGHT_TYPE_DIRECTIONAL  2
+
+#ifndef LIGHT_SHADOW
+#define LIGHT_SHADOW 0
+#endif
+
+cbuffer cb_light
+{
+    float3 lightRadiance;
+    float3 lightPos;
+    float3 lightDir;
+    float  spotLightDecreaseSpeed;
+}
+
+float3 ComputeIrradiance(float3 radiance, float n_dot_l)
+{
+	return radiance * n_dot_l;
+}
+
+float3 ComputeIrradiance(float3 radiance, float3 n, float3 l)
+{
+	return radiance * max(0.0, dot(n, l));
+}
+
+//** Directional */
+float3 ComputeDirectionalIrradiance(float3 radiance, float3 lightDir, float3 n)
+{
+	return ComputeIrradiance(radiance, n, -lightDir);
+}
+
+//** Point */
+float3 ComputePointRadiance(float3 radiance, float dist)
+{
+    return radiance / max(1e-4, dist * dist);
+}
+
+float3 ComputePointRadiance(float3 radiance, float3 lightPos, float3 pos)
+{
+  float dist = length(lightPos - pos);
+  return ComputePointRadiance(radiance, dist);
+}
+
+float3 ComputePointIrradiance(float3 radiance, float dist, float n_dot_l)
+{   
+    radiance = ComputePointRadiance(radiance, dist);
+    return ComputeIrradiance(radiance, n_dot_l);
+}
+
+float3 ComputePointIrradiance(float3 radiance, float dist, float3 n, float3 l)
+{   
+    radiance = ComputePointRadiance(radiance, dist);
+    return ComputeIrradiance(radiance, n, l);
+}
+
+float3 ComputePointIrradiance(float3 radiance, float3 lightPos, float3 pos, float3 n)
+{   
+    float3 l = lightPos - pos;
+    float dist = length(l);
+    l /= max(1e-4, dist);
+    
+    return ComputePointIrradiance(radiance, dist, n, l);
+}
+
+//** Spot */
+float3 ComputeSpotRadiance(float3 radiance, float decreaseSpeed, float cosDecreaseAngle)
+{
+    return radiance * pow(cosDecreaseAngle, decreaseSpeed);
+}
+
+float3 ComputeSpotRadiance(float3 radiance, float decreaseSpeed, float3 lightDir, float3 l)
+{
+    return ComputeSpotRadiance(radiance, decreaseSpeed, max(0.0, dot(lightDir, -l)));
+}
+
+float3 ComputeSpotRadiance(float3 radiance, float decreaseSpeed, float3 lightDir, float3 lightPos, float3 pos)
+{
+    float3 l = normalize(lightPos - pos);
+    return ComputeSpotRadiance(radiance, decreaseSpeed, lightDir, l);
+}
+
+float3 ComputeSpotIrradiance(float3 radiance, float decreaseSpeed, float cosDecreaseAngle, float n_dot_l)
+{
+	radiance = ComputeSpotRadiance(radiance, decreaseSpeed, cosDecreaseAngle);
+    return ComputeIrradiance(radiance, n_dot_l);
+}
+
+float3 ComputeSpotIrradiance(float3 radiance, float decreaseSpeed, float3 lightDir, float3 l, float n_dot_l)
+{
+	radiance = ComputeSpotRadiance(radiance, decreaseSpeed, lightDir, l);
+    return ComputeIrradiance(radiance, n_dot_l);
+}
+
+float3 ComputeSpotIrradiance(float3 radiance, float decreaseSpeed, float3 lightDir, float3 lightPos, float3 pos, float n_dot_l)
+{
+	radiance = ComputeSpotRadiance(radiance, decreaseSpeed, lightDir, lightPos, pos);
+    return ComputeIrradiance(radiance, n_dot_l);
+}
+
+float3 ComputeSpotIrradiance(float3 radiance, float decreaseSpeed, float3 lightDir, float3 lightPos, float3 pos, float3 n)
+{
+    float3 l = normalize(lightPos - pos);
+    
+	radiance = ComputeSpotRadiance(radiance, decreaseSpeed, lightDir, l);
+    return ComputeIrradiance(radiance, max(0.0, dot(n, l)));
+}
+
+
+float3 GetRadiance(float3 pos)
+{
+    float3 radiance;
+    
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    radiance = ComputePointRadiance(lightRadiance, lightPos, pos);
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    radiance = ComputeSpotRadiance(lightRadiance, spotLightDecreaseSpeed, lightDir, lightPos, pos);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    radiance = lightRadiance;
+#endif
+
+    return radiance;
+}
+
+float3 GetIrradiance(float3 pos, float3 n)
+{
+    float3 irradiance = 0.0f;
+    
+#if LIGHT_TYPE == LIGHT_TYPE_POINT
+    irradiance = ComputePointIrradiance(lightRadiance, lightPos, pos, n);
+#elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+    irradiance = ComputeSpotIrradiance(lightRadiance, spotLightDecreaseSpeed, lightDir, lightPos, pos, n);
+#elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    irradiance = ComputeDirectionalIrradiance(lightRadiance, lightDir, n);
+#endif
+
+    return irradiance;
+}
+
+float3 GetPosToLightDir(float3 pos)
+{
+#if LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+    return -lightDir;
+#else
+    return normalize(lightPos - pos);
+#endif
+}
+
+// float ComputeShadow(float3 posW, float viewDepth, float2 screenPos)
+// {
+//     float shadow = 1.0f;
+// 
+// #ifdef LIGHT_SHADOW
+//     
+// #if LIGHT_TYPE == LIGHT_TYPE_POINT
+//     shadow = ComputeShadow_PointLight(posW, lightPos, screenPos);
+// #elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+//     shadow = ComputeShadow_SpotLight(posW, lightPos, screenPos);
+// #elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+//     shadow = ComputeShadow_DirectionalLight(posW, viewDepth, screenPos);
+// #endif
+//     
+// #endif
+// 
+//     return shadow;
+// }
+// 
+// float GetShadowDepth(float3 posW, float viewDepth, out float recieverDepth)
+// {
+//     float depth = 0.0f;
+//     
+// #if LIGHT_TYPE == LIGHT_TYPE_POINT
+//     depth = GetShadowDepth_PointLight(posW, lightPos, recieverDepth);
+// #elif LIGHT_TYPE == LIGHT_TYPE_SPOT
+//     depth = GetShadowDepth_SpotLight(posW, lightPos, recieverDepth);
+// #elif LIGHT_TYPE == LIGHT_TYPE_DIRECTIONAL
+//     depth = GetShadowDepth_DirectionalLight(posW, viewDepth, recieverDepth);
+// #endif
+//     
+//     return depth;
+// }
+
+#endif

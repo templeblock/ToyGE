@@ -2,12 +2,11 @@
 #ifndef FONTFACTORY_H
 #define FONTFACTORY_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\RenderEngine\Font\Font.h"
 
 namespace ToyGE
 {
-	class Font;
+	class FontAsset;
 	class File;
 
 	class TOYGE_CORE_API FontFactory
@@ -15,7 +14,7 @@ namespace ToyGE
 	public:
 		virtual ~FontFactory() = default;
 
-		virtual Ptr<Font> LoadFont(const Ptr<File> & file) = 0;
+		virtual Ptr<Font> CreateNewFont() = 0;
 	};
 }
 

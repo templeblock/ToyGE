@@ -116,7 +116,7 @@ namespace ToyGE
 		}
 
 		DefaultRenderObjectCuller()
-			: DefaultRenderObjectCuller(1, 5)
+			: DefaultRenderObjectCuller(4, 1)
 		{
 
 		}
@@ -145,7 +145,7 @@ namespace ToyGE
 		}
 
 		DefaultRenderLightCuller()
-			: DefaultRenderLightCuller(2, 5)
+			: DefaultRenderLightCuller(4, 1)
 		{
 
 		}
@@ -171,9 +171,9 @@ namespace ToyGE
 	protected:
 		std::shared_ptr<OctreeCuller> CreateNode(int32_t maxNodeDepth, int32_t maxNodeElements) override;
 
-		//XNA::AxisAlignedBox ComputeNodeAABB(const std::vector<Ptr<Cullable>> & elements) override;
+		XNA::AxisAlignedBox ComputeNodeAABB(const std::vector<Ptr<Cullable>> & elements) override;
 
-		//bool IsExceedNodeAABB(const Ptr<Cullable> & element) override;
+		bool IsExceedNodeAABB(const Ptr<Cullable> & element) override;
 
 	private:
 		std::vector<Ptr<DirectionalLightComponent>> _rootDirLights;

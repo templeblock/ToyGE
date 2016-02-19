@@ -1,0 +1,40 @@
+#include "Common.tshader"
+#include "LPVCommon.tshader"
+#include "DrawQuad.tshader"
+#include "GBuffer.tshader"
+#include "View.tshader"
+
+Texture2D gbuffer0;
+Texture2D gbuffer1;
+
+Texture2D linearDepthTex;
+
+SamplerState pointSampler;
+
+float lpvStrength;
+
+float3 RenderLPVIndirectPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    GBuffer gbuf;
+    
+    gbuf.gbuf0 = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+    gbuf.gbuf1 = gbuffer1.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+  
+    Material mat = GBufferToMaterial(gbuf);
+  
+    float linearDepth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0.0f).x;
+  
+    float2 clipPosXY = vsOut.uv * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    float3 viewPos = GetViewPosFromLinear(float3(clipPosXY, linearDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 worldPos = mul(float4(viewPos, 1.0f), viewToWorldMatrix).xyz;
+    
+    float3 samplePos = WorldToGrid(worldPos);
+    
+    LPVCell cell = ReadLPVCellFilter(samplePos + 0.5 * mat.normal);
+    
+    float3 lpvSampleColor = max(0.0, SynSHCoeffs9(-mat.normal, cell.coeffs) );
+    
+    float3 color = lpvSampleColor * lpvStrength * mat.diffuseColor;
+    
+    return color;
+}

@@ -1,118 +1,93 @@
 #include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\Kernel\Assert.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\Shader.h"
 #include "ToyGE\RenderEngine\RenderResource.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\Kernel\Timer.h"
-#include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 #include "ToyGE\RenderEngine\ShaderProgram.h"
+#include "ToyGE\RenderEngine\Sampler.h"
+#include "ToyGE\RenderEngine\BlendState.h"
+#include "ToyGE\RenderEngine\DepthStencilState.h"
+#include "ToyGE\RenderEngine\RasterizerState.h"
 
 namespace ToyGE
 {
-	void RenderContext::SaveState(uint32_t saveFlag, RenderContextStateSave & outSave)
+	void RenderContext::SetRenderTargets(const std::vector<Ptr<RenderTargetView>> & renderTargets)
 	{
-		outSave.saveFlag = saveFlag;
-		if (saveFlag & RENDER_CONTEXT_STATE_INPUT)
-			outSave.saveState.renderInput = _state.renderInput;
-		if (saveFlag & RENDER_CONTEXT_STATE_VIEWPORT)
-			outSave.saveState.viewport = _state.viewport;
-		if (saveFlag & RENDER_CONTEXT_STATE_RENDERTARGETS)
-			outSave.saveState.renderTargets = _state.renderTargets;
-		if (saveFlag & RENDER_CONTEXT_STATE_DEPTHSTENCIL)
-			outSave.saveState.depthStencil = _state.depthStencil;
-		if (saveFlag & RENDER_CONTEXT_STATE_SHADERS)
-			outSave.saveState.shaders = _state.shaders;
-		if (saveFlag & RENDER_CONTEXT_STATE_BLENDSTATE)
-		{
-			outSave.saveState.blendState = _state.blendState;
-			outSave.saveState.blendFactor = _state.blendFactor;
-			outSave.saveState.blendSampleMask = _state.blendSampleMask;
-		}
-		if (saveFlag & RENDER_CONTEXT_STATE_DEPTHSTENCILSTATE)
-		{
-			outSave.saveState.depthStencilState = _state.depthStencilState;
-			outSave.saveState.stencilRef = _state.stencilRef;
-		}
-		if (saveFlag & RENDER_CONTEXT_STATE_RASTERIZERSTATE)
-			outSave.saveState.rasterizerState = _state.rasterizerState;
+		_state.renderTargets = renderTargets;
+		/*if(_state.renderTargets.size() < )
+		_state.renderTargets.resize(offset + renderTargets.size());
+		std::copy(renderTargets.begin(), renderTargets.end(), _state.renderTargets.begin() + offset);*/
 	}
 
-	void RenderContext::RestoreState(const RenderContextStateSave & stateSave)
-	{
-		auto saveFlag = stateSave.saveFlag;
-		if (saveFlag & RENDER_CONTEXT_STATE_INPUT)
-			_state.renderInput = stateSave.saveState.renderInput;
-		if (saveFlag & RENDER_CONTEXT_STATE_VIEWPORT)
-			_state.viewport = stateSave.saveState.viewport;
-		if (saveFlag & RENDER_CONTEXT_STATE_RENDERTARGETS)
-			_state.renderTargets = stateSave.saveState.renderTargets;
-		if (saveFlag & RENDER_CONTEXT_STATE_DEPTHSTENCIL)
-			_state.depthStencil = stateSave.saveState.depthStencil;
-		if (saveFlag & RENDER_CONTEXT_STATE_SHADERS)
-			_state.shaders = stateSave.saveState.shaders;
-		if (saveFlag & RENDER_CONTEXT_STATE_BLENDSTATE)
-		{
-			_state.blendState = stateSave.saveState.blendState;
-			_state.blendFactor = stateSave.saveState.blendFactor;
-			_state.blendSampleMask = stateSave.saveState.blendSampleMask;
-		}
-		if (saveFlag & RENDER_CONTEXT_STATE_DEPTHSTENCILSTATE)
-		{
-			_state.depthStencilState = stateSave.saveState.depthStencilState;
-			_state.stencilRef = stateSave.saveState.stencilRef;
-		}
-		if (saveFlag & RENDER_CONTEXT_STATE_RASTERIZERSTATE)
-			_state.rasterizerState = stateSave.saveState.rasterizerState;
-	}
-
-	void RenderContext::SetViewport(const RenderViewport & viewport)
-	{
-		_state.viewport = viewport;
-	}
-
-	void RenderContext::SetRenderTargets(const std::vector<ResourceView> & targets, int32_t offset)
-	{
-		_state.renderTargets.resize(offset + targets.size());
-		std::copy(targets.begin(), targets.end(), _state.renderTargets.begin() + offset);
-	}
-
-	void RenderContext::SetDepthStencil(const ResourceView & depthStencil)
+	void RenderContext::SetDepthStencil(const Ptr<DepthStencilView> & depthStencil)
 	{
 		_state.depthStencil = depthStencil;
 	}
 
-	void RenderContext::SetRenderInput(const Ptr<RenderInput> & input)
+	void RenderContext::SetShader(const Ptr<ShaderProgram> & shader)
 	{
-		if (_state.renderInput == input)
-			return;
-
-		_state.renderInput = input;
-	}
-
-	void RenderContext::SetShader(const Ptr<Shader> & shader)
-	{
-		if (_state.shaders[shader->GetProgram()->Type()] != shader)
-		{
-			_state.shaders[shader->GetProgram()->Type()] = shader;
-		}
+		if (_state.shaders[shader->GetType()] != shader)
+			_state.shaders[shader->GetType()] = shader;
 	}
 
 	void RenderContext::ResetShader(ShaderType shaderType)
 	{
 		if (_state.shaders[shaderType])
-		{
-			_state.shaders[shaderType].reset();
-		}
+			_state.shaders[shaderType] = nullptr;
+		_state.cbs[shaderType].clear();
+		_state.srvs[shaderType].clear();
+		_state.samplers[shaderType].clear();
+		_state.uavs[shaderType].clear();
+		_state.uavInitialCounts[shaderType].clear();
 	}
 
-	const Ptr<Shader> RenderContext::GetShader(ShaderType shaderType) const
+	Ptr<ShaderProgram> RenderContext::GetShader(ShaderType shaderType) const
 	{
 		return _state.shaders[shaderType];
 	}
 
-	void RenderContext::SetBlendState(const Ptr<BlendState> & state, const std::vector<float> & blendFactors, uint32_t sampleMask)
+	void RenderContext::SetSRVs(ShaderType shaderType, const std::vector<Ptr<ShaderResourceView>> & srvs)
+	{
+		_state.srvs[shaderType] = srvs;
+		/*if(_state.srvs[shaderType].size() < static_cast<size_t>(offset) + srvs.size())
+			_state.srvs[shaderType].resize(offset + srvs.size());
+		std::copy(srvs.begin(), srvs.end(), _state.srvs[shaderType].begin() + offset);*/
+	}
+
+	void RenderContext::SetUAVs(ShaderType shaderType, const std::vector<Ptr<UnorderedAccessView>> & uavs, const std::vector<int32_t> & uavInitialCounts)
+	{
+		/*if (_state.uavs[shaderType].size() < static_cast<size_t>(offset) + uavs.size())
+			_state.uavs[shaderType].resize(offset + uavs.size());
+		std::copy(uavs.begin(), uavs.end(), _state.uavs[shaderType].begin() + offset);
+
+		if (_state.uavInitialCounts[shaderType].size() < static_cast<size_t>(offset) + uavInitialCounts.size())
+			_state.uavInitialCounts[shaderType].resize(offset + uavInitialCounts.size());
+		std::copy(uavInitialCounts.begin(), uavInitialCounts.end(), _state.uavInitialCounts[shaderType].begin() + offset);*/
+
+		_state.uavs[shaderType] = uavs;
+		_state.uavInitialCounts[shaderType] = uavInitialCounts;
+
+		_state.uavInitialCounts[shaderType].resize(_state.uavs[shaderType].size());
+	}
+
+	void RenderContext::SetSamplers(ShaderType shaderType, const std::vector<Ptr<Sampler>> & samplers)
+	{
+		/*if (_state.samplers[shaderType].size() < static_cast<size_t>(offset) + samplers.size())
+			_state.samplers[shaderType].resize(offset + samplers.size());
+		std::copy(samplers.begin(), samplers.end(), _state.samplers[shaderType].begin() + offset);*/
+		_state.samplers[shaderType] = samplers;
+	}
+
+	void RenderContext::SetCBs(ShaderType shaderType, const std::vector<Ptr<RenderBuffer>> & cbs)
+	{
+		/*if (_state.cbs[shaderType].size() < static_cast<size_t>(offset) + cbs.size())
+			_state.cbs[shaderType].resize(offset + cbs.size());
+		std::copy(cbs.begin(), cbs.end(), _state.cbs[shaderType].begin() + offset);*/
+		_state.cbs[shaderType] = cbs;
+	}
+
+	void RenderContext::SetBlendState(const Ptr<BlendState> & state, const float4 & blendFactors, uint32_t sampleMask)
 	{
 		_state.blendState = state;
 		_state.blendFactor = blendFactors;
@@ -136,24 +111,22 @@ namespace ToyGE
 		DoDrawVertices(numVertices, vertexStart);
 	}
 
-	void RenderContext::DrawVertices()
+	void RenderContext::DrawVertices(int32_t vertexStart)
 	{
-		if (_state.renderInput)
-			DrawVertices(_state.renderInput->NumVertices(), _state.renderInput->GetVertexStart());
+		if(_state.vertexBuffers.size() > 0)
+			DrawVertices(_state.vertexBuffers[0]->GetDesc().numElements, vertexStart);
 	}
 
 	void RenderContext::DrawIndexed(int32_t numIndices, int32_t indexStart, int32_t indexBase)
 	{
 		UpdateContext();
 		DoDrawIndexed(numIndices, indexStart, indexBase);
-		//auto & debugInfo = DebugInfo::get_mutable_instance();
-		//DebugInfo::Instance()->AddValue<int>("DrawPrimitives", numIndices);
-		//DebugInfo::Instance()->AddValue<int>("DrawCalls", 1);
 	}
 
-	void RenderContext::DrawIndexed()
+	void RenderContext::DrawIndexed(int32_t indexStart, int32_t indexBase)
 	{
-		DrawIndexed(_state.renderInput->NumIndices(), _state.renderInput->GetIndexStart(), _state.renderInput->GetVertexStart());
+		if(_state.indexBuffer)
+			DrawIndexed(_state.indexBuffer->GetDesc().numElements, indexStart, indexBase);
 	}
 
 	void RenderContext::DrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset)
@@ -164,392 +137,383 @@ namespace ToyGE
 
 	void RenderContext::Compute(int32_t gropuX, int32_t groupY, int32_t groupZ)
 	{
+		ResetShader(SHADER_VS);
+		ResetShader(SHADER_PS);
+		ResetShader(SHADER_GS);
+		ResetShader(SHADER_DS);
+		ResetShader(SHADER_HS);
+
+		SetRenderTargets({});
+		SetDepthStencil(nullptr);
+
+		SetVertexBuffer({});
+		SetIndexBuffer(nullptr);
+
+		SetBlendState(nullptr);
+		SetDepthStencilState(nullptr);
+		SetRasterizerState(nullptr);
+
 		UpdateContext();
 		DoCompute(gropuX, groupY, groupZ);
 	}
 
-	void RenderContext::UpdateContext()
+	void RenderContext::UnBoundResource()
 	{
-		//unbind render targets which are bound to other stages
-		UnBindResources();
+		// Unbound outputs(render target/depth stencil/uav) if are currently bound as inputs
 
-		//update viewport
-		if (_viewportCache != _state.viewport)
+		// RTVs
+		for (auto & rtv : _state.renderTargets)
 		{
-			DoSetViewport(_state.viewport);
-			_viewportCache = _state.viewport;
-		}
+			auto rtvRes = rtv->GetResource();
 
-		//update render targets and depth stencil
-		bool bPSUAVChanged = false;
-		bPSUAVChanged =
-			(_state.shaders[SHADER_PS] && _state.shaders[SHADER_PS]->_uavs != _uavsCache[SHADER_PS])
-			|| (_state.shaders[SHADER_PS] == nullptr && _uavsCache[SHADER_PS].size() > 0);
-
-		if (_state.renderTargets != _rtsCache || _state.depthStencil != _depthStencilCache || bPSUAVChanged)
-		{
-			std::vector<ResourceView> rts;
-			rts = _state.renderTargets;
-			if (_rtsCache.size() > rts.size())
+			if (rtvRes && rtvRes->IsBound() && rtvRes->IsBoundAsInput())
 			{
-				int32_t nullCnt = static_cast<int32_t>(_rtsCache.size() - rts.size());
-				for (int32_t i = 0; i < nullCnt; ++i)
+				if (rtvRes->GetBoundState().boundType == RenderResourceBoundType::RRBT_SRV)
 				{
-					rts.push_back(ResourceView());
+					DoSetSRVs(rtvRes->GetBoundState().boundShaderType, { nullptr }, rtvRes->GetBoundState().boundIndex);
+					_stateCache.srvs[rtvRes->GetBoundState().boundShaderType][rtvRes->GetBoundState().boundIndex] = nullptr;
+
+					rtvRes->ResetBound();
 				}
 			}
-			for (auto & resetRts : _rtsCache)
-			{
-				if (resetRts.resource)
-					resetRts.resource->ResetBind();
-			}
-			if (_depthStencilCache.resource)
-				_depthStencilCache.resource->ResetBind();
 
-			//UAVs For PS
-			std::vector<ResourceView> uavs;
-			if (bPSUAVChanged)
+			if (rtvRes && rtvRes->IsBound())
 			{
-				if (_state.shaders[SHADER_PS])
+				if (rtvRes->GetBoundState().boundType == RenderResourceBoundType::RRBT_UAV)
 				{
-					uavs = _state.shaders[SHADER_PS]->_uavs;
+					DoSetUAVs(rtvRes->GetBoundState().boundShaderType, { nullptr }, {0}, rtvRes->GetBoundState().boundIndex);
+					_stateCache.uavs[rtvRes->GetBoundState().boundShaderType][rtvRes->GetBoundState().boundIndex] = nullptr;
 
-					if (_uavsCache[SHADER_PS].size() > uavs.size())
+					rtvRes->ResetBound();
+				}
+			}
+		}
+
+		// DSV
+		if (_state.depthStencil)
+		{
+			auto dsvRes = _state.depthStencil->GetResource();
+			if (dsvRes && dsvRes->IsBound() && dsvRes->IsBoundAsInput())
+			{
+				if (dsvRes->GetBoundState().boundType == RenderResourceBoundType::RRBT_SRV)
+				{
+					DoSetSRVs(dsvRes->GetBoundState().boundShaderType, { nullptr }, dsvRes->GetBoundState().boundIndex);
+					_stateCache.srvs[dsvRes->GetBoundState().boundShaderType][dsvRes->GetBoundState().boundIndex] = nullptr;
+
+					dsvRes->ResetBound();
+				}
+			}
+
+			if (dsvRes && dsvRes->IsBound())
+			{
+				if (dsvRes->GetBoundState().boundType == RenderResourceBoundType::RRBT_UAV)
+				{
+					DoSetUAVs(dsvRes->GetBoundState().boundShaderType, { nullptr }, { 0 }, dsvRes->GetBoundState().boundIndex);
+					_stateCache.uavs[dsvRes->GetBoundState().boundShaderType][dsvRes->GetBoundState().boundIndex] = nullptr;
+
+					dsvRes->ResetBound();
+				}
+			}
+		}
+
+		// UAVs
+		for (auto & uavList : _state.uavs)
+		{
+			for (auto & uav : uavList)
+			{
+				if (uav)
+				{
+					auto uavRes = uav->GetResource();
+					if (uavRes && uavRes->IsBound() && uavRes->IsBoundAsInput())
 					{
-						int32_t nullCnt = static_cast<int32_t>(_uavsCache[SHADER_PS].size() - uavs.size());
-						int32_t uavOffset = static_cast<int32_t>(uavs.size());
-						for (int32_t j = 0; j != nullCnt; ++j)
+						if (uavRes->GetBoundState().boundType == RenderResourceBoundType::RRBT_SRV)
 						{
-							uavs.push_back(ResourceView());
+							DoSetSRVs(uavRes->GetBoundState().boundShaderType, { nullptr }, uavRes->GetBoundState().boundIndex);
+							_stateCache.srvs[uavRes->GetBoundState().boundShaderType][uavRes->GetBoundState().boundIndex] = nullptr;
+
+							uavRes->ResetBound();
 						}
 					}
-					for (auto & resetUAV : _uavsCache[SHADER_PS])
-					{
-						if (resetUAV.resource)
-							resetUAV.resource->ResetBind();
-					}
-				}
-				else
-				{
-					uavs = std::vector<ResourceView>(_uavsCache[SHADER_PS].size(), ResourceView());
-					for (auto & resetView : _uavsCache[SHADER_PS])
-					{
-						if (resetView.resource)
-							resetView.resource->ResetBind();
-					}
 				}
 			}
-
-			//Do Update 
-			if (uavs.size() <= 0)
-				DoSetRenderTargetsAndDepthStencil(rts, _state.depthStencil);
-			else
-				DoSetRTsAndUAVs(rts, _state.depthStencil, uavs);
-
-			//Set Bind
-			for (int32_t i = 0; i != static_cast<int32_t>(_state.renderTargets.size()); ++i)
-			{
-				if (_state.renderTargets[i].resource)
-					_state.renderTargets[i].resource->SetBind(RESOURCE_BOUND_RENDER_TARGET, i);
-			}
-
-			if (_state.depthStencil.resource)
-				_state.depthStencil.resource->SetBind(RESOURCE_BOUND_DEPTH_STENCIL);
-
-			int32_t uavBoundIndex = 0;
-			for (auto & uav : uavs)
-			{
-				if (uav.resource)
-					uav.resource->SetBind(RESOURCE_BOUND_UAV, uavBoundIndex++, SHADER_PS, uav.subDesc);
-			}
-
-			//Update Cache
-			_rtsCache = _state.renderTargets;
-			_depthStencilCache = _state.depthStencil;
-			_uavsCache[SHADER_PS] = uavs;
-		}
-
-		//update input
-		if (_state.renderInput != _inputCache && _state.shaders[SHADER_VS])
-		{
-			DoSetRenderInput(_state.renderInput);
-			_inputCache = _state.renderInput;
-		}
-
-		//update shader progrmas
-		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM_SHADER_TYPE; ++shaderType)
-		{
-			if (_state.shaders[shaderType])
-			{
-				if (_shaderProgramsCache[shaderType] != _state.shaders[shaderType]->GetProgram())
-				{
-					DoSetShaderProgram(_state.shaders[shaderType]->GetProgram());
-					_shaderProgramsCache[shaderType] = _state.shaders[shaderType]->GetProgram();
-				}
-			}
-			else
-			{
-				if (_shaderProgramsCache[shaderType])
-				{
-					DoResetShaderProgram(static_cast<ShaderType>(shaderType));
-					_shaderProgramsCache[shaderType].reset();
-				}
-			}
-		}
-
-		//update uavs
-		//for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::value; ++shaderType)
-		//{
-		if (_state.shaders[SHADER_CS])
-		{
-			std::vector<ResourceView> uavs;
-			uavs = _state.shaders[SHADER_CS]->_uavs;
-			if (uavs != _uavsCache[SHADER_CS])
-			{
-				if (_uavsCache[SHADER_CS].size() > uavs.size())
-				{
-					int32_t nullCnt = static_cast<int32_t>(_uavsCache[SHADER_CS].size() - uavs.size());
-					int32_t uavOffset = static_cast<int32_t>(uavs.size());
-					for (int32_t j = 0; j != nullCnt; ++j)
-					{
-						uavs.push_back(ResourceView());
-					}
-				}
-				for (auto & resetUAV : _uavsCache[SHADER_CS])
-				{
-					if (resetUAV.resource)
-						resetUAV.resource->ResetBind();
-				}
-
-				DoSetUAVs(static_cast<ShaderType>(SHADER_CS), uavs, 0);
-				for (int32_t uavIndex = 0; uavIndex != _state.shaders[SHADER_CS]->NumUAVs(); ++uavIndex)
-				{
-					auto setView = _state.shaders[SHADER_CS]->GetUAV(uavIndex);
-					if (setView.resource)
-						setView.resource->SetBind(RESOURCE_BOUND_UAV, uavIndex, static_cast<ShaderType>(SHADER_CS), setView.subDesc);
-				}
-				_uavsCache[SHADER_CS] = _state.shaders[SHADER_CS]->_uavs;
-			}
-		}
-		else
-		{
-			if (_uavsCache[SHADER_CS].size() > 0)
-			{
-				std::vector<ResourceView> uavs(_uavsCache[SHADER_CS].size(), ResourceView());
-				DoSetUAVs(static_cast<ShaderType>(SHADER_CS), uavs, 0);
-				for (auto & resetView : _uavsCache[SHADER_CS])
-				{
-					if (resetView.resource)
-						resetView.resource->ResetBind();
-				}
-				_uavsCache[SHADER_CS].clear();
-			}
-		}
-		//}
-
-		//update shader resources
-		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM_SHADER_TYPE; ++shaderType)
-		{
-			if (_state.shaders[shaderType])
-			{
-				std::vector<ResourceView> srs;
-				srs = _state.shaders[shaderType]->_srs;
-				if (srs != _srsCache[shaderType])
-				{
-					if (_srsCache[shaderType].size() > srs.size())
-					{
-						int32_t nullCnt = static_cast<int32_t>(_srsCache[shaderType].size() - srs.size());
-						int32_t srsOffset = static_cast<int32_t>(srs.size());
-						for (int32_t j = 0; j != nullCnt; ++j)
-						{
-							srs.push_back(ResourceView());
-						}
-					}
-					for (auto & resetSR : _srsCache[shaderType])
-					{
-						if (resetSR.resource)
-							resetSR.resource->ResetBind();
-					}
-
-					DoSetShaderResources(static_cast<ShaderType>(shaderType), srs, 0);
-					for (int32_t srIndex = 0; srIndex != _state.shaders[shaderType]->NumShaderResources(); ++srIndex)
-					{
-						auto setView = _state.shaders[shaderType]->GetShaderResource(srIndex);
-						if (setView.resource)
-							setView.resource->SetBind(RESOURCE_BOUND_SHADER_RESOURCE, srIndex, static_cast<ShaderType>(shaderType), setView.subDesc);
-					}
-					_srsCache[shaderType] = _state.shaders[shaderType]->_srs;
-				}
-			}
-			else
-			{
-				if (_srsCache[shaderType].size() > 0)
-				{
-					std::vector<ResourceView> srs(_srsCache[shaderType].size(), ResourceView());
-					DoSetShaderResources(static_cast<ShaderType>(shaderType), srs, 0);
-					for (auto & resetView : _srsCache[shaderType])
-					{
-						if (resetView.resource)
-							resetView.resource->ResetBind();
-					}
-					_srsCache[shaderType].clear();
-				}
-			}
-		}
-
-		//update shader buffers
-		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM_SHADER_TYPE; ++shaderType)
-		{
-			if (_state.shaders[shaderType])
-			{
-				std::vector<Ptr<RenderBuffer>> bufs;
-				bufs = _state.shaders[shaderType]->_cbs;
-				if (bufs != _bufsCache[shaderType])
-				{
-					if (_bufsCache[shaderType].size() > bufs.size())
-					{
-						int32_t nullCnt = static_cast<int32_t>(_bufsCache[shaderType].size() - bufs.size());
-						int32_t bufsOffset = static_cast<int32_t>(bufs.size());
-						for (int32_t j = 0; j != nullCnt; ++j)
-						{
-							bufs.push_back(Ptr<RenderBuffer>());
-						}
-					}
-					for (auto & resetBuf : _bufsCache[shaderType])
-					{
-						if (resetBuf)
-							resetBuf->ResetBind();
-					}
-
-					DoSetShaderBuffers(static_cast<ShaderType>(shaderType), bufs, 0);
-					for (int32_t bufIndex = 0; bufIndex != _state.shaders[shaderType]->NumConstantBuffers(); ++bufIndex)
-					{
-						auto setBuf = _state.shaders[shaderType]->GetConstantBuffer(bufIndex);
-						if (setBuf)
-							setBuf->SetBind(RESOURCE_BOUND_SHADER_BUFFER, bufIndex, static_cast<ShaderType>(shaderType));
-					}
-					_bufsCache[shaderType] = _state.shaders[shaderType]->_cbs;
-				}
-			}
-			else
-			{
-				if (_bufsCache[shaderType].size() > 0)
-				{
-					std::vector<Ptr<RenderBuffer>> bufs(_bufsCache[shaderType].size(), Ptr<RenderBuffer>());
-					DoSetShaderBuffers(static_cast<ShaderType>(shaderType), bufs, 0);
-					for (auto & resetBuf : _bufsCache[shaderType])
-					{
-						if (resetBuf)
-							resetBuf->ResetBind();
-					}
-					_bufsCache[shaderType].clear();
-				}
-			}
-		}
-
-		//update samplers
-		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM_SHADER_TYPE; ++shaderType)
-		{
-			if (_state.shaders[shaderType])
-			{
-				if (_state.shaders[shaderType]->_samplers != _samsCache[shaderType])
-				{
-					DoSetShaderSamplers(static_cast<ShaderType>(shaderType), _state.shaders[shaderType]->_samplers, 0);
-					_samsCache[shaderType] = _state.shaders[shaderType]->_samplers;
-				}
-			}
-		}
-
-		//update blend state
-		if (_state.blendState != _bsCache || _state.blendFactor != _bsFactorsCache || _state.blendSampleMask != _bsSampleMaskCache)
-		{
-			DoSetBlendState(_state.blendState, _state.blendFactor, _state.blendSampleMask);
-			_bsCache = _state.blendState;
-			_bsFactorsCache = _state.blendFactor;
-			_bsSampleMaskCache = _state.blendSampleMask;
-		}
-
-		//update depth stencil state
-		if (_state.depthStencilState != _dssCache || _state.stencilRef != _stencilRefCache)
-		{
-			DoSetDepthStencilState(_state.depthStencilState, _state.stencilRef);
-			_dssCache = _state.depthStencilState;
-			_stencilRefCache = _state.stencilRef;
-		}
-
-		//update rasterizer state
-		if (_state.rasterizerState != _rsCache)
-		{
-			DoSetRasterizerState(_state.rasterizerState);
-			_rsCache = _state.rasterizerState;
 		}
 	}
 
-	void RenderContext::UnBindResources()
+	void RenderContext::UpdateContext()
 	{
-		std::set<ShaderType> srUnbindSet;
-		std::set<ShaderType> bufUnbindSet;
-		for (auto & rt : _state.renderTargets)
+		UnBoundResource();
+
+		// Viewport
+		if (_state.viewport != _stateCache.viewport)
 		{
-			if (rt.resource && rt.resource->IsBinded() &&
-				(RESOURCE_BOUND_RENDER_TARGET != rt.resource->BoundState()))
+			DoSetViewport(_state.viewport);
+		}
+
+		// Vertex buffer
+		if (_state.vertexBuffers != _stateCache.vertexBuffers || _state.vertexBufferOffsets != _stateCache.vertexBufferOffsets)
+		{
+			for (auto & vb : _stateCache.vertexBuffers)
 			{
-				if (RESOURCE_BOUND_SHADER_RESOURCE == rt.resource->BoundState())
-					srUnbindSet.insert(rt.resource->BoundShaderType());
-				else if (RESOURCE_BOUND_SHADER_BUFFER == rt.resource->BoundState())
-					bufUnbindSet.insert(rt.resource->BoundShaderType());
+				if (vb)
+					vb->ResetBound();
+			}
+
+			DoSetVertexBuffer(_state.vertexBuffers, _state.vertexBufferOffsets);
+
+			int32_t index = 0;
+			for (auto & vb : _state.vertexBuffers)
+			{
+				if (vb)
+					vb->SetBound(RenderResourceBoundType::RRBT_VB, SHADER_VS, index++);
 			}
 		}
 
-		if (_state.depthStencil.resource)
+		// Index buffer
+		if (_state.indexBuffer != _stateCache.indexBuffer || _state.indexBufferOffset != _stateCache.indexBufferOffset)
 		{
-			if (_state.depthStencil.resource->IsBinded() &&
-				(RESOURCE_BOUND_DEPTH_STENCIL != _state.depthStencil.resource->BoundState()))
-			{
-				if (RESOURCE_BOUND_SHADER_RESOURCE == _state.depthStencil.resource->BoundState())
-					srUnbindSet.insert(_state.depthStencil.resource->BoundShaderType());
-				else if (RESOURCE_BOUND_SHADER_BUFFER == _state.depthStencil.resource->BoundState())
-					bufUnbindSet.insert(_state.depthStencil.resource->BoundShaderType());
-			}
+			if (_stateCache.indexBuffer)
+				_stateCache.indexBuffer->ResetBound();
+
+			DoSetIndexBuffer(_state.indexBuffer, _state.indexBufferOffset);
+
+			if(_state.indexBuffer)
+				_state.indexBuffer->SetBound(RenderResourceBoundType::RRBT_IB, SHADER_VS, 0);
 		}
 
-		if (_state.shaders[SHADER_CS])
+		// PT
+		if (_state.primitiveTopology != _stateCache.primitiveTopology)
 		{
-			for (auto & uav : _state.shaders[SHADER_CS]->_uavs)
+			DoSetPrimitiveTopology(_state.primitiveTopology);
+		}
+
+		// Vertex input layout
+		if (_state.shaders[SHADER_VS] != _stateCache.shaders[SHADER_VS] || _state.vertexBuffers != _stateCache.vertexBuffers)
+		{
+			if(_state.shaders[SHADER_VS] && _state.vertexBuffers.size() > 0)
+				DoSetVertexInputLayout(VertexInputLayout::GetVertexInputLayout(_state.shaders[SHADER_VS], _state.vertexBuffers));
+			else
+				DoSetVertexInputLayout(nullptr);
+		}
+
+		// RTVs and DSV
+		bool bNeedUpdatePsUavs = _state.uavs[SHADER_PS] != _stateCache.uavs[SHADER_PS] ||
+			_state.uavInitialCounts[SHADER_PS].size() > 0;
+
+		if (_state.renderTargets != _stateCache.renderTargets || 
+			_state.depthStencil != _stateCache.depthStencil || 
+			bNeedUpdatePsUavs)
+		{
+			auto rtvs = _state.renderTargets;
+			while (rtvs.size() < _stateCache.renderTargets.size())
+				rtvs.push_back(nullptr);
+
+			for (auto & rtvReset : _stateCache.renderTargets)
 			{
-				if (uav.resource && uav.resource->IsBinded() &&
-					(RESOURCE_BOUND_UAV != uav.resource->BoundState()))
+				if (rtvReset && rtvReset->GetResource())
+					rtvReset->GetResource()->ResetBound();
+			}
+
+			if (_stateCache.depthStencil && _stateCache.depthStencil->GetResource())
+				_stateCache.depthStencil->GetResource()->ResetBound();
+
+			// uavs
+			if (bNeedUpdatePsUavs)
+			{
+				auto uavs = _state.uavs[SHADER_PS];
+				auto initalCounts = _state.uavInitialCounts[SHADER_PS];
+				while (uavs.size() < _stateCache.uavs[SHADER_PS].size())
 				{
-					if (RESOURCE_BOUND_SHADER_RESOURCE == uav.resource->BoundState())
-						srUnbindSet.insert(uav.resource->BoundShaderType());
-					else if (RESOURCE_BOUND_SHADER_BUFFER == uav.resource->BoundState())
-						bufUnbindSet.insert(uav.resource->BoundShaderType());
+					uavs.push_back(nullptr);
+					initalCounts.push_back(0);
+				}
+
+				for (auto & uavReset : _stateCache.uavs[SHADER_PS])
+				{
+					if (uavReset && uavReset->GetResource())
+						uavReset->GetResource()->ResetBound();
+				}
+
+				DoSetRTVsAndUAVs(rtvs, _state.depthStencil, uavs, initalCounts);
+			}
+			else
+			{
+				DoSetRenderTargetsAndDepthStencil(rtvs, _state.depthStencil);
+			}
+
+			// Set Bound
+			for (int32_t i = 0; i != static_cast<int32_t>(_state.renderTargets.size()); ++i)
+			{
+				if (_state.renderTargets[i] && _state.renderTargets[i]->GetResource())
+					_state.renderTargets[i]->GetResource()->SetBound(RenderResourceBoundType::RRBT_RTV, SHADER_PS, i);
+			}
+
+			if (_state.depthStencil && _state.depthStencil->GetResource())
+				_state.depthStencil->GetResource()->SetBound(RenderResourceBoundType::RRBT_DSV, SHADER_PS, 0);
+
+			for (int32_t i = 0; i != static_cast<int32_t>(_state.uavs[SHADER_PS].size()); ++i)
+			{
+				if (_state.uavs[SHADER_PS][i] && _state.uavs[SHADER_PS][i]->GetResource())
+					_state.uavs[SHADER_PS][i]->GetResource()->SetBound(RenderResourceBoundType::RRBT_UAV, SHADER_PS, i);
+			}
+		}
+
+		// Shaders
+		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM; ++shaderType)
+		{
+			if (_state.shaders[shaderType] != _stateCache.shaders[shaderType])
+			{
+				DoSetShaderProgram(static_cast<ShaderType>(shaderType), _state.shaders[shaderType]);
+			}
+		}
+
+		// UAVs
+		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM; ++shaderType)
+		{
+			if (static_cast<ShaderType>(shaderType) == SHADER_PS)
+				continue;
+
+			if (_state.uavs[shaderType] != _stateCache.uavs[shaderType] || _state.uavInitialCounts[shaderType].size() > 0)
+			{
+				auto uavs = _state.uavs[shaderType];
+				auto initalCounts = _state.uavInitialCounts[shaderType];
+				while (uavs.size() < _stateCache.uavs[shaderType].size())
+				{
+					uavs.push_back(nullptr);
+					initalCounts.push_back(0);
+				}
+
+				for (auto & uavReset : _stateCache.uavs[shaderType])
+				{
+					if (uavReset && uavReset->GetResource())
+						uavReset->GetResource()->ResetBound();
+				}
+
+				DoSetUAVs(static_cast<ShaderType>(shaderType), uavs, initalCounts, 0);
+
+				for (int32_t i = 0; i != static_cast<int32_t>(_state.uavs[shaderType].size()); ++i)
+				{
+					if (_state.uavs[shaderType][i] && _state.uavs[shaderType][i]->GetResource())
+						_state.uavs[shaderType][i]->GetResource()->SetBound(RenderResourceBoundType::RRBT_UAV, static_cast<ShaderType>(shaderType), i);
 				}
 			}
 		}
 
-		for (auto srItr : srUnbindSet)
+		// SRVs
+		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM; ++shaderType)
 		{
-			std::vector<ResourceView> srs(_srsCache[srItr].size(), ResourceView());
-			DoSetShaderResources(srItr, srs, 0);
-			for (auto & sr : _srsCache[srItr])
+			if (_state.srvs[shaderType] != _stateCache.srvs[shaderType])
 			{
-				if (sr.resource)
-					sr.resource->ResetBind();
+				auto srvs = _state.srvs[shaderType];
+				while (srvs.size() < _stateCache.srvs[shaderType].size())
+					srvs.push_back(nullptr);
+
+				for (auto & srvReset : _stateCache.srvs[shaderType])
+				{
+					if (srvReset && srvReset->GetResource())
+						srvReset->GetResource()->ResetBound();
+				}
+
+				DoSetSRVs(static_cast<ShaderType>(shaderType), srvs, 0);
+
+				for (int32_t i = 0; i != static_cast<int32_t>(_state.srvs[shaderType].size()); ++i)
+				{
+					if (_state.srvs[shaderType][i] && _state.srvs[shaderType][i]->GetResource())
+						_state.srvs[shaderType][i]->GetResource()->SetBound(RenderResourceBoundType::RRBT_SRV, static_cast<ShaderType>(shaderType), i);
+				}
 			}
-			_srsCache[srItr].clear();
 		}
 
-		for (auto bufItr : bufUnbindSet)
+		// CBs
+		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM; ++shaderType)
 		{
-			std::vector<Ptr<RenderBuffer>> bufs(_bufsCache[bufItr].size(), Ptr<RenderBuffer>());
-			DoSetShaderBuffers(bufItr, bufs, 0);
-			for (auto & buf : _bufsCache[bufItr])
+			if (_state.cbs[shaderType] != _stateCache.cbs[shaderType])
 			{
-				if (buf)
-					buf->ResetBind();
+				auto cbs = _state.cbs[shaderType];
+				while (cbs.size() < _stateCache.cbs[shaderType].size())
+					cbs.push_back(nullptr);
+
+				for (auto & cbReset : _stateCache.cbs[shaderType])
+				{
+					if (cbReset)
+						cbReset->ResetBound();
+				}
+
+				DoSetCBs(static_cast<ShaderType>(shaderType), cbs, 0);
+
+				for (int32_t i = 0; i != static_cast<int32_t>(_state.cbs[shaderType].size()); ++i)
+				{
+					if (_state.cbs[shaderType][i])
+						_state.cbs[shaderType][i]->SetBound(RenderResourceBoundType::RRBT_CB, static_cast<ShaderType>(shaderType), i);
+				}
 			}
-			_bufsCache[bufItr].clear();
 		}
+
+		// Samplers
+		for (uint32_t shaderType = 0; shaderType != ShaderTypeNum::NUM; ++shaderType)
+		{
+			if (_state.samplers[shaderType] != _stateCache.samplers[shaderType])
+			{
+				auto samplers = _state.samplers[shaderType];
+				while (samplers.size() < _stateCache.samplers[shaderType].size())
+					samplers.push_back(nullptr);
+
+				for (auto & samplerReset : _stateCache.samplers[shaderType])
+				{
+					if (samplerReset)
+						samplerReset->ResetBound();
+				}
+
+				DoSetSamplers(static_cast<ShaderType>(shaderType), samplers, 0);
+
+				for (int32_t i = 0; i != static_cast<int32_t>(_state.samplers[shaderType].size()); ++i)
+				{
+					if (_state.samplers[shaderType][i])
+						_state.samplers[shaderType][i]->SetBound(RenderResourceBoundType::RRBT_SAMPLER, static_cast<ShaderType>(shaderType), i);
+				}
+			}
+		}
+
+		// BlendState
+		if (_state.blendState != _stateCache.blendState || 
+			any(_state.blendFactor != _stateCache.blendFactor) || 
+			_state.blendSampleMask != _stateCache.blendSampleMask)
+		{
+			if (_stateCache.blendState)
+				_stateCache.blendState->ResetBound();
+
+			DoSetBlendState(_state.blendState, _state.blendFactor, _state.blendSampleMask);
+
+			if (_state.blendState)
+				_state.blendState->SetBound(RenderResourceBoundType::RRBT_STATE, SHADER_PS, 0);
+		}
+
+		// DepthStencilState
+		if (_state.depthStencilState != _stateCache.depthStencilState || _state.stencilRef != _stateCache.stencilRef)
+		{
+			if (_stateCache.depthStencilState)
+				_stateCache.depthStencilState->ResetBound();
+
+			DoSetDepthStencilState(_state.depthStencilState, _state.stencilRef);
+
+			if (_state.depthStencilState)
+				_state.depthStencilState->SetBound(RenderResourceBoundType::RRBT_STATE, SHADER_PS, 0);
+		}
+
+		// RasterizerState
+		if (_state.rasterizerState != _stateCache.rasterizerState)
+		{
+			if (_stateCache.rasterizerState)
+				_stateCache.rasterizerState->ResetBound();
+
+			DoSetRasterizerState(_state.rasterizerState);
+
+			if (_state.rasterizerState)
+				_state.rasterizerState->SetBound(RenderResourceBoundType::RRBT_STATE, SHADER_PS, 0);
+		}
+
+		// Update cache
+		_stateCache = _state;
+		for (auto & initalCounts : _state.uavInitialCounts)
+			initalCounts.clear();
 	}
 }

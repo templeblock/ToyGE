@@ -1,0 +1,244 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+
+struct BokehPoint
+{
+    float2 pos;
+    float  size;
+    float3 color;
+};
+    
+
+Texture2D linearDepthTex;
+Texture2D sceneTex;
+Texture2D cocTex;
+Texture2D bokehTex;
+
+Texture2D nearBlurTex;
+Texture2D farBlurTex;
+
+AppendStructuredBuffer<BokehPoint> bokehPointsBufferAppend;
+StructuredBuffer<BokehPoint> bokehPointsBuffer;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float focalDistance;
+float focalAreaLength;
+float nearAreaLength;
+float farAreaLength;
+float maxCoC;
+
+float bokehSizeScale;
+float illumThreshold;
+float bokehIlluminanceScale;
+float minBokehSize;
+float maxBokehSize;
+
+float4 texSize;
+
+float ComputeCoCPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float z = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    float d = z * viewLength + viewNear;
+    
+    float coc = 0.0f;
+    
+    if(d > focalDistance)
+        coc = -saturate( (d - focalDistance - focalAreaLength * 0.5f) / max(1e-4, farAreaLength)  ) * maxCoC;
+    else
+        coc =  saturate( (focalDistance - d - focalAreaLength * 0.5f) / max(1e-4, nearAreaLength) ) * maxCoC;
+        
+    return coc;
+}
+
+void SplitLayersPS(
+    DrawQuadVSOut vsOut,
+    out float4 nearLayer : SV_TARGET0,
+    out float4 farLayer  : SV_TARGET1)
+{
+    nearLayer = 0.0f;
+    farLayer  = 0.0f;
+    
+    float coc = cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+
+    if(abs(coc) > 0.5f)
+    {
+        float4 sceneColor = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+        if(coc > 0.0f)
+        {
+            nearLayer.xyz = sceneColor.xyz;
+            nearLayer.w = 1.0;
+        }
+        else
+        {
+            farLayer.xyz  = sceneColor.xyz;
+            farLayer.w = 1.0;
+        }
+    }
+  
+}
+
+#define BOKEH_COMPUTE_NUM_SAMPLES 9
+
+float3 ComputeBokehPointsPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 t_o = vsOut.uv;
+    
+    float3 color_o = sceneTex.SampleLevel(pointSampler, t_o, 0).rgb;
+    float ilum_o = GetIlluminance(color_o);
+    
+    static const float2 texOffsets[] = 
+    {
+        float2(-1.5f, -1.5f), float2(0.5f, -1.5f), float2(2.0f, -1.5f),
+        float2(-1.5f,  0.5f), float2(0.5f,  0.5f), float2(2.0f,  0.5f),
+        float2(-1.5f,  2.0f), float2(0.5f,  2.0f), float2(2.0f,  2.0f)
+    };
+    
+    float3 avgColor = 0.0f;
+    
+    [unroll] for(int i = 0; i < BOKEH_COMPUTE_NUM_SAMPLES; ++i)
+    {
+        float2 t_i = t_o + texOffsets[i] * texSize.zw;
+        float3 sampleColor = sceneTex.SampleLevel(linearSampler, t_i, 0).rgb;
+        avgColor += sampleColor;
+    }
+    avgColor /= BOKEH_COMPUTE_NUM_SAMPLES;
+    
+    float avgIlum = GetIlluminance(avgColor);
+    
+    float centerCoC = cocTex.SampleLevel(pointSampler, t_o, 0).x;
+    
+    float3 outColor = color_o;
+    
+    float bokehSize = abs(centerCoC) * bokehSizeScale;
+    
+    if(ilum_o - avgIlum > illumThreshold && bokehSize >= minBokehSize)
+    {
+        BokehPoint bokehPoint;
+        bokehPoint.pos = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+        bokehPoint.size = min(bokehSize, maxBokehSize);
+        bokehPoint.color = color_o;
+        bokehPointsBufferAppend.Append(bokehPoint);
+        
+        outColor = 0.0f;
+    }
+    
+    return outColor;
+}
+
+
+struct RenderBokehVSOut
+{
+    float2 pos : POSITION;
+    float size : SIZE;
+    float3 color : COLOR;
+};
+  
+void RenderBokehVS(
+    uint vertexID : SV_VertexID,
+    out RenderBokehVSOut vsOut)
+{
+    BokehPoint bokehPoint = bokehPointsBuffer[vertexID];
+    
+    vsOut.pos.xy = bokehPoint.pos;
+    vsOut.size = bokehPoint.size;
+    vsOut.color = bokehPoint.color;
+}
+
+struct RenderBokehGSOut
+{
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD;
+    float  size : SIZE;
+    float4 color : COLOR;
+};
+
+[maxvertexcount(4)]
+void RenderBokehGS(
+    point RenderBokehVSOut inPoints[1],
+    inout TriangleStream<RenderBokehGSOut> outStream)
+{
+    static const float2 offsets[] = 
+    {
+        float2(-1.0f,  1.0f),
+        float2( 1.0f,  1.0f),
+        float2(-1.0f, -1.0f),
+        float2( 1.0f, -1.0f)
+    };
+    
+    static const float2 texCoords[] = 
+    {
+        float2(0.0f, 0.0f),
+        float2(1.0f, 0.0f),
+        float2(0.0f, 1.0f),
+        float2(1.0f, 1.0f)
+    };
+    
+    float2 posOffsetScale = abs(inPoints[0].size) * texSize.zw * 2.0f;
+    
+    RenderBokehGSOut gsOut;
+    gsOut.pos.zw = float2(0.0f, 1.0f);
+    gsOut.color.rgb = inPoints[0].color;
+    gsOut.color.a = 1.0f / (PI * inPoints[0].size * inPoints[0].size) * bokehIlluminanceScale;
+    gsOut.size = inPoints[0].size;
+    
+    for(uint i = 0; i < 4; ++i)
+    {
+        gsOut.pos.xy = inPoints[0].pos + offsets[i] * posOffsetScale;
+        gsOut.uv = texCoords[i];
+        
+        outStream.Append(gsOut);
+    }
+    
+    outStream.RestartStrip();
+}
+
+void RenderBokehPS(
+    RenderBokehGSOut gsOut,
+    out float4 color : SV_TARGET)
+{
+    float3 bokehSample = bokehTex.Sample(linearSampler, gsOut.uv).rgb;
+    
+    color = float4(bokehSample * gsOut.color.xyz, gsOut.color.w);
+}
+
+
+float3 DOFCombinePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float coc = cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    
+    float4 sharp = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float4 near  = nearBlurTex.SampleLevel(linearSampler, vsOut.uv, 0);
+    float4 far   = farBlurTex.SampleLevel(linearSampler, vsOut.uv, 0);
+    
+    float farMask = far.a;
+    float focalMask = 1.0f - saturate((abs(coc) - 0.5f) / maxCoC);
+    float nearMask = near.a;
+    
+    float3 color = 0.0f;
+    
+    color.rgb = far.rgb / (far.a + 0.001f);
+    
+    float Blend = far.a;
+    Blend = sqrt(Blend);
+    Blend = sqrt(Blend);
+    Blend = Blend * Blend * (3.0 - 2.0 * Blend);
+    color.rgb = lerp(sharp.rgb, color.rgb, Blend);
+        
+    float Smash = 0.25;
+    focalMask = saturate((focalMask - (1.0 - Smash)) * rcp(Smash));
+    focalMask *= focalMask;
+    focalMask = pow(focalMask, 4.0f);
+    color.rgb = lerp(color.rgb, sharp.rgb, focalMask);
+    
+    float3 FrontLayer = near.rgb / (near.a + 0.001f);
+	
+    color.rgb = lerp(color.rgb, FrontLayer, saturate(nearMask * 1));
+    
+    // float3 bokehColor = bokehLayerTex.SampleLevel(samplerPoint, vsOut.tex, 0).rgb;
+    // color.rgb += bokehColor;
+    
+    return color;
+}

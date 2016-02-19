@@ -1,0 +1,13 @@
+#include "Common.tshader"
+
+float4x4 transform;
+
+void FontRenderingVS(
+  float3 pos : POSITION,
+  float3 uvw : TEXCOORD,
+  out float4 outPos : SV_POSITION,
+  out float3 outUVW : TEXCOORD)
+{
+	outPos = mul(float4(pos, 1.0f), transform);
+    outUVW = uvw;
+}

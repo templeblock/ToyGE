@@ -1,0 +1,333 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "AtmosphereRenderingCommon.tshader"
+#include "View.tshader"
+
+#ifndef NUM_SAMPLELINES
+#define NUM_SAMPLELINES 1024
+#endif
+
+#ifndef MAX_SAMPLES_PERLINE
+#define MAX_SAMPLES_PERLINE 1024
+#endif
+
+Texture2D sceneTex;
+Texture2D sceneLinearDepthTex;
+
+Texture2D sampleLinesTex;
+Texture2D sampleCoordsTex;
+Texture2D sampleDepthTex;
+Texture2D<uint2> interpolationSourceTex;
+Texture2D lightAccumTex;
+Texture2D attenuationTex;
+
+float4 texSize;
+uint bLightInScreen;
+float3 lightDirection;
+float3 lightRadiance;
+float2 lightClipPos;
+
+bool IsInScreen(float2 pos)
+{
+    static const float margin = 4.0;
+    return all( abs(pos) <= 1.0 + margin * texSize.zw );
+}
+
+float4 InitSampleLinesPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float lineIndex = (vsOut.pos.x - 0.5) / NUM_SAMPLELINES;
+    uint boundIndex = clamp(floor(lineIndex * 4.0), 0, 3);
+    float boundFrac = frac(lineIndex * 4.0);
+    
+    bool4 boundMask = (boundIndex.xxxx == uint4(0, 1, 2, 3));
+    
+    float4 bounds = float4(-1.0f, -1.0f, 1.0f, 1.0f) + texSize.zwzw * float4(1.0, 1.0, -1.0, -1.0);
+    bool4 bInvalidBound = ( (lightClipPos.xyxy - bounds) * float4(1.0, 1.0, -1.0, -1.0) <= 0 );
+    //Check invalid
+    if( dot(bInvalidBound, boundMask) )
+        return -100.0;
+    
+    float4 boundPosX = float4(              0, boundFrac,         1, 1.0 - boundFrac);
+    float4 boundPosY = float4(1.0 - boundFrac,         0, boundFrac,               1);
+    float2 boundPosFrac = float2(dot(boundPosX, boundMask), dot(boundPosY, boundMask));
+    float2 endPos = lerp(bounds.xy, bounds.zw, boundPosFrac);
+    
+    float2 startPos;
+    if(bLightInScreen)
+    {
+        startPos = lightClipPos;
+    }
+    else
+    {
+        float2 rayDir = endPos - lightClipPos;
+        float rayLen = length(rayDir);
+        rayDir /= max(0.0001f, rayLen);
+        
+        bool4 bValidIntersectMask = abs(rayDir.xyxy) > 1e-5;
+        float4 distToBournds = (bounds - lightClipPos.xyxy) / (rayDir.xyxy + !bValidIntersectMask);
+        bValidIntersectMask = bValidIntersectMask && (distToBournds < rayLen - 1e-4);
+        distToBournds = distToBournds * bValidIntersectMask + !bValidIntersectMask * -FLT_MAX;
+        
+        float startPosDist = 0.0f;
+        startPosDist = max(startPosDist, distToBournds.x);
+        startPosDist = max(startPosDist, distToBournds.y);
+        startPosDist = max(startPosDist, distToBournds.z);
+        startPosDist = max(startPosDist, distToBournds.w);
+        
+        startPos = lightClipPos + rayDir * startPosDist;
+    }
+    
+    //Advance EndPos
+    if( IsInScreen(startPos) )
+    {
+        float lineScreenDist = length( (endPos - startPos) * 0.5f * texSize.xy );
+        endPos = endPos + (endPos - startPos) * max(1.0, (float)MAX_SAMPLES_PERLINE / lineScreenDist);
+    }
+    
+    return float4(startPos, endPos);
+}
+
+void InitSampleCoordsPS(
+    DrawQuadVSOut vsOut,
+    out float2 sampleCoord : SV_TARGET0,
+    out float  cameraZ : SV_TARGET1)
+{
+    float4 lineStartEnd = sampleLinesTex.Load(uint3(vsOut.pos.y, 0, 0));
+    
+    if( !IsInScreen(lineStartEnd.xy) )
+        discard;
+    
+    sampleCoord = lerp(lineStartEnd.xy, lineStartEnd.zw, (vsOut.pos.x - 0.5) / (float)(MAX_SAMPLES_PERLINE - 1) );
+    
+    if( !IsInScreen(sampleCoord) )
+        discard;
+    
+    float2 sampleUV = sampleCoord * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
+    
+    cameraZ = sceneLinearDepthTex.SampleLevel(pointSampler, sampleUV, 0).x;
+}
+
+void MarkRayMarchingSamplesPS(DrawQuadVSOut vsOut)
+{
+    uint2 interpolationSource = interpolationSourceTex.Load(uint3(vsOut.pos.xy, 0));
+    if(interpolationSource.x != interpolationSource.y)
+        discard;
+}
+
+#define RAYMARCHING_NUM_SAMPLES 32
+
+void RayMarchingPS(
+    DrawQuadVSOut vsOut,
+    out float3 outLightAccum : SV_TARGET0,
+    out float3 outAttenuation : SV_TARGET1)
+{
+    
+#ifdef EPIPOLAR_SAMPLING
+    float2 sampleCoord  = sampleCoordsTex.Load(uint3(vsOut.pos.xy, 0)).xy;
+    float linearDepth   = sampleDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    float3 posFromDepthView  = GetViewPosFromLinear(float3(sampleCoord, linearDepth), viewToClipMatrix, viewNear, viewFar);
+#else
+    float2 clipPosXY = vsOut.uv * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    float linearDepth   = sceneLinearDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    float3 posFromDepthView  = GetViewPosFromLinear(float3(clipPosXY, linearDepth), viewToClipMatrix, viewNear, viewFar);
+#endif
+    float3 posFromDepthWorld = mul(float4(posFromDepthView, 1.0), viewToWorldMatrix).xyz;
+    
+    float3 cameraToDist = posFromDepthWorld - viewWorldPosition;
+    float cameraToDepthDist = length(cameraToDist);
+    
+    float3 traceDir = cameraToDist / max(1e-5, cameraToDepthDist);
+    
+    float2 atmIntersection, earthIntersection;
+    GetRaySphereIntersection(viewWorldPosition, traceDir, earthCenter, earthRadius + atmosphereTopHeight, atmIntersection);
+    GetRaySphereIntersection(viewWorldPosition, traceDir, earthCenter, earthRadius - 1e4, earthIntersection);
+    
+    if(atmIntersection.y <= 0 )
+    {
+        outLightAccum = 0.0f;
+        outAttenuation = 0.0f;
+        return;
+    }
+    
+    float3 startPos = 0.0f;
+    float3 endPos = 0.0f;
+    
+    //Restrict start pos
+    float startDist = max(atmIntersection.x, 0);
+    startPos = viewWorldPosition + traceDir * startDist;
+    
+    //Restrict end pos
+    float endDist = cameraToDepthDist;
+    if(linearDepth >= 0.99f)
+        endDist = FLT_MAX;
+    endDist = min(atmIntersection.y, endDist);
+    if( earthIntersection.x > 0 )
+        endDist = min(earthIntersection.x, endDist);
+    endPos = viewWorldPosition + traceDir * endDist;
+    
+    float3 step = (endPos - startPos) / RAYMARCHING_NUM_SAMPLES;
+    float stepLen = length(step);
+
+    float3 attenuationAccum = ComputeAttenuationPoints(endPos, startPos, earthCenter, earthRadius);
+    
+    float3 inScatteringStart = ComputeInScattering(startPos, traceDir, -lightDirection);
+    if( linearDepth < 0.99 )
+    {
+        inScatteringStart -= ComputeInScattering(posFromDepthWorld, traceDir, -lightDirection);
+        inScatteringStart = max(inScatteringStart, 0.0f);
+    }
+    
+    
+    outLightAccum = inScatteringStart * lightRadiance;
+    //outLightAccum = inScattering * lightRadiance;
+    //outLightAccum = lightAccum;
+    outAttenuation = attenuationAccum;
+}
+
+void InterpolateRestSamplesPS(
+    DrawQuadVSOut vsOut,
+    out float3 outLightAccum : SV_TARGET0,
+    out float3 outAttenuation : SV_TARGET1 )
+{
+    // float2 sampleCoord = sampleCoordsTex.Load(uint3(vsOut.pos.xy, 0)).xy;
+    // if( !IsInScreen(sampleCoord) )
+    //     discard;
+    
+    uint2 sourceIndex = interpolationSourceTex.Load(uint3(vsOut.pos.xy, 0));
+    float interpolationPos = (vsOut.pos.x - 0.5 - (float)sourceIndex.x) / max(1, sourceIndex.y - sourceIndex.x);
+    
+    
+    float cameraDepth  = sampleDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    float cameraDepth0 = sampleDepthTex.Load(uint3(sourceIndex.x, vsOut.pos.y, 0)).x;
+    float cameraDepth1 = sampleDepthTex.Load(uint3(sourceIndex.y, vsOut.pos.y, 0)).x;
+    float2 depthWeight = 1.0f / max(1e-5, abs(1.0 - float2(cameraDepth0, cameraDepth1)) );
+    
+    float2 weights = depthWeight * float2(1.0f - interpolationPos, interpolationPos);
+    float weightSum = dot(weights, 1);
+    
+    
+    float3 lightAccum0 = lightAccumTex.Load(uint3(sourceIndex.x, vsOut.pos.y, 0)).xyz;
+    float3 lightAccum1 = lightAccumTex.Load(uint3(sourceIndex.y, vsOut.pos.y, 0)).xyz;
+    //outLightAccum = lerp(lightAccum0, lightAccum1, interpolationPos);
+    outLightAccum = (lightAccum0 * weights.x + lightAccum1 * weights.y) / max(1e-5, weightSum);
+    
+    float3 attenuation0 = attenuationTex.Load(uint3(sourceIndex.x, vsOut.pos.y, 0)).xyz;
+    float3 attenuation1 = attenuationTex.Load(uint3(sourceIndex.y, vsOut.pos.y, 0)).xyz;
+    //outAttenuation = lerp(attenuation0, attenuation1, interpolationPos);
+    outAttenuation = (attenuation0 * weights.x + attenuation1 * weights.y) / max(1e-5, weightSum);
+}
+
+
+
+float4 UnWarpSamplesPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 posH = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+    float2 rayDir = normalize(posH - lightClipPos);
+    
+    float cameraDepth = sceneLinearDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    
+    float4 bounds = float4(-1.0f, -1.0f, 1.0f, 1.0f) + texSize.zwzw * float4(1.0, 1.0, -1.0, -1.0);
+    float4 halfSapceEquationTerms = (posH.xxyy - bounds.xzyw) * rayDir.yyxx;
+    bool4 halfSpaceFlags = halfSapceEquationTerms.xyyx < halfSapceEquationTerms.zzww;
+    
+    bool4 sectionFlags = halfSpaceFlags.wxyz && !halfSpaceFlags.xyzw;
+    
+    float4 distToBounds = (bounds - posH.xyxy) / ( rayDir.xyxy + (abs(rayDir.xyxy) < 1e-6) );
+    float distToExitBound = dot(distToBounds, sectionFlags);
+    float2 exitPoint = posH + rayDir * distToExitBound;
+    
+    float4 lineIndexPosMask = float4(0, 0.25, 0.5, 0.75) + abs(exitPoint.yxyx - bounds.wxyz) / (bounds.wzwz - bounds.yxyx) / 4.0f;
+    float lineIndexPos = dot(lineIndexPosMask, sectionFlags);
+    
+    float leftLineIndex = min( floor(lineIndexPos * NUM_SAMPLELINES), NUM_SAMPLELINES-1 );
+    
+    float lineIndex[2];
+    lineIndex[0] = leftLineIndex;
+    lineIndex[1] = leftLineIndex + 1;
+    
+    float lineIndexCoord[2];
+    lineIndexCoord[0] = (leftLineIndex + 0.5) / NUM_SAMPLELINES;
+    lineIndexCoord[1] = frac( (leftLineIndex + 1.5) / NUM_SAMPLELINES );
+    
+    float lineWeights[2];
+    lineWeights[1] = lineIndexPos * NUM_SAMPLELINES - leftLineIndex;
+    lineWeights[0] = 1.0f - lineWeights[1];
+    
+    float3 lightAccum = 0.0f;
+    float3 attenuation = 0.0f;
+    float weightSum = 0.0f;
+    
+    for(int i = 0; i < 2; ++i)
+    {
+        float4 sampleLineStartEnd = sampleLinesTex.SampleLevel(pointSampler, float2(lineIndexCoord[i], 0.5f), 0);
+        //float4 sampleLineStartEnd = sampleLinesTex.Load(int3((int)lineIndex[i], 0, 0));
+        
+        float2 lineDir = sampleLineStartEnd.zw - sampleLineStartEnd.xy;
+        float lineLen = length(lineDir);
+        lineDir /= max(1e-6, lineLen);
+        
+        float projOnLine = dot(lineDir, posH - sampleLineStartEnd.xy) / max(1e-6, lineLen);
+        projOnLine *= (float)MAX_SAMPLES_PERLINE - 1;
+        
+        float leftSampleIndex = floor(projOnLine);
+        float leftSampleWeight = 1.0 - frac(projOnLine);
+        
+        float2 leftSampleUV  = float2( (leftSampleIndex + 0.5) / MAX_SAMPLES_PERLINE, lineIndexCoord[i]);
+        float2 rightSampleUV = float2( (leftSampleIndex + 1.5) / MAX_SAMPLES_PERLINE, lineIndexCoord[i]);
+        
+        float leftCameraDepth  = sampleDepthTex.SampleLevel(pointSampler, leftSampleUV, 0).x;
+        float rightCameraDepth = sampleDepthTex.SampleLevel(pointSampler, rightSampleUV, 0).x;
+        float2 depthWeights = 1.0 / max(1e-5, abs( float2(leftCameraDepth, rightCameraDepth) - cameraDepth ));
+        
+        float2 weights = float2(leftSampleWeight, 1.0 - leftSampleWeight) * lineWeights[i] * depthWeights;
+        
+        float3 leftLightAccum = lightAccumTex.SampleLevel(pointSampler, leftSampleUV, 0).xyz;
+        float3 rightLightAccum = lightAccumTex.SampleLevel(pointSampler, rightSampleUV, 0).xyz;
+        lightAccum += leftLightAccum * weights.x + rightLightAccum * weights.y;
+        
+        float3 leftAttenuation = attenuationTex.SampleLevel(pointSampler, leftSampleUV, 0).xyz;
+        float3 rightAttenuation = attenuationTex.SampleLevel(pointSampler, rightSampleUV, 0).xyz;
+        attenuation += leftAttenuation * weights.x + rightAttenuation * weights.y;
+        
+        weightSum += dot(weights, 1);
+    }
+    
+    lightAccum /= max(1e-5, weightSum);
+    attenuation /= max(1e-5, weightSum);
+    
+    float3 sceneColor = sceneTex.Load(uint3(vsOut.pos.xy, 0)).xyz;
+    
+    return float4(lightAccum + sceneColor * attenuation, 1.0f);
+}
+
+void AccumRayMarchingPS(
+    DrawQuadVSOut vsOut,
+    out float3 color0 : SV_TARGET0,
+    out float3 color1 : SV_TARGET1) 
+{
+    color0 = lightAccumTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+    color1 = attenuationTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+}
+
+void RenderSampleCoordsVS(
+    uint vertexID : SV_VertexID,
+    out float4 pos : SV_POSITION)
+{
+    int2 samplePos = int2((int)(vertexID%MAX_SAMPLES_PERLINE), (int)(vertexID/MAX_SAMPLES_PERLINE));
+    uint2 source = interpolationSourceTex[samplePos];
+    if(source.x == source.y)
+    {
+        pos = float4(sampleCoordsTex[samplePos].xy, 0.0, 1.0);
+    }
+    else
+    {
+        pos = float4(-2.0, -2.0, 0.0, 1.0);
+    }
+}
+
+void RenderSampleCoordsPS(
+    float4 pos : SV_POSITION,
+    out float3 color : SV_TARGET)
+{
+    color = float3(1.0, 0.0, 0.0);
+}

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<config>
+  
+  <window
+    title="ToyGE"
+    width="1280"
+    height="720"
+    x="0"
+    y="0"
+    />
+    
+  <adapter key="Nvidia"/>
+  <graphics_engine debug="0"/>
+
+</config>

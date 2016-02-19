@@ -9,36 +9,30 @@ namespace ToyGE
 	class D3D11Texture3D : public D3D11Texture
 	{
 	public:
-		D3D11Texture3D(const TextureDesc & desc);
-		D3D11Texture3D(const TextureDesc & desc, const std::vector<RenderDataDesc> & initDataList);
+		D3D11Texture3D() : D3D11Texture(TEXTURE_3D) {}
 
-		static Ptr<D3D11Texture3D>
-			CreateFromRawD3D(
-			const Ptr<ID3D11Device> & rawDevice, const Ptr<ID3D11Texture3D> & rawTexture3D);
+		virtual void Init(const std::vector<RenderDataDesc> & initDataList) override;
 
-		Ptr<ID3D11Resource> RawD3DTexture() const override
+		virtual void InitFromHardware(const Ptr<ID3D11Resource> & hardwareResource) override;
+
+		virtual void Release() override
 		{
-			return _rawD3DTexture3D;
+			D3D11Texture::Release();
+			_hardwareTexture3D = nullptr;
 		}
 
-		const Ptr<ID3D11ShaderResourceView>& 
-			AcquireRawD3DShaderResourceView
-			(int32_t firstMipLevel, int32_t numMipLevels, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
-
-		const Ptr<ID3D11RenderTargetView>& 
-			AcquireRawD3DRenderTargetView
-			(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
-
-		const Ptr<ID3D11UnorderedAccessView>& 
-			AcquireRawD3DUnorderedAccessView
-			(int32_t mipLevel, int32_t firstArray, int32_t arraySize, RenderFormat formatHint) override;
-
+		Ptr<ID3D11Resource> GetHardwareTexture() const override
+		{
+			return _hardwareTexture3D;
+		}
 	private:
-		Ptr<ID3D11Texture3D> _rawD3DTexture3D;
+		Ptr<ID3D11Texture3D> _hardwareTexture3D;
 
-		D3D11Texture3D() = default;
-		void InitFromRawD3DTexture();
-		void CreateRawD3DTexture3D_Desc(bool hasInitData, D3D11_TEXTURE3D_DESC & outDesc);
+		virtual Ptr<TextureShaderResourceView> CreateShaderResourceView(int32_t firstMip, int32_t numMips, int32_t firstArray, int32_t numArrays, bool bCube, RenderFormat viewFormat) override;
+
+		virtual Ptr<TextureUnorderedAccessView> CreateUnorderedAccessView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat) override;
+
+		virtual Ptr<TextureRenderTargetView> CreateRenderTargetView(int32_t mipLevel, int32_t firstArray, int32_t numArrays, RenderFormat viewFormat) override;
 	};
 }
 

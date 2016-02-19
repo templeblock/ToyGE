@@ -4,29 +4,30 @@
 
 #include "ToyGE\RenderEngine\TransformComponent.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
+#include "ToyGE\Kernel\StaticCastable.h"
 
 namespace ToyGE
 {
 	enum LightType : uint32_t
 	{
-		LIGHT_POINT = 0UL,
-		LIGHT_SPOT = 1UL,
-		LIGHT_DIRECTIONAL = 2UL
+		LIGHT_POINT			= 0UL,
+		LIGHT_SPOT			= 1UL,
+		LIGHT_DIRECTIONAL	= 2UL
 	};
 
 	namespace LightTypeNum
 	{
 		enum LightTypeNumDef
 		{
-			value = LIGHT_DIRECTIONAL + 1
+			NUM = LIGHT_DIRECTIONAL + 1
 		};
 	}
 
+	class RenderView;
 	class Camera;
 	class ShadowTechnique;
-	class RenderEffect;
 
-	class TOYGE_CORE_API LightComponent : public TransformComponent, public Cullable, public std::enable_shared_from_this<LightComponent>
+	class TOYGE_CORE_API LightComponent : public TransformComponent, public Cullable, public StaticCastable
 	{
 	public:
 		LightComponent(LightType type);
@@ -38,48 +39,37 @@ namespace ToyGE
 			return _type;
 		}
 
-		void SetRadiance(const XMFLOAT3 & radiance);
+		CLASS_SET(Color, float3, _color);
+		CLASS_GET(Color, float3, _color);
 
-		const XMFLOAT3 & Radiance() const
-		{
-			return _lightRadiance;
-		}
+		void SetIntensity(float intensity);
+		CLASS_GET(Intensity, float, _intensity);
+
+		CLASS_SET(ShadowTechnique, Ptr<ShadowTechnique>, _shadowTechnique);
+		CLASS_GET(ShadowTechnique, Ptr<ShadowTechnique>, _shadowTechnique);
 
 		void SetCastShadow(bool bCastShadow)
 		{
 			_bCastShadow = bCastShadow;
 		}
-
 		bool IsCastShadow() const
 		{
 			return _bCastShadow;
 		}
 
-		void SetShadowTechnique(const Ptr<ShadowTechnique> & shadowTech)
-		{
-			_shadowTechnique = shadowTech;
-		}
-
-		const Ptr<ShadowTechnique> & GetShadowTechnique() const
-		{
-			return _shadowTechnique;
-		}
-
-		void SetCastCaustics(bool bCastCaustics)
+		/*void SetCastCaustics(bool bCastCaustics)
 		{
 			_bCastCaustics = bCastCaustics;
 		}
-
 		bool IsCastCaustics() const
 		{
 			return _bCastCaustics;
-		}
+		}*/
 
 		void SetCastLightVolume(bool bCastLightVolume)
 		{
 			_bCastLightVolume = bCastLightVolume;
 		}
-
 		bool IsCastLightVolume() const
 		{
 			return _bCastLightVolume;
@@ -89,36 +79,33 @@ namespace ToyGE
 		{
 			_bCastLPV = bCastLPV;
 		}
-
 		bool IsCastLPV() const
 		{
 			return _bCastLPV;
 		}
 
-		virtual void BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera);
+		virtual float2 GetClipSpacePos(const Ptr<Camera> & camera) const;
 
-		virtual void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera);
+		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros);
 
-		virtual float2 GetLightClipPos(const Ptr<Camera> & camera) const;
+		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view);
 
 	protected:
-		bool _bCastShadow;
-		Ptr<ShadowTechnique> _shadowTechnique;
-		bool _bCastCaustics;
-		bool _bCastLightVolume;
-		bool _bCastLPV;
-
-		void UpdateLightCuller();
-
-		void DoActive() override;
-
-		void OnTranformUpdated() override;
-
-		virtual void OnRadianceChanged(const XMFLOAT3 & prevRadiance){};
-
-	private:
 		LightType _type;
-		XMFLOAT3 _lightRadiance;
+
+		float3 _color = 0.0f;
+		float _intensity = 0.0f;
+		bool _bCastShadow = false;
+		Ptr<ShadowTechnique> _shadowTechnique;
+		//bool _bCastCaustics = false;
+		bool _bCastLightVolume = false;
+		bool _bCastLPV = false;
+
+		virtual void UpdateLightCuller();
+
+		virtual void DoActive() override;
+
+		virtual void OnTranformUpdated() override;
 	};
 
 
@@ -130,20 +117,13 @@ namespace ToyGE
 
 		float MaxDistance() const;
 
-		XNA::AxisAlignedBox GetBoundsAABB() const override;
+		virtual XNA::AxisAlignedBox GetBoundsAABB() const override;
 
 		XNA::Sphere GetBoundsSphere() const;
 
-		void BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
+		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros) override;
 
-		void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
-
-		/*void StoreBoundsCache() override;
-
-		bool Intersect(const XNA::AxisAlignedBox & aabb) const override;*/
-
-	protected:
-		void OnRadianceChanged(const XMFLOAT3 & prevRadiance) override;
+		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view) override;
 	};
 
 
@@ -181,23 +161,15 @@ namespace ToyGE
 
 		XNA::AxisAlignedBox GetBoundsAABB() const override;
 
-		void BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
+		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros) override;
 
-		void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
-
-		/*XNA::Frustum GetBoundsFrustum() const override;
-
-		void StoreBoundsCache() override;
-
-		bool Intersect(const XNA::AxisAlignedBox & aabb) const override;*/
-
-	protected:
-		void OnRadianceChanged(const XMFLOAT3 & prevRadiance) override;
+		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view) override;
 
 	private:
 		XMFLOAT3 _direction;
 		float _decreaseSpeed;
 	};
+
 
 	//DirectionalLight
 	class TOYGE_CORE_API DirectionalLightComponent : public LightComponent
@@ -241,15 +213,11 @@ namespace ToyGE
 
 		float3 GetPosOffsetVec() const;
 
-		void BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
+		virtual float2 GetClipSpacePos(const Ptr<Camera> & camera) const override;
 
-		void BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera) override;
+		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros) override;
 
-		/*void StoreBoundsCache() override;
-
-		bool Intersect(const XNA::AxisAlignedBox & aabb) const override;*/
-
-		float2 GetLightClipPos(const Ptr<Camera> & camera) const override;
+		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view) override;
 
 	protected:
 		void OnTranformUpdated() override;

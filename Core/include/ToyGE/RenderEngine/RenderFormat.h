@@ -2,7 +2,7 @@
 #ifndef RENDERFORMAT_H
 #define RENDERFORMAT_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
+#include "ToyGE\Kernel\PreInclude.h"
 
 namespace ToyGE
 {

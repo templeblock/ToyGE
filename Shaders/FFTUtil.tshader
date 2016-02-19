@@ -1,0 +1,29 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D srcTex;
+
+SamplerState pointSampler;
+
+float2 FFTSetupPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return float2( srcTex.SampleLevel(pointSampler, vsOut.uv, 0).x, 0.0f );
+}
+
+float ifftScale;
+
+float2 IFFTScalePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return srcTex.SampleLevel(pointSampler, vsOut.uv, 0).xy * ifftScale;
+}
+
+float2 IFFTConjugatePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    return srcTex.SampleLevel(pointSampler, vsOut.uv, 0).xy * float2(1.0f, -1.0f);
+}
+
+float4 ShowFFTPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 value = srcTex.SampleLevel(pointSampler, vsOut.uv, 0).xy;
+    return sqrt(dot(value, value)) / 1e2;
+}

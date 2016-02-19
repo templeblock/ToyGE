@@ -1,0 +1,23 @@
+#ifndef VIEW_TSHADER
+#define VIEW_TSHADER
+
+cbuffer cb_view_shared
+{
+    float4x4 worldToViewMatrix;
+    float4x4 viewToClipMatrix;
+    float4x4 worldToClipMatrix;
+    float4x4 viewToWorldMatrix;
+    float4x4 preWorldToViewMatrix;
+    float3   viewWorldPosition;
+    float    _pad_0;
+    float    viewNear;
+    float    viewFar;
+    float    viewLength; // far - near
+    float    _pad_1;
+    float2   viewSize;
+    float2   invViewSize;
+    float3   viewWorldDir;
+    float    _pad_2;
+};
+
+#endif

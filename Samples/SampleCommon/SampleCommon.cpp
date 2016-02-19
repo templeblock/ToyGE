@@ -1,10 +1,11 @@
 #include "SampleCommon.h"
-#include "ToyGE\Kernel\Config.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
+#include "ToyGE\Kernel\TextureAsset.h"
 #include "ToyGE\RenderEngine\Texture.h"
+#include "ToyGE\RenderEngine\RenderUtil.h"
 
 using namespace ToyGE;
+
+DECLARE_SHADER(, RenderNormalPS, SHADER_PS, "RenderNormal", "RenderNormalPS", SM_4);
 
 SharedParamRender::SharedParamRender()
 	: _renderParamColorWrite(COLOR_WRITE_ALL)
@@ -12,33 +13,30 @@ SharedParamRender::SharedParamRender()
 
 }
 
-void SharedParamRender::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+void SharedParamRender::Render(const Ptr<RenderView> & view)
 {
 	if (_renderParam.size() > 0)
 	{
-		auto param = sharedEnviroment->ParamByName(_renderParam)->As<SharedParam<Ptr<Texture>>>()->GetValue();
+		auto param = view->GetViewRenderContext()->GetSharedTexture(_renderParam);
+		if (!param)
+			return;
+
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
 		if (_renderParamAsNormal)
 		{
-			auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Transform.xml");
-
-			fx->VariableByName("srcTex")->AsShaderResource()->SetValue(param->CreateTextureView());
-
-			Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView() }, 0);
-
-			RenderQuad(fx->TechniqueByName("TransformAsNormal"));
+			auto ps = Shader::FindOrCreate<RenderNormalPS>();
+			ps->SetScalar("bDecode", (int)bDecode);
+			ps->SetSRV("srcTex", param->GetShaderResourceView(0, 0, 0, 0, false, _format));
+			ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+			ps->Flush();
+			DrawQuad({ sceneTex->GetRenderTargetView(0 ,0, 1) });
 		}
 		else
 		{
-			if (_renderParam == CommonRenderShareName::RawDepth())
-				ToyGE::Transform(
-				param->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
-				sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
-				_renderParamColorWrite);
-			else
-				ToyGE::Transform(
-				param->CreateTextureView(),
-				sharedEnviroment->GetView()->GetRenderResult()->CreateTextureView(),
+			ToyGE::Transform(
+				param->GetShaderResourceView(0, 0, 0, 0, false, _format),
+				sceneTex->GetRenderTargetView(0, 0, 1),
 				_renderParamColorWrite);
 		}
 	}
@@ -47,13 +45,7 @@ void SharedParamRender::Render(const Ptr<RenderSharedEnviroment> & sharedEnvirom
 
 void SampleCommon::Start(const ToyGE::Ptr<App> & app)
 {
-	File::SetCurrentPathToProgram();
-
-	Config config;
-	bool configLoad = Config::Load(L"../../../Media/Config.xml", config);
-
-	ToyGE::EngineDriver::StartUp(config, app);
-
+	ToyGE::EngineDriver::Init(app);
 	ToyGE::EngineDriver::Run();
 }
 
@@ -65,55 +57,62 @@ SampleCommon::SampleCommon()
 
 }
 
-void SampleCommon::Startup()
+void SampleCommon::Init()
 {
-	Global::GetRenderEngine()->GetWindow()->SetTitle(_sampleName);
+	Global::GetWindow()->SetTitle(_sampleName);
 
 	//Create Scene
 	auto scene = std::make_shared<Scene>();
 	Global::SetScene(scene);
-	scene->SetAmbientColor(0.02f);
+	scene->SetAmbientColor(0.05f);
 
 	//Create View
 	_renderView = std::make_shared<RenderView>();
 	scene->AddView(_renderView);
 
-	_renderView->SetRenderConfig(std::make_shared<RenderConfig>());
+	//_renderView->SetRenderConfig(std::make_shared<RenderConfig>());
 
 	//Set Resize Events
-	Global::GetRenderEngine()->GetWindow()->OnResizeEvent().connect(
+	Global::GetWindow()->OnResizeEvent().connect(
 		[&](const Ptr<Window> & window, int32_t preWidth, int32_t preHeight)
 	{
 		RenderViewport vp;
 		vp.topLeftX = 0.0f;
 		vp.topLeftY = 0.0f;
-		vp.width = static_cast<float>(Global::GetRenderEngine()->GetWindow()->Width());
-		vp.height = static_cast<float>(Global::GetRenderEngine()->GetWindow()->Height());
+		vp.width = static_cast<float>(Global::GetWindow()->Width());
+		vp.height = static_cast<float>(Global::GetWindow()->Height());
 		vp.minDepth = 0.0f;
 		vp.maxDepth = 1.0f;
 		_renderView->SetViewport(vp);
+
+		_renderView->GetCamera()->Cast<PerspectiveCamera>()->SetAspectRatio(vp.width / vp.height);
+
+		_renderView->SetRenderTarget(Global::GetRenderEngine()->GetFrameBuffer()->GetRenderTargetView(0, 0, 1));
 	});
 
-	//Create Camera
-	auto camera = std::make_shared<PhysicalCamera>(0.1f, 1e+2f);
-	camera->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
-	_renderView->SetCamera(camera);
 
 	//Create Viewport
 	RenderViewport vp;
 	vp.topLeftX = 0.0f;
 	vp.topLeftY = 0.0f;
-	vp.width = static_cast<float>(Global::GetRenderEngine()->GetWindow()->Width());
-	vp.height = static_cast<float>(Global::GetRenderEngine()->GetWindow()->Height());
+	vp.width = static_cast<float>(Global::GetWindow()->Width());
+	vp.height = static_cast<float>(Global::GetWindow()->Height());
 	vp.minDepth = 0.0f;
 	vp.maxDepth = 1.0f;
 	_renderView->SetViewport(vp);
 
+	_renderView->SetRenderTarget(Global::GetRenderEngine()->GetFrameBuffer()->GetRenderTargetView(0, 0, 1));
+
+	//Create Camera
+	auto camera = std::make_shared<PerspectiveCamera>(XM_PIDIV2, vp.width / vp.height, 0.1f, 1e+2f);
+	camera->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
+	_renderView->SetCamera(camera);
+	FrameInfoRender::traceCamera = camera;
+
 	//Set Background Render
-	auto skyboxTex = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>()->AcquireResource(L"uffizi_cross.dds");
-	auto skyboxRender = std::make_shared<SkyBox>();
-	skyboxRender->SetTexture(skyboxTex);
-	Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->SetBackgroundRender(skyboxRender);
+	auto skyboxTex = Asset::Find<TextureAsset>("Textures/uffizi_cross.dds");
+	skyboxTex->Init();
+	scene->SetAmbientTexture(skyboxTex->GetTexture());
 
 	//UI
 	_twBar = TwNewBar("Sample");
@@ -121,7 +120,7 @@ void SampleCommon::Startup()
 	int size[2] = { 200, 400 };
 	TwSetParam(_twBar, nullptr, "size", TW_PARAM_INT32, 2, size);
 
-	int pos[2] = { Global::GetRenderEngine()->GetWindow()->Width() - size[0], 10 };
+	int pos[2] = { Global::GetWindow()->Width() - size[0], 10 };
 	TwSetParam(_twBar, nullptr, "position", TW_PARAM_INT32, 2, pos);
 
 
@@ -133,6 +132,13 @@ void SampleCommon::Startup()
 		mouse->OnButtonDownEvent().connect(std::bind(&SampleCommon::MouseDown, this, std::placeholders::_1, std::placeholders::_2));
 		mouse->OnButtonUpEvent().connect(std::bind(&SampleCommon::MouseUp, this, std::placeholders::_1, std::placeholders::_2));
 		mouse->OnMouseMoveEvent().connect(std::bind(&SampleCommon::MouseMove, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+	}
+
+	auto numKeyboards = Global::GetInputEngine()->NumInputDevices(INPUT_DEVICE_KEYBORD);
+	for (int32_t i = 0; i < numKeyboards; ++i)
+	{
+		auto keyboard = std::static_pointer_cast<InputKeyboard>(Global::GetInputEngine()->GetInputDevice(INPUT_DEVICE_KEYBORD, i));
+		keyboard->KeyUpEvent().connect(std::bind(&SampleCommon::KeyUp, this, std::placeholders::_1, std::placeholders::_2));
 	}
 };
 
@@ -153,6 +159,15 @@ void SampleCommon::Update(float elapsedTime)
 	if (InputKeyboard::ExistKeyDown(KEY_E))
 		_renderView->GetCamera()->Fly(-dst);
 };
+
+void SampleCommon::KeyUp(const Ptr<InputKeyboard> & keyboard, KeyCode code)
+{
+	if (code == KEY_Escape)
+		Global::GetLooper()->SetExit(true);
+
+	if (code == KEY_F1)
+		Global::GetRenderEngine()->SetFullScreen(!Global::GetRenderEngine()->IsFullScreen());
+}
 
 
 void SampleCommon::MouseDown(const ToyGE::Ptr<ToyGE::InputMouse> & mouse, const ToyGE::MouseButton button)
@@ -181,6 +196,6 @@ void SampleCommon::MouseMove(const ToyGE::Ptr<ToyGE::InputMouse> & mouse, int re
 
 bool SampleCommon::IsPosInWindow(const ToyGE::int2 & pos) const
 {
-	return pos.x >= 0 && pos.x <= Global::GetRenderEngine()->GetWindow()->Width()
-		&& pos.y >= 0 && pos.y <= Global::GetRenderEngine()->GetWindow()->Height();
+	return pos.x() >= 0 && pos.x() <= Global::GetWindow()->Width()
+		&& pos.y() >= 0 && pos.y() <= Global::GetWindow()->Height();
 }

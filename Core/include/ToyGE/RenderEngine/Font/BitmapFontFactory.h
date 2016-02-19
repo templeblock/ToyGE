@@ -3,6 +3,7 @@
 #define BITMAPFONTFACOTRY_H
 
 #include "ToyGE\RenderEngine\Font\FontFactory.h"
+#include "ToyGE\RenderEngine\Font\BitmapFont.h"
 
 namespace ToyGE
 {
@@ -11,7 +12,10 @@ namespace ToyGE
 	public:
 		virtual ~BitmapFontFactory() = default;
 
-		Ptr<Font> LoadFont(const Ptr<File> & file) override;
+		virtual Ptr<Font> CreateNewFont()
+		{
+			return std::make_shared<BitmapFont>();
+		}
 	};
 }
 

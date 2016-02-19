@@ -1,0 +1,165 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+struct SpritePoint
+{
+    float2 pos;
+    float3 color;
+};
+
+Texture2D sceneTex;
+Texture2D brightPassTex;
+Texture2D setupTex;
+Texture2D lensTex;
+
+AppendStructuredBuffer<SpritePoint> spPointsBuf;
+StructuredBuffer<SpritePoint> spPointsRenderBuf;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float brightPassThreshold;
+float spriteThreshold;
+float4 texSize;
+float flareIntensity;
+
+
+float3 BrightPassPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float3 color = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+    float ilum = GetIlluminance(color);
+    if(ilum < brightPassThreshold)
+        discard;
+        
+    return color;
+}
+
+float BorderFade(float2 pos)
+{
+    float fade = saturate(1.0f - dot(pos, pos));
+    return fade * fade;
+}
+    
+float4 LensFlareSetupPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 posH = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+    float borderFade = BorderFade(posH);
+    
+    borderFade *= BorderFade(0.8 * posH);
+    
+    return brightPassTex.SampleLevel(linearSampler, vsOut.uv, 0) * borderFade;
+}
+
+
+#define TILE_SIZE 9
+    
+void ExtractSpritePointsPS(DrawQuadVSOut vsOut)
+{
+    uint2 tileLU = uint2(vsOut.pos.xy) * TILE_SIZE;
+    
+    float4 colorSum = 0.0f;
+    
+    [unroll] for(uint i = 0; i < TILE_SIZE; ++i)
+    {
+        [unroll] for(uint j = 0; j < TILE_SIZE; ++j)
+        {
+            float4 sampleColor = setupTex.Load(uint3(tileLU.x + i, tileLU.y + j, 0));
+            colorSum += sampleColor;
+        }
+    }
+    
+    colorSum /= TILE_SIZE * TILE_SIZE;
+    
+    float ilum = GetIlluminance(colorSum.xyz);
+    if(ilum >= spriteThreshold)
+    {
+        SpritePoint sp;
+        sp.pos = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+        sp.color = colorSum.xyz;
+        
+        spPointsBuf.Append(sp);
+    }
+}
+
+
+struct LensBlurVSOut
+{
+    float2 pos : POSITION;
+    float size : SIZE;
+    float3 color : COLOR;
+};
+  
+void LensBlurVS(
+    uint vertexID : SV_VertexID,
+    out LensBlurVSOut vsOut)
+{
+    SpritePoint sp = spPointsRenderBuf[vertexID];
+  
+    vsOut.pos.xy = sp.pos;
+  
+    float spMinSize = TILE_SIZE * 1 / texSize.x;
+    float spMaxSize = TILE_SIZE * 32 / texSize.x;
+  
+    float d = sqrt( max(1e-4, dot(vsOut.pos, vsOut.pos)) );
+    vsOut.size = lerp(spMinSize, spMaxSize, saturate(d));
+  
+    vsOut.color = sp.color;
+}
+
+struct LensBlurGSOut
+{
+    float4 pos : SV_POSITION;
+    float2 tex : TEXCOORD;
+    float4 color : COLOR;
+};
+
+[maxvertexcount(4)]
+void LensBlurGS(
+    point LensBlurVSOut inPoints[1],
+    inout TriangleStream<LensBlurGSOut> outStream)
+{
+    static const float2 offsets[] = 
+    {
+      float2(-1.0f,  1.0f),
+      float2( 1.0f,  1.0f),
+      float2(-1.0f, -1.0f),
+      float2( 1.0f, -1.0f)
+    };
+  
+    static const float2 texCoords[] = 
+    {
+      float2(0.0f, 0.0f),
+      float2(1.0f, 0.0f),
+      float2(0.0f, 1.0f),
+      float2(1.0f, 1.0f)
+    };
+  
+    float2 posOffsetScale = abs(inPoints[0].size) * float2(1.0f, texSize.x / texSize.y);
+  
+    float pixelSize = inPoints[0].size * texSize.x;
+  
+    LensBlurGSOut gsOut;
+    gsOut.pos.zw = float2(0.0f, 1.0f);
+    gsOut.color.rgb = inPoints[0].color;
+    gsOut.color.a = 1.0f / (PI * pixelSize * pixelSize) * flareIntensity * GetIlluminance(gsOut.color.rgb);
+  
+    for(uint i = 0; i < 4; ++i)
+    {
+      gsOut.pos.xy = inPoints[0].pos + offsets[i] * posOffsetScale;
+      gsOut.tex = texCoords[i];
+    
+      outStream.Append(gsOut);
+    }
+  
+    outStream.RestartStrip();
+}
+
+
+float4 LensBlurPS(LensBlurGSOut gsOut) : SV_TARGET
+{
+    float3 color = lensTex.Sample(linearSampler, gsOut.tex).rgb;
+
+    color *= gsOut.color.rgb;
+    
+    return float4(color, gsOut.color.a);
+}

@@ -2,7 +2,8 @@
 #ifndef APP_H
 #define APP_H
 
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 
 namespace ToyGE
 {
@@ -11,7 +12,7 @@ namespace ToyGE
 	public:
 		virtual ~App() = default;
 
-		virtual void Startup(){}
+		virtual void Init(){}
 
 		virtual void Update(float elapsedTime){}
 

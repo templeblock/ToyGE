@@ -6,18 +6,7 @@
 
 namespace ToyGE
 {
-	D3D11Sampler::D3D11Sampler(const SamplerDesc & desc)
-		: Sampler(desc)
-	{
-		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
-		D3D11_SAMPLER_DESC d3dSamplerDesc;
-		CreateD3DSamplerDesc(desc, d3dSamplerDesc);
-		ID3D11SamplerState *pD3DSampler = nullptr;
-		re->RawD3DDevice()->CreateSamplerState(&d3dSamplerDesc, &pD3DSampler);
-		_rawD3DSampler = MakeComShared(pD3DSampler);
-	}
-
-	void D3D11Sampler::CreateD3DSamplerDesc(const SamplerDesc & desc, D3D11_SAMPLER_DESC & d3dDesc)
+	static void CreateD3DSamplerDesc(const SamplerDesc & desc, D3D11_SAMPLER_DESC & d3dDesc)
 	{
 		d3dDesc.Filter = GetD3DFilter(desc.filter);
 		d3dDesc.AddressU = GetD3DTextureAddressMode(desc.addressU);
@@ -26,8 +15,26 @@ namespace ToyGE
 		d3dDesc.MipLODBias = desc.mipLODBias;
 		d3dDesc.MaxAnisotropy = desc.maxAnisotropy;
 		d3dDesc.ComparisonFunc = GetD3DComparisonFunc(desc.comparisonFunc);
-		std::copy(desc.borderColor, desc.borderColor + 4, d3dDesc.BorderColor);
+		d3dDesc.BorderColor[0] = desc.borderColor.x();
+		d3dDesc.BorderColor[1] = desc.borderColor.y();
+		d3dDesc.BorderColor[2] = desc.borderColor.z();
+		d3dDesc.BorderColor[3] = desc.borderColor.w();
 		d3dDesc.MinLOD = desc.minLOD;
 		d3dDesc.MaxLOD = desc.maxLOD;
 	}
+
+	void D3D11Sampler::Init()
+	{
+		Sampler::Init();
+
+		auto re = std::static_pointer_cast<D3D11RenderEngine>(Global::GetRenderEngine());
+		D3D11_SAMPLER_DESC d3dSamplerDesc;
+		CreateD3DSamplerDesc(_desc, d3dSamplerDesc);
+
+		ID3D11SamplerState *pD3DSampler = nullptr;
+		D3D11RenderEngine::d3d11Device->CreateSamplerState(&d3dSamplerDesc, &pD3DSampler);
+		_hardwareSampler = MakeComShared(pD3DSampler);
+	}
+
+	
 }

@@ -2,8 +2,8 @@
 #ifndef SCENECULLER_H
 #define SCENECULLER_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\Math\Math.h"
 
 namespace ToyGE

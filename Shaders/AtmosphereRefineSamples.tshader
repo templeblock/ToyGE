@@ -1,0 +1,205 @@
+#include "Common.tshader"
+#include "AtmosphereRenderingCommon.tshader"
+
+RWTexture2D<uint2> interpolationSourceTex;
+Texture2D sampleCoordsTex;
+Texture2D sampleDepthTex;
+
+float depthBreakThreshold;
+float2 lightClipPos;
+float4 texSize;
+
+// #define INITIAL_SAMPLE_STEP 4
+#define GROUP_SIZE 32
+  
+#define NUM_DEPTHBREAKFLAGS (GROUP_SIZE / 32)
+groupshared uint depthBreakFlags[NUM_DEPTHBREAKFLAGS];
+
+[numthreads(GROUP_SIZE, 1, 1)]
+void RefineSamplesCS(
+    uint3 Gid : SV_GroupID,
+    uint3 GTid : SV_GroupThreadID,
+    uint3 DTid : SV_DispatchThreadID)
+{
+    uint sampleLineIndex = DTid.y;
+    uint sampleIndex = DTid.x;
+    uint sampleIndexInGroup = GTid.x;
+    
+    float2 sampleCoord = sampleCoordsTex.Load(uint3(sampleIndex, sampleLineIndex, 0), 0).xy;
+    
+    bool bValidSample = all( abs(sampleCoord) < 1.0 + texSize.zw * 4 );
+    
+    //Init flags zero
+    if( GTid.x < NUM_DEPTHBREAKFLAGS )
+        depthBreakFlags[GTid.x] = 0;
+        
+    GroupMemoryBarrierWithGroupSync();
+    
+    //Set DepthBreak Flags
+    if(bValidSample)
+    {
+        float cameraDepth = sampleDepthTex.Load(uint3(sampleIndex, sampleLineIndex, 0), 0).x;
+        float cameraDepthNext = sampleDepthTex.Load(uint3(sampleIndex + 1, sampleLineIndex, 0), 0).x;
+        
+        bool bNoBreak = abs(cameraDepth - cameraDepthNext) <= depthBreakThreshold;
+        InterlockedOr( depthBreakFlags[sampleIndexInGroup/32], bNoBreak << (sampleIndexInGroup % 32) );
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    if(!bValidSample)
+        return;
+        
+    //More samples near light
+    uint initialSampleStep = INITIAL_SAMPLE_STEP;
+    uint leftInitalSampleIndex = sampleIndex / initialSampleStep * initialSampleStep;
+    
+    /*
+    if( leftInitalSampleIndex/(float)MAX_SAMPLES_PERLINE < 0.05
+        && length(sampleCoord - lightClipPos) < 0.1 )
+    {
+        initialSampleStep = max(initialSampleStep / sampleDensityFactor, 1);
+        leftInitalSampleIndex = sampleIndex / initialSampleStep * initialSampleStep;
+    }
+    */
+    
+    //Compute interpolation source
+    uint2 texDims;
+    interpolationSourceTex.GetDimensions(texDims.x, texDims.y);
+    uint rightInitalSampleIndex = min(texDims.x - 1, leftInitalSampleIndex + initialSampleStep);
+    
+    uint leftInitalSampleIndexInGroup = leftInitalSampleIndex % GROUP_SIZE;
+    
+    uint leftSourceIndex = sampleIndex;
+    uint rightSourceIndex = sampleIndex;
+    
+    if( sampleIndex > leftInitalSampleIndex && sampleIndex < rightInitalSampleIndex)
+    {
+        //Check depth break
+        bool bNoBreak = true;
+    #if INITIAL_SAMPLE_STEP < 32
+        {
+        int sectionFlagPackIndex = leftInitalSampleIndexInGroup / 32;
+        int sectionFlagBitIndex = leftInitalSampleIndexInGroup % 32;
+        uint flag = depthBreakFlags[sectionFlagPackIndex];
+        uint flagMask = (1 << INITIAL_SAMPLE_STEP) - 1;
+        if( ((flag >> sectionFlagBitIndex) & flagMask) != flagMask )
+            bNoBreak = false;
+        }
+    #else
+        {
+            [unroll] for(uint i = 0; i < NUM_DEPTHBREAKFLAGS; ++i)
+            {
+                if( depthBreakFlags[i] != 0xFFFFFFFFU )
+                bNoBreak = false;
+            }
+        }
+    #endif
+        
+        if(bNoBreak)
+        {
+            leftSourceIndex = leftInitalSampleIndex;
+            rightSourceIndex = rightInitalSampleIndex;
+        }
+        else
+        {
+            //Left Break
+            {
+                int leftBreakIndexInGroup = sampleIndexInGroup - 1;
+                
+                int sectionFlagPackIndex = (uint)leftBreakIndexInGroup / 32;
+                int sectionFlagBitIndex = (uint)leftBreakIndexInGroup % 32;
+                uint flag = depthBreakFlags[sectionFlagPackIndex];
+                
+                if(sectionFlagBitIndex < 31)
+                {
+                    flag |= 0xFFFFFFFFU << (sectionFlagBitIndex + 1);
+                }
+                
+                int firstBreakBitIndex = firstbithigh( ~flag );
+                if( !(firstBreakBitIndex >= 0 && firstBreakBitIndex <= 31) )
+                    firstBreakBitIndex = -1;
+                
+                //int breakOffset = sectionFlagBitIndex - max(0, firstBreakBitIndex);
+                leftBreakIndexInGroup -= sectionFlagBitIndex - firstBreakBitIndex;
+                
+        #if INITIAL_SAMPLE_STEP > 32
+                --sectionFlagPackIndex;
+                while(sectionFlagPackIndex >= 0 && firstBreakBitIndex == -1)
+                {
+                    flag = depthBreakFlags[sectionFlagPackIndex];
+                    firstBreakBitIndex = firstbithigh( ~flag);
+                    if( !(firstBreakBitIndex >= 0 && firstBreakBitIndex <= 31) )
+                        firstBreakBitIndex = -1;
+                    
+                    //breakOffset += 32 - max(0, firstBreakBitIndex);
+                    leftBreakIndexInGroup -= 31 - firstBreakBitIndex;
+                    
+                    --sectionFlagPackIndex;
+                }
+        #endif
+                /*
+                if(firstBreakBitIndex == -1)
+                    breakOffset = 0;
+                else
+                    --breakOffset;
+                */
+                
+                //breakOffset = min(breakOffset, sampleIndex - leftInitalSampleIndex);
+                //leftSourceIndex = sampleIndex - breakOffset;
+                leftBreakIndexInGroup = max( uint(leftBreakIndexInGroup + 1), leftInitalSampleIndexInGroup);
+                leftSourceIndex = Gid.x * GROUP_SIZE + leftBreakIndexInGroup;
+            }//End Left
+        
+            //Right Break
+            {
+                uint rightBreakIndexInGroup = sampleIndexInGroup;
+                
+                int sectionFlagPackIndex = rightBreakIndexInGroup / 32;
+                int sectionFlagBitIndex = rightBreakIndexInGroup % 32;
+                uint flag = depthBreakFlags[sectionFlagPackIndex];
+                
+                flag |= (1U << sectionFlagBitIndex) - 1;
+                
+                int firstBreakBitIndex = firstbitlow( ~flag );
+                if( !(firstBreakBitIndex >= 0 && firstBreakBitIndex <= 31) )
+                firstBreakBitIndex = 32;
+                
+                //int breakOffset = (firstBreakBitIndex + 32) - floor(float(firstBreakBitIndex + 32)/32.0)*32 - sectionFlagBitIndex;
+                rightBreakIndexInGroup += firstBreakBitIndex - sectionFlagBitIndex;
+                
+        #if INITIAL_SAMPLE_STEP > 32
+                ++sectionFlagPackIndex;
+                while(sectionFlagPackIndex < NUM_DEPTHBREAKFLAGS && firstBreakBitIndex == 32)
+                {
+                    flag = depthBreakFlags[sectionFlagPackIndex];
+                    firstBreakBitIndex = firstbithigh( ~flag );
+                    if( !(firstBreakBitIndex >= 0 && firstBreakBitIndex <= 31) )
+                        firstBreakBitIndex = 32;
+                    
+                    //breakOffset += (firstBreakBitIndex + 32) - floor(float(firstBreakBitIndex + 32)/32.0)*32;
+                    rightBreakIndexInGroup += firstBreakBitIndex;
+                    
+                    ++sectionFlagPackIndex;
+                }
+        #endif
+                /*
+                if(firstBreakBitIndex == -1)
+                    breakOffset = 0;
+                */
+                
+                //breakOffset = min(breakOffset, leftInitalSampleIndex + initialSampleStep - sampleIndex);
+                //rightSourceIndex = sampleIndex + breakOffset;
+                
+                rightBreakIndexInGroup = min(rightBreakIndexInGroup, leftInitalSampleIndexInGroup + initialSampleStep);
+                rightSourceIndex = Gid.x * GROUP_SIZE + rightBreakIndexInGroup;
+            }//End Right
+        
+        }
+        
+        if( leftSourceIndex == sampleIndex || rightSourceIndex == sampleIndex )
+            rightSourceIndex = leftSourceIndex = sampleIndex;
+    }
+    
+    interpolationSourceTex[uint2(DTid.xy)] = uint2(leftSourceIndex, rightSourceIndex);
+}

@@ -1,0 +1,185 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "BRDF.tshader"
+
+#define NUM_SAMPLES 256
+
+TextureCube envMap;
+
+SamplerState linearSampler;
+
+int arrayIndex;
+float4 texSize;
+float  mipCoord;
+    
+float3 ImportanceSampling(float2 sample2d, float roughness, float3 N)
+{
+    float a = lerp(MIN_ROUGHNESS, MAX_ROUGHNESS, roughness);
+    a = a * a;
+    
+    float phi = 2 * PI * sample2d.x;
+    float cosTheta = sqrt( max(1e-5, 1 - sample2d.y) / max(1e-5, 1 + (a*a - 1) * sample2d.y) );
+    float sinTheta = sqrt( max(1e-5, 1 - cosTheta * cosTheta) );
+    float3 H = 0;
+    H.x = sinTheta * sin(phi);
+    H.y = cosTheta;
+    H.z = sinTheta * cos(phi);
+    
+    float3 Tx = abs(N.x) < 0.999 ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+    float3 Tz = normalize(cross(Tx, N));
+    Tx = cross(N, Tz);
+    return H.x * Tx + H.y * N + H.z * Tz;
+}
+    
+float3 PrefilterEnvMap(float roughness, float3 R)
+{
+    float3 N = R;
+    float3 V = R;
+    float3 colorSum = 0.0f;
+    float weightSum = 0.0f;
+    
+    for(uint i = 0; i < NUM_SAMPLES; ++i)
+    {
+        float2 sample2d = Hammersley2d(i, NUM_SAMPLES);
+        float3 H = ImportanceSampling(sample2d, roughness, N);
+        float3 L = 2 * H - V;
+        
+        float NoL = saturate(dot(N, L));
+        if(NoL > 0)
+        {
+            colorSum += envMap.SampleLevel(linearSampler, L, 0).xyz * NoL;
+            weightSum += NoL;
+        }
+    }
+    
+    return colorSum / max(1e-4, weightSum);
+}
+
+// struct PrefilterEnvMapVSOut
+// {
+//   float4 pos : POSITION;
+// };
+// 
+// PrefilterEnvMapVSOut PrefilterEnvMapVS(
+//     float2 pos : POSITION,
+//     float2 tex : TEXCOORD)
+// {
+// 	PrefilterEnvMapVSOut vsOut;
+// 	vsOut.pos = float4(pos, 0.0f, 1.0f);
+// 	return vsOut;
+// }
+// 
+// struct PrefilterEnvMapGSOut
+// {
+//   float4 pos : SV_POSITION;
+//   uint arrayIndex : SV_RenderTargetArrayIndex;
+// };
+// 
+// [maxvertexcount(18)]
+// void PrefilterEnvMapGS(
+//   triangle PrefilterEnvMapVSOut vsOut[3], 
+//   inout TriangleStream<PrefilterEnvMapGSOut> output)
+// {
+//   PrefilterEnvMapGSOut gsOut;
+//   
+//   for(uint faceIndex = 0; faceIndex < 6; ++faceIndex)
+//   {
+//     for(uint vertexIndex = 0; vertexIndex < 3; ++vertexIndex)
+//     {
+//       gsOut.pos = vsOut[vertexIndex].pos;
+//       gsOut.arrayIndex = faceIndex;
+//       output.Append(gsOut);
+//     }
+//     output.RestartStrip();
+//   }
+// }
+
+void GetLookAndUpVec(uint index, out float3 look, out float3 up)
+{
+    static const float3 lookArray[6] = 
+    {
+        float3( 1.0f,  0.0f,  0.0f),
+        float3(-1.0f,  0.0f,  0.0f),
+        float3( 0.0f,  1.0f,  0.0f),
+        float3( 0.0f, -1.0f,  0.0f),
+        float3( 0.0f,  0.0f,  1.0f),
+        float3( 0.0f,  0.0f, -1.0f)
+    };
+    
+    static const float3 upArray[6] = 
+    {
+        float3( 0.0f,  1.0f,  0.0f),
+        float3( 0.0f,  1.0f,  0.0f),
+        float3( 0.0f,  0.0f, -1.0f),
+        float3( 0.0f,  0.0f,  1.0f),
+        float3( 0.0f,  1.0f,  0.0f),
+        float3( 0.0f,  1.0f,  0.0f)
+    };
+    
+    look = lookArray[index];
+    up = upArray[index];
+}
+    
+float3 PrefilterEnvMapPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float3 Wz = 0.0f;
+    float3 Wy = 0.0f;
+    GetLookAndUpVec(arrayIndex, Wz, Wy);
+    float3 Wx = cross(Wy, Wz);
+    float2 size = texSize.xy;
+    float roughness = mipCoord;
+    
+    float2 texelIndex = vsOut.pos.xy - 0.5f;
+    float2 rPos = texelIndex / max(1e-5, size - 1) * float2(1.0, -1.0) + float2(-0.5, 0.5);
+    
+    float3 R = rPos.x * Wx + rPos.y * Wy + 0.5 * Wz;
+    R = normalize(R);
+    
+    return PrefilterEnvMap(roughness, R);
+}
+
+
+float2 IntegrateBRDF(float roughness, float NoV)
+{
+    //roughness = lerp(0.1, 0.9, roughness);
+    
+    float3 N = float3(0.0f, 1.0f, 0.0f);
+    float3 V = 0.0f;
+    V.x = sqrt(max(1e-4, 1.0f - NoV * NoV));
+    V.y = NoV;
+    
+    float2 resultSum = 0.0f;
+    
+    for(uint i = 0; i < NUM_SAMPLES; ++i)
+    {
+        float2 sample2d = Hammersley2d(i, NUM_SAMPLES);
+        float3 H = ImportanceSampling(sample2d, roughness, N);
+        float3 L = 2 * H - V;
+        
+        float VoH = saturate(dot(V, H));
+        float NoH = saturate(dot(N, H));
+        float NoL = saturate(dot(N, L));
+        
+        if(NoL > 0)
+        {
+            float D = NDF_GGX(NoH, roughness);
+            float G = G_Smith(NoL, NoV, roughness);
+            float G_t = G * VoH / max(1e-4, NoV * NoH);
+            float F_t = pow(1.0f - VoH, 5);
+            
+            resultSum.x += (1.0f - F_t) * G_t;
+            resultSum.y += F_t * G_t;
+        }
+    }
+    
+    return resultSum / NUM_SAMPLES;
+}
+
+float2 PreComputedLUTPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    // float2 texCoord = vsOut.uv;
+    float NoV = (vsOut.pos.x - 0.5) / (texSize.x - 1);
+    float roughness = (vsOut.pos.y - 0.5) / (texSize.y - 1);
+    
+    return IntegrateBRDF(roughness, NoV);
+}

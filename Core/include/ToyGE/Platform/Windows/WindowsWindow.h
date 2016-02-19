@@ -2,7 +2,7 @@
 #ifndef WINDOWSWINDOW_H
 #define WINDOWSWINDOW_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
+#include "ToyGE\Kernel\PreInclude.h"
 #include "ToyGE\Platform\Window.h"
 
 namespace ToyGE
@@ -19,7 +19,7 @@ namespace ToyGE
 			return _hwnd;
 		}
 
-		void SetTitle(const WString & tile) override;
+		void SetTitle(const String & title) override;
 
 		void Show() override;
 

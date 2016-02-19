@@ -1,5 +1,4 @@
 #include "SampleCommon.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
 
 using namespace ToyGE;
 using namespace XNA;
@@ -19,27 +18,28 @@ public:
 
 	DeferredViewTextureType _viewTextureType;
 	Ptr<SharedParamRender> _paramRender;
-	Vector4<ColorWriteMask> _colorWriteMask;
+	Vector<ColorWriteMask, 4> _colorWriteMask;
 
 	SampleDeferredRendering()
 	{
-		_sampleName = L"DeferredRendering";
+		_sampleName = "DeferredRendering";
 
 		_viewTextureType = NONE;
 
-		_colorWriteMask = Vector4<ColorWriteMask>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A);
+		_colorWriteMask = Vector<ColorWriteMask, 4>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A);
 	}
 
-	void Startup() override
+	void Init() override
 	{
-		SampleCommon::Startup();
+		SampleCommon::Init();
 
-		_renderView->AddPostProcessRender(std::make_shared<HDR>());
+		auto pp = std::make_shared<PostProcessing>();
+		pp->AddRender(std::make_shared<HDR>());
 		_paramRender = std::make_shared<SharedParamRender>();
-		_renderView->AddPostProcessRender(_paramRender);
-		_renderView->AddPostProcessRender(std::make_shared<GammaCorrection>());
-		_renderView->AddPostProcessRender(std::make_shared<FXAA>());
-		_renderView->AddPostProcessRender(std::make_shared<TweakBarRenderer>());
+		pp->AddRender(_paramRender);
+		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<TweakBarRenderer>());
+		_renderView->SetPostProcessing(pp);
 
 		//Init Scene
 		auto scene = Global::GetScene();
@@ -47,7 +47,8 @@ public:
 		//Add Light
 		auto pointLightCom = std::make_shared<PointLightComponent>();
 		pointLightCom->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
-		pointLightCom->SetRadiance(XMFLOAT3(30.0f, 30.0f, 30.0f));
+		pointLightCom->SetColor(1.0f);
+		pointLightCom->SetIntensity(30.0f);
 		pointLightCom->SetCastShadow(true);
 		auto pointLightObj = std::make_shared<SceneObject>();
 		pointLightObj->AddComponent(pointLightCom);
@@ -56,8 +57,10 @@ public:
 
 		std::vector<Ptr<RenderComponent>> objs;
 
-		auto model = Global::GetResourceManager(RESOURCE_MODEL)->As<ModelManager>()->AcquireResource(L"crytek-sponza/sponza.tx");
-		model->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f), nullptr);
+		auto model = Asset::Find<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
+		if (!model->IsInit())
+			model->Init();
+		model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
 
 
 		//Init UI
@@ -108,16 +111,19 @@ public:
 		static std::map<DeferredViewTextureType, String> renderParamMap = 
 		{
 			{ NONE, "" },
-			{ ZBUFFER, CommonRenderShareName::RawDepth() },
-			{ GBUFFER_0, CommonRenderShareName::GBuffer(0) },
-			{ GBUFFER_1, CommonRenderShareName::GBuffer(1) },
-			{ LIGHTING_0, CommonRenderShareName::Lighting(0) },
-			{ LIGHTING_1, CommonRenderShareName::Lighting(1) }
+			{ ZBUFFER, "SceneLinearClipDepth" },
+			{ GBUFFER_0, "GBuffer0" },
+			{ GBUFFER_1, "GBuffer1" },
+			{ LIGHTING_0, "Lighting0" },
+			{ LIGHTING_1, "Lighting1" }
 		};
 
 		_paramRender->SetRenderParam(renderParamMap[_viewTextureType]);
 		if (_viewTextureType == GBUFFER_1)
+		{
 			_paramRender->SetRenderParamAsNormal(true);
+			_paramRender->bDecode = true;
+		}
 		else
 			_paramRender->SetRenderParamAsNormal(false);
 

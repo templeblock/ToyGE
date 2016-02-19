@@ -1,0 +1,16 @@
+#ifndef FONTCOMMON_TSHADER
+#define FONTCOMMON_TSHADER
+
+static const float MAX_DISTANCE = 16.0f;
+
+float EncodeDistance(float d)
+{
+    return (d + MAX_DISTANCE) / MAX_DISTANCE / 2.0f;
+}
+
+float DecodeDistance(float ed)
+{
+    return ed * 2.0f * MAX_DISTANCE - MAX_DISTANCE;
+}
+
+#endif

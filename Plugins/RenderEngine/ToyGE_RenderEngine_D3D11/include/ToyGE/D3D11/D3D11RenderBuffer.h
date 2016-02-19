@@ -3,20 +3,59 @@
 #define D3D11RENDERBUFFER_H
 
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
+#include "ToyGE\D3D11\D3D11ResourceView.h"
 
 namespace ToyGE
 {
-	class D3D11RenderBuffer : public RenderBuffer
+	class D3D11BufferShaderResourceView : public BufferShaderResourceView, public D3D11ShaderResourceView
 	{
 	public:
-		D3D11RenderBuffer(const RenderBufferDesc & desc, const void *pInitData);
-		//D3D11RenderBuffer(const RenderBufferDesc & desc, const void *pInitData,
-		//	VertexBufferType vertexBufferType, const std::vector<VertexElementDesc> & vertexElementDesc);
+		virtual ~D3D11BufferShaderResourceView() = default;
+
+		virtual void Release() override
+		{
+			hardwareSRV = nullptr;
+		}
+	};
+
+	class D3D11BufferUnorderedAccessView : public BufferUnorderedAccessView, public D3D11UnorderedAccessView
+	{
+	public:
+		virtual ~D3D11BufferUnorderedAccessView() = default;
+
+		virtual void Release() override
+		{
+			hardwareUAV = nullptr;
+		}
+	};
+
+	class D3D11BufferRenderTargetView : public BufferRenderTargetView, public D3D11RenderTargetView
+	{
+	public:
+		virtual ~D3D11BufferRenderTargetView() = default;
+
+		virtual void Release() override
+		{
+			hardwareRTV = nullptr;
+		}
+	};
+
+	class D3D11RenderBuffer : public virtual RenderBuffer
+	{
+	public:
+		virtual void Init(const void * pInitData, bool bCacheData = false) override;
+
+		virtual void Release() override
+		{
+			RenderBuffer::Release();
+			_hardwareBuffer = nullptr;
+		}
 
 		RenderDataDesc Map(MapType mapFlag) override;
 
 		void UnMap() override;
+
+		bool CopyTo(const Ptr<RenderBuffer> & dst, int32_t dstBytesOffset, int32_t srcBytesOffset, int32_t cpyBytesSize) const override;
 
 		void CopyStructureCountTo(
 			const Ptr<RenderBuffer> & dst,
@@ -26,42 +65,40 @@ namespace ToyGE
 			RenderFormat format,
 			uint32_t uavFlag) override;
 
-		bool CopyTo(const Ptr<RenderBuffer> & dst, int32_t dstBytesOffset, int32_t srcBytesOffset, int32_t cpyBytesSize) const override;
-
-		const Ptr<ID3D11Buffer> & RawD3DBuffer() const
+		const Ptr<ID3D11Buffer> & GetHardwareBuffer() const
 		{
-			return _rawD3DBuffer;
+			return _hardwareBuffer;
 		}
 
-		const Ptr<ID3D11ShaderResourceView>&
-			AcquireRawD3DShaderResourceView
-			(int32_t firstElement, int32_t numElements, RenderFormat format);
+	protected:
+		virtual Ptr<BufferShaderResourceView> CreateShaderResourceView(int32_t firstElement, int32_t numElements, RenderFormat viewFormat) override;
 
-		const Ptr<ID3D11RenderTargetView>&
-			AcquireRawD3DRenderTargetView
-			(int32_t firstElement, int32_t numElements, RenderFormat format);
+		virtual Ptr<BufferUnorderedAccessView> CreateUnorderedAccessView(int32_t firstElement, int32_t numElements, RenderFormat viewFormat, uint32_t uavFlags) override;
 
-		const Ptr<ID3D11UnorderedAccessView>&
-			AcquireRawD3DUnorderedAccessView
-			(int32_t firstElement, int32_t numElements, RenderFormat format, uint32_t uavFlags);
-
+		virtual Ptr<BufferRenderTargetView> CreateRenderTargetView(int32_t firstElement, int32_t numElements, RenderFormat viewFormat) override;
 
 	private:
-		Ptr<ID3D11Buffer> _rawD3DBuffer;
-		std::map<uint64_t, Ptr<ID3D11ShaderResourceView>>	_srvMap;
-		std::map<uint64_t, Ptr<ID3D11RenderTargetView>>		_rtvMap;
-		std::map<uint64_t, Ptr<ID3D11UnorderedAccessView>>	_uavMap;
+		Ptr<ID3D11Buffer> _hardwareBuffer;
+	};
 
-		void Init(const RenderBufferDesc & createDesc, const void *pInitData);
+	class D3D11VertexBuffer : public virtual VertexBuffer, public virtual D3D11RenderBuffer
+	{
+	};
 
-		void CreateBufferDesc(bool hasInitData, D3D11_BUFFER_DESC & outDesc);
+	class D3D11VertexInputLayout : public VertexInputLayout
+	{
+	public:
+		Ptr<ID3D11InputLayout> hardwareInputLayout;
 
-		void ExtractD3DBindFlags(
-			bool hasInitData,
-			uint32_t & d3dBindFlags,
-			uint32_t & d3dCpuAccessFlags,
-			D3D11_USAGE & d3dUsage,
-			uint32_t & d3dMiscFlags);
+		virtual void Init() override;
+
+		virtual void Release() override
+		{
+			VertexInputLayout::Release();
+			hardwareInputLayout = nullptr;
+		}
+
+	protected:
 	};
 }
 

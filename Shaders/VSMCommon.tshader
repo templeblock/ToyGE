@@ -1,0 +1,53 @@
+#ifndef VSMCOMMON_TSHADER
+#define VSMCOMMON_TSHADER
+
+cbuffer cb_vsm
+{
+    float vsmBias;
+    float vsmReduceBlending;
+};
+
+SamplerState vsmSampler;
+
+float linstep(float min, float max, float value)
+{
+  return saturate((value - min) / (max - min));
+}
+
+float ReduceLightBleeding(float pmax, float amount)
+{
+  return linstep(amount, 1.0f, pmax);
+}
+
+float ChebyshevUpperBound(float2 moments, float reciever, float minVariance, float reduceBlending)
+{
+  float p = (reciever <= moments.x);
+  float variance = moments.y - (moments.x * moments.x);
+  variance = max(minVariance, variance);
+  float d = reciever - moments.x;
+  float pmax = variance / (variance + d * d);
+  
+  pmax = ReduceLightBleeding(pmax, reduceBlending);
+  
+  return max(p, pmax);
+}
+
+#define EVSM_POS_EXPONENT 40.0
+#define EVSM_NEG_EXPONENT 10.0
+
+float WarpDepth2(float depth)
+{
+  //depth = depth * 2.0f - 1.0f;
+  float pos =  exp( EVSM_POS_EXPONENT * depth);
+  return pos;
+}
+
+float2 WarpDepth4(float depth)
+{
+  //depth = depth * 2.0f - 1.0f;
+  float pos =  exp( EVSM_POS_EXPONENT * depth);
+  float neg = -exp(-EVSM_NEG_EXPONENT * depth);
+  return float2(pos, neg);
+}
+
+#endif

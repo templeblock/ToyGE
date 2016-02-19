@@ -1,0 +1,46 @@
+#ifndef GBUFFER_TSHADER
+#define GBUFFER_TSHADER
+
+#include "Material.tshader"
+
+struct GBuffer
+{
+    float4 gbuf0;  
+    float4 gbuf1;
+    float4 gbuf2;
+};
+
+GBuffer MaterialToGBuffer(Material mat)
+{
+    GBuffer gbuf = (GBuffer)0;
+    
+    gbuf.gbuf0.xyz = mat.baseColor;
+    gbuf.gbuf0.w = mat.metallic;
+  
+    gbuf.gbuf1.xyz = EncodeNormal(mat.normal);
+    gbuf.gbuf1.w = mat.roughness;
+    
+    gbuf.gbuf2.xyz = mat.emissive;
+    
+    return gbuf;
+}
+
+Material GBufferToMaterial(GBuffer gbuf)
+{
+    Material mat = (Material)0;
+    
+    mat.baseColor = gbuf.gbuf0.xyz;
+    mat.metallic = gbuf.gbuf0.w;
+    
+    mat.normal = DecodeNormal(gbuf.gbuf1.xyz);
+    mat.roughness = gbuf.gbuf1.w;
+    
+    mat.emissive = gbuf.gbuf2.xyz;
+    
+    mat.diffuseColor = GetDiffuseColor(mat.baseColor, mat.metallic);
+    mat.specularColor = GetSpecularColor(mat.baseColor, mat.metallic);
+    
+    return mat;
+}
+
+#endif

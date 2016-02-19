@@ -2,17 +2,20 @@
 #ifndef RENDERVIEWPORT_H
 #define RENDERVIEWPORT_H
 
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
+
 namespace ToyGE
 {
-	class TOYGE_CORE_API RenderViewport
+	class RenderViewport
 	{
 	public:
-		float topLeftX = FLT_MAX;
-		float topLeftY = FLT_MAX;
-		float width = FLT_MAX;
-		float height = FLT_MAX;
-		float minDepth = FLT_MAX;
-		float maxDepth = FLT_MAX;
+		float topLeftX	= 0.0f;
+		float topLeftY	= 0.0f;
+		float width		= 0.0f;
+		float height	= 0.0f;
+		float minDepth	= 0.0f;
+		float maxDepth	= 1.0f;
 
 		bool operator==(const RenderViewport & rhs)
 		{

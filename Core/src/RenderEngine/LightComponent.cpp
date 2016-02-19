@@ -1,84 +1,38 @@
 #include "ToyGE\RenderEngine\LightComponent.h"
+#include "ToyGE\Kernel\Core.h"
+#include "ToyGE\Math\Math.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
-#include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\Math\Math.h"
+#include "ToyGE\RenderEngine\Shader.h"
 #include "ToyGE\RenderEngine\ShadowTechnique.h"
-#include "ToyGE\RenderEngine\Effects\PointShadowDepthTechnique.h"
-#include "ToyGE\RenderEngine\Effects\SpotShadowDepthTechnique.h"
-#include "ToyGE\RenderEngine\Effects\CascadedShadowDepthTechnique.h"
-#include "ToyGE\RenderEngine\Effects\VSM.h"
-#include "ToyGE\RenderEngine\Effects\PCF.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
 
 namespace ToyGE
 {
 	LightComponent::LightComponent(LightType type)
-		: _type(type),
-		_bCastShadow(false),
-		_bCastCaustics(false),
-		_bCastLightVolume(false),
-		_bCastLPV(false)
+		: _type(type)
 	{
 	}
 
-	void LightComponent::SetRadiance(const XMFLOAT3 & radiance)
+	void LightComponent::SetIntensity(float intensity)
 	{
-		if (_lightRadiance.x != radiance.x || _lightRadiance.y != radiance.y || _lightRadiance.z != radiance.z)
-		{
-			XMFLOAT3 prevRadiance = _lightRadiance;
-			_lightRadiance = radiance;
-			OnRadianceChanged(prevRadiance);
-		}
+		_intensity = intensity;
+		UpdateLightCuller();
 	}
 
 	void LightComponent::UpdateLightCuller()
 	{
 		if (IsActive())
-			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(shared_from_this());
+			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(shared_from_this()->Cast<LightComponent>());
 	}
 
-	void LightComponent::BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
-	{
-		if (IsCastShadow() && !disableShadow)
-		{
-			effect->AddExtraMacro("LIGHT_SHADOW", "");
-			GetShadowTechnique()->BindMacros(effect, shared_from_this(), camera);
-		}
-		else
-		{
-			effect->RemoveExtraMacro("LIGHT_SHADOW");
-			effect->RemoveExtraMacro("SHADOW_TYPE");
-		}
-	}
-
-	void LightComponent::BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
-	{
-		effect->VariableByName("lightRadiance")->AsScalar()->SetValue(&_lightRadiance);
-
-		if (IsCastShadow() && !disableShadow)
-			GetShadowTechnique()->BindParams(effect, shared_from_this(), camera);
-	}
-
-	void LightComponent::DoActive()
-	{
-		auto renderLightCuller = Global::GetRenderEngine()->GetSceneRenderLightsCuller();
-		renderLightCuller->AddElement(shared_from_this());
-	}
-
-	void LightComponent::OnTranformUpdated()
-	{
-		UpdateLightCuller();
-	}
-
-	float2 LightComponent::GetLightClipPos(const Ptr<Camera> & camera) const
+	float2 LightComponent::GetClipSpacePos(const Ptr<Camera> & camera) const
 	{
 		auto posW = this->GetPos();
 		auto posWXM = XMLoadFloat3(&posW);
-		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
-		auto projXM = XMLoadFloat4x4(&camera->ProjMatrix());
+		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
+		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
 		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
 		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
 		XMFLOAT4 posH;
@@ -89,32 +43,52 @@ namespace ToyGE
 		return float2(posH.x, posH.y);
 	}
 
+	void LightComponent::BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros)
+	{
+		if (IsCastShadow() && enableShadow && _shadowTechnique)
+		{
+			_shadowTechnique->BindMacros(view, outMacros);
+		}
+	}
+
+	void LightComponent::BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view)
+	{
+		shader->SetScalar("lightRadiance", _color * _intensity);
+
+		if (IsCastShadow() && enableShadow && _shadowTechnique)
+		{
+			_shadowTechnique->BindShaderParams(shader, view);
+		}
+	}
+
+	void LightComponent::DoActive()
+	{
+		auto renderLightCuller = Global::GetRenderEngine()->GetSceneRenderLightsCuller();
+		renderLightCuller->AddElement(shared_from_this()->Cast<LightComponent>());
+	}
+
+	void LightComponent::OnTranformUpdated()
+	{
+		UpdateLightCuller();
+	}
+
+	
+
 
 	//PointLight
 	PointLightComponent::PointLightComponent()
 		: LightComponent(LIGHT_POINT)
 	{
-		_shadowTechnique = std::make_shared<ShadowTechnique>();
-		_shadowTechnique->SetDepthTechnique(std::make_shared<PointShadowDepthTechnique>());
-		_shadowTechnique->SetRenderTechnique(std::make_shared<ShadowRenderTechniqueEVSM4>());
-		_shadowTechnique->SetShadowMapSize(256);
+		_shadowTechnique = std::make_shared<PointLightPCFShadow>();
+		_shadowTechnique->SetShadowMapSize(128);
 	}
-
-	//static float _ComputePointLightMaxDistance(const XMFLOAT3 & radiance)
-	//{
-	//	float epison = 1e-5f;
-	//	//auto & radiance = radiance;
-	//	float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
-	//	float maxDist = sqrtf(ilum / epison);
-	//	return maxDist;
-	//}
 
 	float PointLightComponent::MaxDistance() const
 	{
 		float epison = 1e-3f;
-		auto & radiance = Radiance();
-		float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
-		float maxDist = sqrtf(ilum / epison);
+		//auto & radiance = Radiance();
+		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
+		float maxDist = sqrtf(_intensity / epison);
 
 		return maxDist;
 	}
@@ -135,23 +109,18 @@ namespace ToyGE
 		return sp;
 	}
 
-	void PointLightComponent::BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void PointLightComponent::BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros)
 	{
-		LightComponent::BindMacros(effect, disableShadow, camera);
+		LightComponent::BindMacros(enableShadow, view, outMacros);
 
-		effect->AddExtraMacro("LIGHT_TYPE", "LIGHT_TYPE_POINT");
+		outMacros["LIGHT_TYPE"] = "LIGHT_TYPE_POINT";
 	}
 
-	void PointLightComponent::BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void PointLightComponent::BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view)
 	{
-		LightComponent::BindParams(effect, disableShadow, camera);
+		LightComponent::BindShaderParams(shader, enableShadow, view);
 
-		effect->VariableByName("lightPos")->AsScalar()->SetValue(&_pos);
-	}
-
-	void PointLightComponent::OnRadianceChanged(const XMFLOAT3 & prevRadiance)
-	{
-		UpdateLightCuller();
+		shader->SetScalar("lightPos", _pos);
 	}
 
 
@@ -159,26 +128,24 @@ namespace ToyGE
 	SpotLightComponent::SpotLightComponent()
 		: LightComponent(LIGHT_SPOT)
 	{
-		_shadowTechnique = std::make_shared<ShadowTechnique>();
-		_shadowTechnique->SetDepthTechnique(std::make_shared<SpotShadowDepthTechnique>());
-		_shadowTechnique->SetRenderTechnique(std::make_shared<ShadowRenderTechniqueEVSM4>());
+		_shadowTechnique = std::make_shared<SpotLightPCFShadow>();
 		_shadowTechnique->SetShadowMapSize(512);
 	}
 
 	float SpotLightComponent::MaxAngle() const
 	{
-		auto & radiance = Radiance();
-		float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
+		//auto & radiance = Radiance();
+		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
 		float epison = 0.01f;
-		return acosf(powf(epison / ilum, 1.0f / DecreaseSpeed()));
+		return acosf(powf(epison / _intensity, 1.0f / DecreaseSpeed()));
 	}
 
 	float SpotLightComponent::MaxDistance() const
 	{
 		float epison = 0.01f;
-		auto & radiance = Radiance();
-		float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
-		float maxDist = sqrtf(ilum / epison);
+		//auto & radiance = Radiance();
+		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
+		float maxDist = sqrtf(_intensity / epison);
 
 		return maxDist;
 	}
@@ -188,7 +155,7 @@ namespace ToyGE
 		XNA::AxisAlignedBox aabb;
 		float3 pos = *(reinterpret_cast<const float3*>(&GetPos()));
 		float3 dir = *(reinterpret_cast<const float3*>(&Direction()));
-		float3 u = abs(dir.y) > 0.99f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+		float3 u = abs(dir.y()) > 0.99f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
 		float3 r = normalize(cross(u, dir));
 		u = cross(dir, r);
 		float maxDist = MaxDistance();
@@ -199,32 +166,27 @@ namespace ToyGE
 		float3 v3 = v1 - u * t;
 		float3 v4 = v1 + r * t;
 		float3 v5 = v1 - r * t;
-		float3 vMin = vecMin({ v0, v1, v2, v3, v4, v5 });
-		float3 vMax = vecMax({ v0, v1, v2, v3, v4, v5 });
+		float3 vMin = min_vec({ v0, v1, v2, v3, v4, v5 });
+		float3 vMax = max_vec({ v0, v1, v2, v3, v4, v5 });
 		Math::MinMaxToAxisAlignedBox(vMin, vMax, aabb);
 
 		return aabb;
 	}
 
-	void SpotLightComponent::BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void SpotLightComponent::BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros)
 	{
-		LightComponent::BindMacros(effect, disableShadow, camera);
+		LightComponent::BindMacros(enableShadow, view, outMacros);
 
-		effect->AddExtraMacro("LIGHT_TYPE", "LIGHT_TYPE_SPOT");
+		outMacros["LIGHT_TYPE"] = "LIGHT_TYPE_SPOT";
 	}
 
-	void SpotLightComponent::BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void SpotLightComponent::BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view)
 	{
-		LightComponent::BindParams(effect, disableShadow, camera);
+		LightComponent::BindShaderParams(shader, enableShadow, view);
 
-		effect->VariableByName("lightPos")->AsScalar()->SetValue(&_pos);
-		effect->VariableByName("lightDir")->AsScalar()->SetValue(&_direction);
-		effect->VariableByName("spotLightDecreaseFac")->AsScalar()->SetValue(&_decreaseSpeed);
-	}
-
-	void SpotLightComponent::OnRadianceChanged(const XMFLOAT3 & prevRadiance)
-	{
-		UpdateLightCuller();
+		shader->SetScalar("lightPos", _pos);
+		shader->SetScalar("lightDir", _direction);
+		shader->SetScalar("spotLightDecreaseSpeed", _decreaseSpeed);
 	}
 
 
@@ -236,19 +198,15 @@ namespace ToyGE
 	{
 		memset(&_influenceAABB, 0, sizeof(_influenceAABB));
 
-		_shadowTechnique = std::make_shared<ShadowTechnique>();
-		_shadowTechnique->SetDepthTechnique(std::make_shared<PSSMDepthTechnique>());
-		auto evsm = std::make_shared<ShadowRenderTechniqueEVSM2>();
-		//evsm->SetSoftness(0.08f);
-		_shadowTechnique->SetRenderTechnique(evsm);
+		_shadowTechnique = std::make_shared<CascadedPCFShadow>();
+		_shadowTechnique->Cast<CascadedPCFShadow>()->SetFilterSize(3.0f);
 		_shadowTechnique->SetShadowMapSize(1024);
-		_shadowTechnique->SetRSMSize(256);
 	}
 
 	void DirectionalLightComponent::SetInfluenceAll(bool bInfluenceAll)
 	{
 		if (_bInfluenceAll != bInfluenceAll && IsActive())
-			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(shared_from_this());
+			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(shared_from_this()->Cast<LightComponent>());
 
 		_bInfluenceAll = bInfluenceAll;
 		if (_bInfluenceAll)
@@ -263,18 +221,18 @@ namespace ToyGE
 			return _influenceAABB;
 	}
 
-	void DirectionalLightComponent::BindMacros(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void DirectionalLightComponent::BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros)
 	{
-		LightComponent::BindMacros(effect, disableShadow, camera);
+		LightComponent::BindMacros(enableShadow, view, outMacros);
 
-		effect->AddExtraMacro("LIGHT_TYPE", "LIGHT_TYPE_DIRECTIONAL");
+		outMacros["LIGHT_TYPE"] = "LIGHT_TYPE_DIRECTIONAL";
 	}
 
-	void DirectionalLightComponent::BindParams(const Ptr<RenderEffect> & effect, bool disableShadow, const Ptr<Camera> & camera)
+	void DirectionalLightComponent::BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view)
 	{
-		LightComponent::BindParams(effect, disableShadow, camera);
+		LightComponent::BindShaderParams(shader, enableShadow, view);
 
-		effect->VariableByName("lightDir")->AsScalar()->SetValue(&_direction);
+		shader->SetScalar("lightDir", _direction);
 	}
 
 	void DirectionalLightComponent::OnTranformUpdated()
@@ -291,17 +249,17 @@ namespace ToyGE
 		return dir * -_dist;
 	}
 
-	float2 DirectionalLightComponent::GetLightClipPos(const Ptr<Camera> & camera) const
+	float2 DirectionalLightComponent::GetClipSpacePos(const Ptr<Camera> & camera) const
 	{
-		auto & cameraPos = camera->Pos();
+		auto & cameraPos = camera->GetPos();
 		float dist = GetDistance();
 		auto posW = XMFLOAT3(
 			cameraPos.x - Direction().x * dist,
 			cameraPos.y - Direction().y * dist,
 			cameraPos.z - Direction().z * dist);
 		auto posWXM = XMLoadFloat3(&posW);
-		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
-		auto projXM = XMLoadFloat4x4(&camera->ProjMatrix());
+		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
+		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
 		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
 		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
 		XMFLOAT4 posH;

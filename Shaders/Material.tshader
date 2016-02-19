@@ -1,0 +1,226 @@
+#ifndef MATERIAL_TSHADER
+#define MATERIAL_TSHADER
+
+#include "Common.tshader"
+#include "GammaCorrectionCommon.tshader"
+
+#ifndef NUM_TEXCOORDS
+#define NUM_TEXCOORDS 1
+#endif
+
+#ifndef MAT_TEX_BASECOLOR
+#define MAT_TEX_BASECOLOR 0
+#endif
+#ifndef MAT_TEX_ROUGHNESS
+#define MAT_TEX_ROUGHNESS 0
+#endif
+#ifndef MAT_TEX_METALLIC
+#define MAT_TEX_METALLIC 0
+#endif
+#ifndef MAT_TEX_EMISSIVE
+#define MAT_TEX_EMISSIVE 0
+#endif
+#ifndef MAT_TEX_OPACITY
+#define MAT_TEX_OPACITY 0
+#endif
+#ifndef MAT_TEX_OPACITYMASK
+#define MAT_TEX_OPACITYMASK 0
+#endif
+#ifndef MAT_TEX_BUMP
+#define MAT_TEX_BUMP 0
+#endif
+
+#if MAT_TEX_OPACITYMASK == 1
+#define CLIP_OPCACITYMASK(opacityMask, threshold) clip(opacityMask - threshold)
+#else
+#define CLIP_OPCACITYMASK(opacityMask, threshold) 
+#endif
+
+cbuffer cb_material
+{
+    float3  matBaseColor;
+    float   matRoughness;
+    float   matMetallic;
+    float3  matEmissive;
+    float   matOpacity;
+    float   matRefractionIndex;
+}
+ 
+Texture2D baseColorTex;
+Texture2D roughnessTex;
+Texture2D metallicTex;
+Texture2D emissiveTex;
+Texture2D opacityTex;
+Texture2D opacityMaskTex;
+Texture2D bumpTex;
+
+SamplerState bilinearSampler;
+
+struct MaterialInputs
+{
+    float3 texCoord[NUM_TEXCOORDS];
+    float3 normal;
+    float3 tangent;
+    float3 bitangent;
+};
+
+struct Material
+{
+    float3  baseColor;
+    float3  diffuseColor;
+    float3  specularColor;
+    float   roughness;
+    float   metallic;
+    float3  emissive;
+    float3  normal;
+    float   opacity;
+    float   opacityMask;
+    float   refractionIndex;
+};
+
+float3 GetBaseColor(MaterialInputs inputs)
+{
+    #if MAT_TEX_BASECOLOR == 1
+    
+    float3 baseColor = baseColorTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_BASECOLOR_TEXCOORDINDEX].xy).rgb;
+    baseColor = GammaCorrectIn(baseColor);
+    return baseColor;
+    
+    #else
+
+    float3 baseColor = matBaseColor;
+    return baseColor;
+    
+    #endif
+}
+
+float GetRoughness(MaterialInputs inputs)
+{
+    #if MAT_TEX_ROUGHNESS == 1
+    
+    float roughness = roughnessTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_ROUGHNESS_TEXCOORDINDEX].xy).r;
+    return roughness;
+    
+    #else
+
+    float roughness = matRoughness;
+    return roughness;
+    
+    #endif
+}
+
+float GetMetallic(MaterialInputs inputs)
+{
+    #if MAT_TEX_METALLIC == 1
+    
+    float metallic = metallicTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_METALLIC_TEXCOORDINDEX].xy).r;
+    return metallic;
+    
+    #else
+
+    float metallic = matMetallic;
+    return metallic;
+    
+    #endif
+}
+
+float3 GetEmissive(MaterialInputs inputs)
+{
+    #if MAT_TEX_EMISSIVE == 1
+    
+    float emissive = emissiveTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_EMISSIVE_TEXCOORDINDEX].xy).rgb;
+    return emissive;
+    
+    #else
+
+    float3 emissive = matEmissive;
+    return emissive;
+    
+    #endif
+}
+
+float3 GetNormal(MaterialInputs inputs)
+{
+    #if MAT_TEX_BUMP == 1
+    
+    float3 N = inputs.normal;
+  	float3 T = inputs.tangent;
+	float3 B = inputs.bitangent;
+  	float3x3 texToWorld = float3x3(T, B, N);
+  	float3 normalSample = bumpTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_BUMP_TEXCOORDINDEX].xy).rgb;
+	normalSample = normalSample * 2.0f - 1.0f;
+	//normalSample = normalize(normalSample);
+	float3 normal = mul(normalSample, texToWorld);
+    return normalize(normal);
+    
+    #else
+    
+    return (inputs.normal);
+      
+    #endif
+}
+
+
+float GetOpacity(MaterialInputs inputs)
+{
+    #if MAT_TEX_OPACITY == 1
+    
+    float opacity = opacityTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_OPACITY_TEXCOORDINDEX].xy).r;
+    return opacity;
+    
+    #else
+
+    float opacity = matOpacity;
+    return opacity;
+    
+    #endif
+}
+
+float GetOpacityMask(MaterialInputs inputs)
+{
+    #if MAT_TEX_OPACITYMASK == 1
+    
+    float opacityMask = opacityMaskTex.Sample(bilinearSampler, inputs.texCoord[MAT_TEX_OPACITYMASK_TEXCOORDINDEX].xy).r;
+    return opacityMask;
+    
+    #else
+
+    return 1.0f;
+    
+    #endif
+}
+
+float GetRefractionIndex(MaterialInputs inputs)
+{
+    return matRefractionIndex;
+}
+
+float3 GetDiffuseColor(float3 baseColor, float metallic)
+{
+    return baseColor - baseColor * metallic;
+}
+
+float3 GetSpecularColor(float3 baseColor, float metallic)
+{
+    return lerp(0.03f, baseColor, metallic);
+} 
+
+Material GetMaterial(MaterialInputs inputs)
+{
+    Material mat = (Material)0;
+    mat.baseColor = GetBaseColor(inputs);
+    mat.roughness = GetRoughness(inputs);
+    mat.metallic = GetMetallic(inputs);
+    mat.emissive = GetEmissive(inputs);
+    mat.normal = GetNormal(inputs);
+    mat.opacity = GetOpacity(inputs);
+    mat.opacityMask = GetOpacityMask(inputs);
+    mat.refractionIndex = GetRefractionIndex(inputs);
+    
+    mat.diffuseColor = GetDiffuseColor(mat.baseColor, mat.metallic);
+    mat.specularColor = GetSpecularColor(mat.baseColor, mat.metallic);
+    
+    return mat;
+}
+
+#endif

@@ -1,15 +1,7 @@
 #include "ToyGE\RenderEngine\Effects\ImageBasedLensFlare.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
-#include "ToyGE\RenderEngine\RenderView.h"
+#include "ToyGE\Kernel\Core.h"
+#include "ToyGE\Kernel\TextureAsset.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 
 namespace ToyGE
 {
@@ -18,62 +10,61 @@ namespace ToyGE
 		_spriteThreshold(1.0f),
 		_flareIntensity(6.0f)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"ImageBasedLensFlare.xml");
-
-		_lensTex = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>()->AcquireResource(L"Bokeh_Hex.dds");
 	}
 
-	void ImageBasedLensFlare::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void ImageBasedLensFlare::Render(const Ptr<RenderView> & view)
 	{
-		auto sceneTex = sharedEnviroment->GetView()->GetRenderResult();
-		auto brightPassTex = BrightPass(sceneTex);
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		auto setupTex = Setup(brightPassTex);
+		auto brightPassTexRef = BrightPass(sceneTex);
 
-		LensBlur(setupTex, sharedEnviroment->GetView()->GetRenderResult());
+		auto setupTexRef = Setup(brightPassTexRef->Get()->Cast<Texture>());
 
-		brightPassTex->Release();
-		setupTex->Release();
+		LensBlur(setupTexRef->Get()->Cast<Texture>(), sceneTex);
 	}
 
-	Ptr<Texture> ImageBasedLensFlare::BrightPass(const Ptr<Texture> & sceneTex)
+	PooledTextureRef ImageBasedLensFlare::BrightPass(const Ptr<Texture> & sceneTex)
 	{
-		//float threshold = 0.5f;
-		auto brightPassTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(sceneTex->Desc());
+		auto brightPassTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
 
-		_fx->VariableByName("brightPassThreshold")->AsScalar()->SetValue(&_brightPassThreshold);
+		auto ps = Shader::FindOrCreate<LensBlurBrightPassPS>();
 
-		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
+		ps->SetScalar("brightPassThreshold", _brightPassThreshold);
+		ps->SetSRV("sceneTex", sceneTex->GetShaderResourceView());
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ brightPassTex->CreateTextureView() }, 0);
-		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTargets(0.0f);
+		ps->Flush();
 
-		RenderQuad(_fx->TechniqueByName("BrightPass"));
+		DrawQuad({ brightPassTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
 
-		return brightPassTex;
+		return brightPassTexRef;
 	}
 
-	Ptr<Texture> ImageBasedLensFlare::Setup(const Ptr<Texture> & brightPassTex)
+	PooledTextureRef ImageBasedLensFlare::Setup(const Ptr<Texture> & brightPassTex)
 	{
-		auto setupTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(brightPassTex->Desc());
+		auto setupTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, brightPassTex->GetDesc() });
+		auto setupTex = setupTexRef->Get()->Cast<Texture>();
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(setupTex->GetRenderTargetView(0, 0, 1), 0.0f);
 
-		_fx->VariableByName("brightPassTex")->AsShaderResource()->SetValue(brightPassTex->CreateTextureView());
+		auto ps = Shader::FindOrCreate<LensFlareSetupPS>();
 
-		rc->SetRenderTargets({ setupTex->CreateTextureView() }, 0);
-		rc->ClearRenderTargets(0.0f);
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(
+			BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
-		int2 texSize = int2(setupTex->Desc().width / 2, setupTex->Desc().height / 2);
+		int2 texSize = int2(setupTex->GetDesc().width / 2, setupTex->GetDesc().height / 2);
 		int2 center = texSize;
 
 		for (int i = 0; i < 3; ++i)
 		{
 			int2 xy = center - texSize / 2;
 
-			RenderQuad(_fx->TechniqueByName("LensFlareSetup"),
-				xy.x, xy.y, texSize.x, texSize.y,
-				0.0f, 0.0f, 1.0f, 1.0f);
+			ps->SetSRV("brightPassTex", brightPassTex->GetShaderResourceView());
+			ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+			ps->Flush();
+
+			DrawQuad({ setupTex->GetRenderTargetView(0, 0, 1) }, 
+				(float)xy.x(), (float)xy.y(), (float)texSize.x(), (float)texSize.y());
 
 			texSize /= 2;
 		}
@@ -82,88 +73,112 @@ namespace ToyGE
 		{
 			int2 xy = center - texSize / 2;
 
-			RenderQuad(_fx->TechniqueByName("LensFlareSetup"),
-				xy.x, xy.y, texSize.x, texSize.y,
+			ps->SetSRV("brightPassTex", brightPassTex->GetShaderResourceView());
+			ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+			ps->Flush();
+
+			DrawQuad({ setupTex->GetRenderTargetView(0, 0, 1) }, 
+				(float)xy.x(), (float)xy.y(), (float)texSize.x(), (float)texSize.y(),
 				1.0f, 1.0f, -1.0f, -1.0f);
 
 			texSize *= 2;
 		}
 
-		return setupTex;
+		Global::GetRenderEngine()->GetRenderContext()->SetBlendState(nullptr);
+
+		return setupTexRef;
 	}
 
 	void ImageBasedLensFlare::LensBlur(const Ptr<Texture> & setupTex, const Ptr<Texture> & target)
 	{
 		int32_t tileSize = 9;
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
 		//Extract Sprite Points
-		int32_t extractWidth = (setupTex->Desc().width + tileSize - 1) / tileSize;
-		int32_t extractHeight = (setupTex->Desc().height + tileSize - 1) / tileSize;
+		int32_t extractWidth = (setupTex->GetDesc().width + tileSize - 1) / tileSize;
+		int32_t extractHeight = (setupTex->GetDesc().height + tileSize - 1) / tileSize;
 
 		RenderBufferDesc spPointsBufDesc;
-		spPointsBufDesc.bindFlag = BUFFER_BIND_SHADER_RESOURCE | BUFFER_BIND_UNORDERED_ACCESS | BUFFER_BIND_STRUCTURED;
+		spPointsBufDesc.bindFlag = BUFFER_BIND_SHADER_RESOURCE | BUFFER_BIND_UNORDERED_ACCESS;
 		spPointsBufDesc.elementSize = sizeof(float2) + sizeof(float3);
 		spPointsBufDesc.numElements = extractWidth * extractHeight;
 		spPointsBufDesc.cpuAccess = 0;
-		spPointsBufDesc.structedByteStride = spPointsBufDesc.elementSize;
+		spPointsBufDesc.bStructured = true;
 
-		auto spPointsBuf = Global::GetRenderEngine()->GetRenderFactory()->GetBufferPooled(spPointsBufDesc);
+		auto spPointsBufRef = BufferPool::Instance().FindFree(spPointsBufDesc);
+		auto spPointsBuf = spPointsBufRef->Get()->Cast<RenderBuffer>();
 
-		_fx->VariableByName("spriteThreshold")->AsScalar()->SetValue(&_spriteThreshold);
+		{
+			auto ps = Shader::FindOrCreate<ExtractSpritePointsPS>();
 
-		_fx->VariableByName("setupTex")->AsShaderResource()->SetValue(setupTex->CreateTextureView());
-		_fx->VariableByName("spPointsBuf")->AsUAV()->SetValue(
-			spPointsBuf->CreateBufferView(RENDER_FORMAT_UNKNOWN, 0, spPointsBufDesc.numElements, BUFFER_UAV_APPEND) );
+			ps->SetScalar("spriteThreshold", _spriteThreshold);
+			ps->SetSRV("setupTex", setupTex->GetShaderResourceView());
+			ps->SetUAV("spPointsBuf", spPointsBuf->GetUnorderedAccessView(0, 0, RENDER_FORMAT_UNKNOWN, BUFFER_UAV_APPEND));
+			ps->Flush();
 
-		rc->SetRenderTargets({}, 0);
-		RenderQuad(_fx->TechniqueByName("ExtractSpritePoints"),
-			0, 0, extractWidth, extractHeight);
+			DrawQuad({}, 0.0f, 0.0f, (float)extractWidth, (float)extractHeight);
+		}
 
 		//Render Sprites
-		RenderBufferDesc indirectArgsBufDesc;
-		indirectArgsBufDesc.bindFlag = BUFFER_BIND_INDIRECT_ARGS;
-		indirectArgsBufDesc.elementSize = 16;
-		indirectArgsBufDesc.numElements = 1;
-		indirectArgsBufDesc.cpuAccess = 0;
-		indirectArgsBufDesc.structedByteStride = 0;
+		if (!_indirectAgsBuf)
+		{
+			RenderBufferDesc indirectArgsBufDesc;
+			indirectArgsBufDesc.bindFlag = BUFFER_BIND_INDIRECT_ARGS;
+			indirectArgsBufDesc.elementSize = 16;
+			indirectArgsBufDesc.numElements = 1;
+			indirectArgsBufDesc.cpuAccess = 0;
+			indirectArgsBufDesc.bStructured = false;
 
-		uint32_t initData[] = { 0, 1, 0, 0 };
+			uint32_t initData[] = { 0, 1, 0, 0 };
 
-		auto indirectAgsBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer(indirectArgsBufDesc, &initData[0]);
+			_indirectAgsBuf = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+			_indirectAgsBuf->SetDesc(indirectArgsBufDesc);
+			_indirectAgsBuf->Init(initData);
+		}
 
-		spPointsBuf->CopyStructureCountTo(indirectAgsBuffer, 0, 0, spPointsBuf->Desc().numElements, RENDER_FORMAT_UNKNOWN, BUFFER_UAV_APPEND);
+		spPointsBuf->CopyStructureCountTo(_indirectAgsBuf, 0, 0, spPointsBuf->GetDesc().numElements, RENDER_FORMAT_UNKNOWN, BUFFER_UAV_APPEND);
 
-		_fx->VariableByName("texSize")->AsScalar()->SetValue(&target->GetTexSize());
-		_fx->VariableByName("flareIntensity")->AsScalar()->SetValue(&_flareIntensity);
+		{
+			auto vs = Shader::FindOrCreate<LensBlurVS>();
+			auto gs = Shader::FindOrCreate<LensBlurGS>();
+			auto ps = Shader::FindOrCreate<LensBlurPS>();
 
-		_fx->VariableByName("spPointsRenderBuf")->AsShaderResource()->SetValue(
-			spPointsBuf->CreateBufferView(RENDER_FORMAT_UNKNOWN, 0, spPointsBufDesc.numElements));
-		_fx->VariableByName("lensTex")->AsShaderResource()->SetValue(_lensTex->CreateTextureView());
+			vs->SetScalar("texSize", target->GetTexSize());
+			gs->SetScalar("texSize", target->GetTexSize());
 
-		auto ri = std::make_shared<RenderInput>();
-		ri->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_POINTLIST);
-		rc->SetRenderInput(ri);
+			gs->SetScalar("flareIntensity", _flareIntensity);
 
-		auto preVP = rc->GetViewport();
-		auto vp = preVP;
-		vp.width = static_cast<float>(target->Desc().width);
-		vp.height = static_cast<float>(target->Desc().height);
-		rc->SetViewport(vp);
+			vs->SetSRV("spPointsRenderBuf", spPointsBuf->GetShaderResourceView(0, 0, RENDER_FORMAT_UNKNOWN));
 
-		//auto tmpTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(target->Desc());
-		rc->SetRenderTargets({ target->CreateTextureView() }, 0);
-		//rc->ClearRenderTargets(0.0f);
+			auto lensTexAsset = Asset::Find<TextureAsset>("Textures/Bokeh_Circle.dds");
+			if (!lensTexAsset->IsInit())
+				lensTexAsset->Init();
+			auto lensTex = lensTexAsset->GetTexture();
+			ps->SetSRV("lensTex", lensTex->GetShaderResourceView());
 
-		rc->SetDepthStencil(ResourceView());
+			ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
 
-		_fx->TechniqueByName("LensBlur")->PassByIndex(0)->Bind();
-		rc->DrawInstancedIndirect(indirectAgsBuffer, 0);
-		_fx->TechniqueByName("LensBlur")->PassByIndex(0)->UnBind();
+			vs->Flush();
+			gs->Flush();
+			ps->Flush();
 
-		rc->SetViewport(preVP);
+			auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		//tmpTex->Release();
+			rc->SetVertexBuffer({});
+			rc->SetIndexBuffer(nullptr);
+			rc->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_POINTLIST);
+
+			rc->SetViewport(GetTextureQuadViewport(target));
+
+			rc->SetRenderTargets({ target->GetRenderTargetView(0, 0, 1) });
+			rc->SetDepthStencil(nullptr);
+			rc->SetDepthStencilState(DepthStencilStateTemplate<false>::Get());
+
+			rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_SRC_ALPHA, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
+
+			rc->DrawInstancedIndirect(_indirectAgsBuf, 0);
+
+			rc->ResetShader(SHADER_GS);
+			rc->SetBlendState(nullptr);
+		}
 	}
 }

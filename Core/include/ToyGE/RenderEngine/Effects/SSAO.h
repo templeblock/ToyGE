@@ -3,16 +3,21 @@
 #define SSAO_H
 
 #include "ToyGE\RenderEngine\RenderAction.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, DownSampleNormalDepthPS, SHADER_PS, "SSAO", "DownSampleNormalDepthPS", SM_4);
+	DECLARE_SHADER(, RenderAOPS, SHADER_PS, "SSAO", "RenderAOPS", SM_4);
+	DECLARE_SHADER(, CrossBilateralBlurXPS, SHADER_PS, "SSAO", "CrossBilateralBlurXPS", SM_4);
+	DECLARE_SHADER(, CrossBilateralBlurYPS, SHADER_PS, "SSAO", "CrossBilateralBlurYPS", SM_4);
+	DECLARE_SHADER(, CombineAOPS, SHADER_PS, "SSAO", "CombineAOPS", SM_4);
+
 	class TOYGE_CORE_API SSAO : public RenderAction
 	{
 	public:
 		SSAO();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
+		void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_SET(AORadius, float, _aoRadius)
 		CLASS_GET(AORadius, float, _aoRadius)
@@ -24,18 +29,20 @@ namespace ToyGE
 		CLASS_GET(AOIntensity, float, _aoIntensity)
 
 	private:
-		Ptr<RenderEffect> _fx;
 		float _aoRadius;
 		float _aoPower;
 		float _aoIntensity;
 
 		void DownSampleNormalDepth(
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & inNormalTex,
 			const Ptr<Texture> & inDepthTex,
-			Ptr<Texture> & outNormalTex,
-			Ptr<Texture> & outDepthTex);
+			PooledTextureRef & outNormalTex,
+			PooledTextureRef & outDepthTex);
 
-		Ptr<Texture> RenderAOTex(
+		PooledTextureRef RenderAOTex(
+			float aoRadius,
+			const Ptr<RenderView> & view,
 			const Ptr<Texture> & normalTex,
 			const Ptr<Texture> & depthTex,
 			const Ptr<Texture> & preMipAOTex,
@@ -44,11 +51,9 @@ namespace ToyGE
 			bool bUpSampling,
 			bool bFullRes);
 
-		//Ptr<Texture> BilateralUpSampling(const Ptr<Texture> & aoTex, const Ptr<Texture> & lowResDepthTex, const Ptr<Texture> & highResDepthTex);
+		void CrossBilateralBlur(const Ptr<RenderView> & view, const Ptr<Texture> & aoTex, const Ptr<Texture> & depthTex);
 
-		void CrossBilateralBlur(const Ptr<Texture> & aoTex, const Ptr<Texture> & depthTex);
-
-		void CombineAO(const Ptr<Texture> & aoTex, const ResourceView & target);
+		void CombineAO(const Ptr<Texture> & aoTex, const Ptr<Texture> & target);
 	};
 }
 

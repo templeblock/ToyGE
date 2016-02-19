@@ -1,0 +1,68 @@
+#ifndef BRDF_TSHADER
+#define BRDF_TSHADER
+
+#include "Common.tshader"
+#define MIN_ROUGHNESS 0.2
+#define MAX_ROUGHNESS 1.0
+
+float NDF_BlinnPhong(float n_dot_h, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+
+  return 1.0 / (max(1e-6, a2) * PI) * pow(n_dot_h, 2.0f / max(1e-6, a2) - 2.0f);
+
+/*
+  float n_dot_h = max(1e-6, dot(n, h));
+  return (shininess + 2) / (2.0 * PI) * pow(n_dot_h, shininess);
+*/
+}
+
+float NDF_GGX(float n_dot_h, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+  float t = n_dot_h * n_dot_h * (a2 - 1.0f) + 1.0f;
+  return a2 / (PI * t * t);
+}
+
+float3 Fresnel_Schlick(float v_dot_h, float3 f0)
+{
+  return f0 + (1.0f - f0) * pow(1 - v_dot_h, 5);
+}
+
+float G_Implicit(float n_dot_l, float n_dot_v)
+{
+  return n_dot_l * n_dot_v;
+}
+
+float G_Smith(float n_dot_l, float n_dot_v, float roughness)
+{
+  float a = roughness * roughness;
+  float a2 = a * a;
+  //float NoV = max(0.0f, dot(n, v));
+  //float NoL = max(0.0f, dot(n, l));
+  float G_L = n_dot_l + sqrt( max(1e-5, (n_dot_l - n_dot_l * a2) * n_dot_l + a2) );
+  float G_V = n_dot_v + sqrt( max(1e-5, (n_dot_v - n_dot_v * a2) * n_dot_v + a2) );
+  return rcp( G_L * G_V ) * 4 * n_dot_l * n_dot_v;
+}
+
+float3 BRDF(float3 n, float3 l, float3 v, float3 specColor, float roughness)
+{
+    float3 h = normalize(l + v);
+    
+    float n_dot_l = max(1e-5, dot(n, l));
+    float n_dot_v = max(1e-5, dot(n, v));
+    float n_dot_h = max(1e-5, dot(n, h));
+    float v_dot_h = max(1e-5, dot(v, h));
+    
+    roughness = lerp(MIN_ROUGHNESS, MAX_ROUGHNESS, roughness);
+    
+    float  D = NDF_GGX(n_dot_h, roughness);
+    float3 F = Fresnel_Schlick(v_dot_h, specColor);
+    float  G = G_Smith(n_dot_l, n_dot_v, roughness);
+    
+    return D * F * G / (4 * n_dot_l * n_dot_v);
+}
+
+#endif

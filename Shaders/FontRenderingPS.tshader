@@ -1,0 +1,28 @@
+#include "Common.tshader"
+#include "SignedDistanceFontCommon.tshader"
+
+Texture2DArray fontTex;
+SamplerState bilinearSampler;
+
+float4 color;
+
+float4 BitmapFontRenderingPS(
+  float4 posH : SV_POSITION,
+  float3 uvw : TEXCOORD) : SV_TARGET
+{
+    float fontSample = fontTex.Sample(bilinearSampler, uvw).r;
+
+	return fontSample * color;
+}
+
+float4 SignedDistanceFontRenderingPS(
+  float4 posH : SV_POSITION,
+  float3 uvw : TEXCOORD) : SV_TARGET
+{
+    float fontSample = fontTex.Sample(bilinearSampler, uvw).r;
+    
+    float d = DecodeDistance(fontSample);
+    
+    float softness = 8.0f;
+	return saturate( (d + softness) / (softness + 1.0) * color );
+}

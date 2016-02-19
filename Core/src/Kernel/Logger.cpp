@@ -1,15 +1,22 @@
 #include "ToyGE\Kernel\Logger.h"
-#include "ToyGE\Kernel\File.h"
 #include "ToyGE\Kernel\Util.h"
-#include "ToyGE\Kernel\Assert.h"
+#include "ToyGE\Platform\File.h"
+#include "ToyGE\Kernel\Global.h"
+#include "ToyGE\Platform\Platform.h"
 
 namespace ToyGE
 {
-	Ptr<Writer> Logger::_logWriter;
+	static Ptr<FileWriter> _logWriter;
 
 	void Logger::Init()
 	{
-		_logWriter = std::make_shared<FileWriter>(std::make_shared<File>(L"../../../Media/ToyGE.log", FILE_OPEN_WRITE));
+		auto logPath = ParentPath(Global::GetPlatform()->GetCurentProgramPath()) + "/ToyGE.log";
+		_logWriter = std::make_shared<FileWriter>(Global::GetPlatform()->CreatePlatformFile(logPath, FILE_OPEN_WRITE));
+	}
+
+	void Logger::Release()
+	{
+		_logWriter = nullptr;
 	}
 
 	void Logger::Log(const char * format, ...)
@@ -22,10 +29,13 @@ namespace ToyGE
 
 	void Logger::Log(const char * format, va_list vl)
 	{
-		String outStr;
-		FormatString(outStr, format, vl);
-		_logWriter->WriteStringNoTerminates(outStr);
-		//_logWriter->Flush();
+		_logWriter->WriteStringNoTerminates(FormatString(format, vl));
+		_logWriter->GetFile()->Flush();
+	}
+
+	void Logger::Log(const String & msg)
+	{
+		Log(msg.c_str());
 	}
 
 	void Logger::LogLine(const char * format, ...)
@@ -38,12 +48,51 @@ namespace ToyGE
 
 	void Logger::LogLine(const char * format, va_list vl)
 	{
-		Log(format, vl);
-		_logWriter->WriteStringNoTerminates(END_SYMBOL);
+		_logWriter->WriteStringNoTerminates(FormatString(format, vl));
+		_logWriter->WriteStringNoTerminates(TOYGE_LINE_END);
+		_logWriter->GetFile()->Flush();
+	}
+
+	void Logger::LogLine(const String & msg)
+	{
+		LogLine(msg.c_str());
+	}
+
+
+	void ToyGELog(LogType type, const char * format, ...)
+	{
+		va_list vl;
+		va_start(vl, format);
+		ToyGELog(type, format, vl);
+		va_end(vl);
+	}
+
+	void ToyGELog(LogType type, const char * format, va_list vl)
+	{
+		String prefix;
+		switch (type)
+		{
+		case LogType::LT_INFO:
+			prefix = "Info> ";
+			break;
+		case LogType::LT_WARNING:
+			prefix = "Warning> ";
+			break;
+		case LogType::LT_ERROR:
+			prefix = "Error> ";
+			break;
+		default:
+			break;
+		}
+
+		Logger::LogLine((prefix + format).c_str(), vl);
+	}
+
+	void ToyGELog(LogType type, const String & msg)
+	{
+		ToyGELog(type, msg.c_str());
 	}
 }
 
-void _assert_log(const std::string & str)
-{
-	ToyGE::Logger::Log(str.c_str());
-}
+
+

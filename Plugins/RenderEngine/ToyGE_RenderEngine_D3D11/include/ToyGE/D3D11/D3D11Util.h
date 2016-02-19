@@ -2,9 +2,10 @@
 #ifndef D3D11RENDERFORMAT_H
 #define D3D11RENDERFORMAT_H
 
+#include "ToyGE\D3D11\D3D11PreInclude.h"
 #include "ToyGE\RenderEngine\RenderFormat.h"
-#include "ToyGE\D3D11\D3D11REPreDeclare.h"
 #include "ToyGE\RenderEngine\RenderCommonDefines.h"
+#include "ToyGE\RenderEngine\BlendState.h"
 
 namespace ToyGE
 {
@@ -18,7 +19,7 @@ namespace ToyGE
 		return static_cast<RenderFormat>(format);
 	}
 
-	D3D11_COMPARISON_FUNC GetD3DComparisonFunc(ComparisonFuc func);
+	D3D11_COMPARISON_FUNC GetD3DComparisonFunc(ComparisonFunc func);
 
 	D3D11_BLEND GetD3DBlend(BlendParam blend);
 

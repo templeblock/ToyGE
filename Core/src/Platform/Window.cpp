@@ -4,10 +4,18 @@
 
 namespace ToyGE
 {
-	Window::Window(const WindowCreateParams & params)
-		: _name(params.name), _width(params.width), _height(params.height), _x(params.x), _y(params.y)
-	{
+	static int32_t _windowIndex = 0;
 
+	Window::Window(const WindowCreateParams & params)
+		: _name(params.name),
+		_title(params.title),
+		_width(params.width),
+		_height(params.height),
+		_x(params.x),
+		_y(params.y)
+	{
+		if (_name.size() == 0)
+			_name = "ToyGE_Window_" + std::to_string(_windowIndex++);
 	}
 
 	void Window::Resize(int32_t width, int32_t height)

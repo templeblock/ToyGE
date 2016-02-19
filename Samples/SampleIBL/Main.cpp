@@ -27,7 +27,7 @@ public:
 
 	std::map<SceneType, SceneData> _sceneMap;
 	SceneType _curScene;
-	std::vector<Ptr<RenderComponent>> _objs;
+	Ptr<RenderMeshComponent> _objs;
 
 	SampleIBL()
 		: _matBaseColor(1.0f),
@@ -35,17 +35,18 @@ public:
 		_matMetallic(1.0f),
 		_curScene(SCENE0)
 	{
-		_sampleName = L"IBL";
+		_sampleName = "IBL";
 	}
 
-	void Startup() override
+	void Init() override
 	{
-		SampleCommon::Startup();
+		SampleCommon::Init();
 
-		_renderView->AddPostProcessRender(std::make_shared<HDR>());
-		_renderView->AddPostProcessRender(std::make_shared<GammaCorrection>());
-		_renderView->AddPostProcessRender(std::make_shared<FXAA>());
-		_renderView->AddPostProcessRender(std::make_shared<TweakBarRenderer>());
+		auto pp = std::make_shared<PostProcessing>();
+		pp->AddRender(std::make_shared<HDR>());
+		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<TweakBarRenderer>());
+		_renderView->SetPostProcessing(pp);
 
 		//Init Scene
 		auto scene = Global::GetScene();
@@ -60,21 +61,24 @@ public:
 		//pointLightObj->ActiveAllComponents();
 		//scene->AddSceneObject(pointLightObj);
 
-		WString bkTexs[] = 
+		String bkTexs[] = 
 		{
-			L"rnl_cross.dds",
-			L"galileo_cross.dds",
-			L"uffizi_cross.dds",
-			L"stpeters_cross_mmp_ABGR16F.dds"
+			"Textures/rnl_cross.dds",
+			"Textures/galileo_cross.dds",
+			"Textures/uffizi_cross.dds",
+			"Textures/stpeters_cross_mmp_ABGR16F.dds"
 		};
 
 		for (int32_t i = 0; i < _countof(bkTexs); ++i)
 		{
 			SceneData sceneData;
-			sceneData.tex = Global::GetResourceManager(RESOURCE_TEXTURE)->As<TextureManager>()->AcquireResource(bkTexs[i]);
+			auto texAsset = Asset::Find<TextureAsset>(bkTexs[i]);
+			if (!texAsset->IsInit())
+				texAsset->Init();
+			sceneData.tex = texAsset->GetTexture();
 
-			auto reflectionMap = ReflectionMap::Create();
-			reflectionMap->SetEnvMap(sceneData.tex);
+			auto reflectionMap = std::make_shared<ReflectionMap>();
+			reflectionMap->SetEnvironmentMap(sceneData.tex);
 			reflectionMap->InitPreComputedData();
 
 			sceneData.reflecMap = reflectionMap;
@@ -82,18 +86,21 @@ public:
 			_sceneMap[static_cast<SceneType>(i)] = sceneData;
 		}
 
-		auto backgroundRender = std::static_pointer_cast<SkyBox>(Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->GetBackgroundRender());
-		backgroundRender->SetTexture(_sceneMap[_curScene].tex);
+
+		/*auto backgroundRender = std::static_pointer_cast<SkyBox>(Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->GetBackgroundRender());
+		backgroundRender->SetTexture(_sceneMap[_curScene].tex);*/
 
 		_mat = std::make_shared<Material>();
 		_mat->SetBaseColor(_matBaseColor);
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
-		auto model = Global::GetResourceManager(RESOURCE_MODEL)->As<ModelManager>()->AcquireResource(L"stanford_bunny.tx");
-		model->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f), &_objs);
+		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+		if (!model->IsInit())
+			model->Init();
+		_objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
 
-		for (auto & obj : _objs)
+		for (auto & obj : _objs->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
 			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
@@ -111,13 +118,13 @@ public:
 		float2 minMax = float2(0.0f, 1.0f);
 		float step = 0.01f;
 		TwAddVarRW(_twBar, "Roughness", TW_TYPE_FLOAT, &_matRoughness, nullptr);
-		TwSetParam(_twBar, "Roughness", "min", TW_PARAM_FLOAT, 1, &minMax.x);
-		TwSetParam(_twBar, "Roughness", "max", TW_PARAM_FLOAT, 1, &minMax.y);
+		TwSetParam(_twBar, "Roughness", "min", TW_PARAM_FLOAT, 1, &minMax.x());
+		TwSetParam(_twBar, "Roughness", "max", TW_PARAM_FLOAT, 1, &minMax.y());
 		TwSetParam(_twBar, "Roughness", "step", TW_PARAM_FLOAT, 1, &step);
 
 		TwAddVarRW(_twBar, "Metallic", TW_TYPE_FLOAT, &_matMetallic, nullptr);
-		TwSetParam(_twBar, "Metallic", "min", TW_PARAM_FLOAT, 1, &minMax.x);
-		TwSetParam(_twBar, "Metallic", "max", TW_PARAM_FLOAT, 1, &minMax.y);
+		TwSetParam(_twBar, "Metallic", "min", TW_PARAM_FLOAT, 1, &minMax.x());
+		TwSetParam(_twBar, "Metallic", "max", TW_PARAM_FLOAT, 1, &minMax.y());
 		TwSetParam(_twBar, "Metallic", "step", TW_PARAM_FLOAT, 1, &step);
 
 		TwEnumVal sceneEnumVal[] =
@@ -139,11 +146,9 @@ public:
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
+		Global::GetScene()->SetAmbientTexture(_sceneMap[_curScene].tex);
 
-		auto backgroundRender = std::static_pointer_cast<SkyBox>(Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->GetBackgroundRender());
-		backgroundRender->SetTexture(_sceneMap[_curScene].tex);
-
-		for (auto & obj : _objs)
+		for (auto & obj : _objs->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
 			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);

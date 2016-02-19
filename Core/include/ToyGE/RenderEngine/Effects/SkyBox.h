@@ -2,32 +2,32 @@
 #ifndef SKYBOX_H
 #define SKYBOX_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
-#include "ToyGE\RenderEngine\RenderAction.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
+#include "ToyGE\RenderEngine\Shader.h"
 
 namespace ToyGE
 {
-	class RenderInput;
+	DECLARE_SHADER(, SkyBoxVS, SHADER_VS, "SkyBox", "SkyBoxVS", SM_4);
+	DECLARE_SHADER(, SkyBoxPS, SHADER_PS, "SkyBox", "SkyBoxPS", SM_4);
 
-	class TOYGE_CORE_API SkyBox : public RenderAction
+	class Texture;
+
+	class TOYGE_CORE_API SkyBox
 	{
 	public:
 		SkyBox();
 
-		void Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment) override;
-
-		/*void SetTexture(const Ptr<Texture> & tex)
-		{
-			_tex = tex;
-		}*/
+		void Render(
+			const Ptr<class RenderTargetView> & target, 
+			const Ptr<class DepthStencilView> & dsv, 
+			const Ptr<class RenderView> & view);
 
 		CLASS_SET(Texture, Ptr<Texture>, _tex)
 		CLASS_GET(Texture, Ptr<Texture>, _tex)
 
 	private:
-		Ptr<RenderEffect> _skyBoxFX;
-		Ptr<RenderInput> _sphereInput;
+		Ptr<class Mesh> _sphereMesh;
 		Ptr<Texture> _tex;
 	};
 }

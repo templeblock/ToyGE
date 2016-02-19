@@ -1,0 +1,278 @@
+#ifndef COMMON_TSHADER
+#define COMMON_TSHADER
+
+#define PI 3.1415927
+#define FLT_MAX 3.402823466e+38F
+#define FLT_MIN 1.175494351e-38F
+
+float4 DistributePrecision(float2 value, float factor)
+{
+  float factorInv = 1.0f / factor;
+  
+  float2 intPart;
+  float2 fracPart = modf(value * factor, intPart);
+  return float4(intPart * factorInv, fracPart);
+}
+
+float2 RecombinePrecision(float4 value, float factor)
+{
+  float factorInv = 1.0f / factor;
+  return float2(value.xy + value.zw * factorInv);
+}
+
+float GetIlluminance(float3 color)
+{
+  static float3 illuminaceTrans = float3(0.2125f, 0.7154f, 0.0721f);
+  return dot(color, illuminaceTrans);
+}
+
+uint ReverseBits32(uint bits) {
+     bits = (bits << 16u) | (bits >> 16u);
+     bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+     bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+     bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+     bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+     return bits;
+     //return float(bits) * 2.3283064365386963e-10; // / 0x100000000
+ }
+ 
+ float2 Hammersley2d(uint i, uint N) {
+     return float2(float(i)/float(N), ReverseBits32(i) * 2.3283064365386963e-10);
+ }
+ 
+ float2 Hammersley2d(uint i, uint N, uint2 random) {
+     float e0 = float(i)/float(N) + float(random.x & 0xffff) / (1<<16);
+     float e1 = float( ReverseBits32(i) ^ random.y ) * 2.3283064365386963e-10;
+     return float2(e0, e1);
+ }
+ 
+uint2 ScrambleTEA(uint2 v, uint IterationCount = 3)
+{
+	// Start with some random data (numbers can be arbitrary but those have been used by others and seem to work well)
+	uint k[4] ={ 0xA341316Cu , 0xC8013EA4u , 0xAD90777Du , 0x7E95761Eu };
+	
+	uint y = v[0];
+	uint z = v[1];
+	uint sum = 0;
+	
+	[unroll] for(uint i = 0; i < IterationCount; ++i)
+	{
+		sum += 0x9e3779b9;
+		y += (z << 4u) + k[0] ^ z + sum ^ (z >> 5u) + k[1];
+		z += (y << 4u) + k[2] ^ y + sum ^ (y >> 5u) + k[3];
+	}
+
+	return uint2(y, z);
+}
+
+float InterleavedGradientNoise(float2 v, float scale)
+{
+  static const float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+  return -scale + 2.0 * scale * frac( magic.z * frac(dot(v, magic.xy)) );
+}
+ 
+// float3 LinearDepthToViewPos(float linearZ, float2 cameraNearFar, float2 posH, float4x4 proj)
+// {
+//   float2 posH_xy = posH;
+//   float near = cameraNearFar.x;
+//   float far = cameraNearFar.y;
+//   float posV_z = linearZ * (far - near) + near;
+//   float posV_x = posH_xy.x * posV_z / proj[0][0];
+//   float posV_y = posH_xy.y * posV_z / proj[1][1];
+//   //float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
+//   //float4 posW = mul(posV, invView);
+//   return float3(posV_x, posV_y, posV_z);
+// }
+//  
+// float3 DepthToViewPos(float depth, float2 cameraNearFar, float2 screenPos, float2 screenSize, float4x4 proj)
+// {
+//   float2 posH_xy = (screenPos) / screenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+//   
+//   return LinearDepthToViewPos(depth, cameraNearFar, posH_xy, proj);
+// }
+// 
+// float3 PespectiveDepthToViewPos(float depth, float2 posH, float4x4 proj)
+// {
+//   float2 posH_xy = posH;
+//   float posV_z = proj[3][2] / (depth - proj[2][2]);
+//   float posV_x = posH_xy.x * posV_z / proj[0][0];
+//   float posV_y = posH_xy.y * posV_z / proj[1][1];
+//   //float4 posV = float4(posV_x, posV_y, posV_z, 1.0f);
+//   //float4 posW = mul(posV, invView);
+//   return float3(posV_x, posV_y, posV_z);
+// }
+// 
+// float3 PespectiveDepthToViewPos(float depth, float2 screenPos, float2 screenSize, float4x4 proj)
+// {
+//   float2 posH_xy = (screenPos) / screenSize * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+//   
+//   return PespectiveDepthToViewPos(depth, posH_xy, proj);
+// }
+
+float GetDepthFromPespectiveClip(float n, float f, float clipDepth)
+{
+    float A = - f / (n - f);
+    float B = - n * A;
+    return B / (clipDepth - A);
+}
+
+float GetDepthFromLinearClip(float n, float f, float clipDepth)
+{
+    return clipDepth * (f - n) + n;
+}
+
+float3 GetViewPosFromPespective(float3 clipPos, float4x4 proj)
+{
+    float viewPos_z = proj[3][2] / (clipPos.z - proj[2][2]);
+    float viewPos_x = clipPos.x * viewPos_z / proj[0][0];
+    float viewPos_y = clipPos.y * viewPos_z / proj[1][1];
+    
+    return float3(viewPos_x, viewPos_y, viewPos_z);
+}
+
+float3 GetViewPosFromLinear(float3 clipPos, float4x4 proj, float viewNear, float viewFar)
+{
+  float viewPos_z = GetDepthFromLinearClip(viewNear, viewFar, clipPos.z);
+  float viewPos_x = clipPos.x * viewPos_z / proj[0][0];
+  float viewPos_y = clipPos.y * viewPos_z / proj[1][1];
+
+  return float3(viewPos_x, viewPos_y, viewPos_z);
+}
+ 
+float2 GetUVFromScreen(float2 screenPos, float2 screenSize)
+{
+    return screenPos / screenSize;
+}
+
+float2 GetClipPosXYFromScreen(float2 screenPos, float2 screenSize)
+{
+    return GetUVFromScreen(screenPos, screenSize) * float2(2.0, -2.0) + float2(-1.0, 1.0);
+}
+
+//** Encode and Decode nommal */
+float2 EncodeNormalSphereMap(float3 normal)
+{
+
+    float2 enc = normalize(normal.xy) * sqrt( max(1e-5, normal.z * 0.5 + 0.5) );
+    //enc = enc * 0.5 + 0.5;
+    return enc;
+  
+/*
+    float p = sqrt( max(1e-5, normal.z * 8.0 + 8.0) );
+    return float2(normal.xy / p + 0.5);
+*/
+}
+
+float3 DecodeNormalSphereMap(float2 enc)
+{
+
+    float3 normal;
+    //enc = enc * 2.0 - 1.0;
+    float len2 = dot(enc, enc);
+    normal.z = len2 * 2.0 - 1.0;
+    normal.xy = normalize(enc) * sqrt( max(1e-5, 1.0 - normal.z * normal.z) );
+    return normal;
+
+/*
+    float2 fenc = enc * 4.0 - 2.0;
+    float f = dot(fenc, fenc);
+    float g = sqrt( max(1e-5, 1.0 - f / 4.0) );
+    float3 n;
+    n.xy = fenc * g;
+    n.z = -1.0 + f / 2.0;
+    return n;
+*/
+}
+
+float2 EncodeNormalSpherical(float3 n)
+{
+    float2 enc;
+    enc.x = acos(n.y) / PI * 2.0 - 1.0;
+    enc.y = atan2(n.z, n.x) / PI;// * 0.5 + 0.5;
+    return enc;
+}
+
+float3 DecodeNormalSpherical(float2 enc)
+{
+    //enc.x *= PI;
+    //enc.y = (enc.y * 2.0 - 1.0) * PI;
+    enc.x = (enc.x * 0.5 + 0.5) * PI;
+    enc.y = enc.y * PI;
+    
+    float cosTheta = cos(enc.x);
+    float sinTheta = sin(enc.x);//sqrt(1.0 - enc.x * enc.x);
+    
+    float3 n;
+    n.y = cosTheta;
+    n.x = sinTheta * cos(enc.y);
+    n.z = sinTheta * sin(enc.y);
+    return n;
+}
+
+float2 SignNotZero(float2 v)
+{
+    return float2( (v.x >= 0.0) ? 1.0 : -1.0, (v.y >= 0.0) ? 1.0 : -1.0 );
+}
+
+float2 EncodeNormalOCT(float3 n)
+{
+    float2 p = n.xy * ( 1.0 / (abs(n.x) + abs(n.y) + abs(n.z)) );
+    return (n.z <= 0.0) ? ((1.0 - abs(p.yx)) * SignNotZero(p)) : p;
+}
+
+float3 DecodeNormalOCT(float2 enc)
+{
+    float3 n = float3(enc.xy, 1.0 - abs(enc.x) - abs(enc.y));
+    if(n.z < 0.0)
+        n.xy = (1.0 - abs(n.yx)) * SignNotZero(n.xy);
+    return normalize(n);
+}
+
+float3 Encode_2x12sn_to_3x8un(float2 f)
+{
+    float2 u = float2(round(clamp(f, -1.0, 1.0) * 2047 + 2047));
+    float t = floor(u.y / 256.0);
+    
+    return floor(float3(
+        u.x / 16.0,
+        frac(u.x / 16.0) * 256 + t,
+        u.y - t * 256)) / 255.0;
+}
+
+float2 Decode_3x8un_to_2x12sn(float3 u)
+{
+    u *= 255.0;
+    u.y *= (1.0 / 16.0);
+    float2 s = float2(
+        u.x * 16.0 + floor(u.y),
+        frac(u.y) * (16.0 * 256.0) + u.z);
+    
+    return clamp(s * (1.0 / 2047.0) - 1.0, -1.0, 1.0);
+}
+
+float3 EncodeNormal(float3 normal)
+{
+    return Encode_2x12sn_to_3x8un( EncodeNormalSpherical(normal) );
+    //return Encode_2x12sn_to_3x8un( EncodeNormalOCT(normal) );
+}
+
+float3 DecodeNormal(float3 enc)
+{
+    return DecodeNormalSpherical( Decode_3x8un_to_2x12sn(enc) );
+    //return DecodeNormalOCT( Decode_3x8un_to_2x12sn(enc) );
+}
+
+
+float3 EncodeNormal(float3 normal, float4x4 view)
+{
+    normal = mul(float4(normal, 0.0f), view).xyz;
+    return Encode_2x12sn_to_3x8un( EncodeNormalSphereMap(normal) );
+}
+
+float3 DecodeNormal(float3 enc, float4x4 invView)
+{
+    float3 normal = DecodeNormalSphereMap( Decode_3x8un_to_2x12sn(enc) );
+    return mul(float4(normal, 0.0f), invView).xyz;
+}
+
+#endif

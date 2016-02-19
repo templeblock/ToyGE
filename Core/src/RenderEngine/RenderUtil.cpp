@@ -1,21 +1,15 @@
 #include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\Kernel\Core.h"
+#include "ToyGE\Math\Math.h"
 #include "ToyGE\RenderEngine\RenderFormat.h"
-#include "ToyGE\Kernel\Assert.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\Kernel\Global.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\RenderContext.h"
 #include "ToyGE\RenderEngine\Shader.h"
 #include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderTechnique.h"
-#include "ToyGE\RenderEngine\RenderPass.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffectVariable.h"
-#include "ToyGE\Platform\Window.h"
-#include "ToyGE\Math\Math.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
+#include "ToyGE\RenderEngine\RenderView.h"
 
 namespace ToyGE
 {
@@ -182,257 +176,268 @@ namespace ToyGE
 		}
 	}
 
-	Ptr<Texture> HeightToBump(const Ptr<Texture> & heightTex, float scale)
+	void ComputeMipsSize(
+		int32_t width,
+		int32_t heigth,
+		int32_t depth,
+		std::vector<int3> & outMipsSize)
 	{
-		auto bumpTexDesc = heightTex->Desc();
+		outMipsSize.clear();
+
+		int32_t x = std::max<int32_t>(1, width);
+		int32_t y = std::max<int32_t>(1, heigth);
+		int32_t z = std::max<int32_t>(1, depth);
+
+		// Mip 0
+		outMipsSize.push_back(int3(x, y, z));
+
+		// Loop until x=y=z=1
+		while ((x != 1) || (y != 1) || (z != 1))
+		{
+			x = std::max<int32_t>(1, x >> 1);
+			y = std::max<int32_t>(1, y >> 1);
+			z = std::max<int32_t>(1, z >> 1);
+
+			outMipsSize.push_back(int3(x, y, z));
+		}
+	}
+
+	static float GausscianFactor(float x)
+	{
+		return exp(x * x * -0.5f);
+	}
+
+	const std::vector<float> & GetGaussTable(int32_t numSamples)
+	{
+		static std::vector<std::vector<float>> gaussTables;
+		
+		if (numSamples >= (int32_t)gaussTables.size())
+		{
+			gaussTables.resize(numSamples + 1);
+		}
+
+		auto & table = gaussTables[numSamples];
+
+		if (table.size() <= 0)
+		{
+			float sum = 0.0f;
+
+			float step = 6.0f / (float)(numSamples - 1);
+			float start = -3.0f;
+
+			for (int32_t i = 0; i < numSamples; ++i)
+			{
+				float x = start + (float)i * step;
+				float factor = GausscianFactor(x);
+				sum += factor;
+				table.push_back(factor);
+			}
+
+			// Normalize
+			for (int32_t i = 0; i < numSamples; ++i)
+			{
+				table[i] /= sum;
+			}
+		}
+
+		return table;
+	}
+
+	RenderViewport GetTextureQuadViewport(const Ptr<Texture> & tex)
+	{
+		RenderViewport vp;
+		vp.width = (float)tex->GetDesc().width;
+		vp.height = (float)tex->GetDesc().height;
+		vp.topLeftX = 0.0f;
+		vp.topLeftY = 0.0f;
+		vp.minDepth = 0.0f;
+		vp.maxDepth = 1.0f;
+		return vp;
+	}
+
+	RenderViewport GetQuadViewport()
+	{
+		RenderViewport vp;
+		vp.width = (float)Global::GetWindow()->Width();
+		vp.height = (float)Global::GetWindow()->Height();
+		vp.topLeftX = 0.0f;
+		vp.topLeftY = 0.0f;
+		vp.minDepth = 0.0f;
+		vp.maxDepth = 1.0f;
+		return vp;
+	}
+
+	Ptr<Texture> HeightToBumpTex(const Ptr<Texture> & heightTex, float scale)
+	{
+		auto bumpTexDesc = heightTex->GetDesc();
 		bumpTexDesc.format = RENDER_FORMAT_R8G8B8A8_UNORM;
 		bumpTexDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
-		auto bumpTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(bumpTexDesc);
+		bumpTexDesc.mipLevels = 0;
+		auto bumpTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+		bumpTex->SetDesc(bumpTexDesc);
+		bumpTex->Init();
 
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"HeightToBump.xml");
-		
-		fx->VariableByName("texSize")->AsScalar()->SetValue(&bumpTex->GetTexSize());
-		fx->VariableByName("scale")->AsScalar()->SetValue(&scale);
+		auto ps = Shader::FindOrCreate<HeightToBumpPS>();
 
-		fx->VariableByName("heightTex")->AsShaderResource()->SetValue(heightTex->CreateTextureView());
+		ps->SetScalar("texSize", heightTex->GetTexSize());
+		ps->SetScalar("scale", scale);
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ bumpTex->CreateTextureView() }, 0);
+		ps->SetSRV("heightTex", heightTex->GetShaderResourceView());
 
-		RenderQuad(fx->TechniqueByName("HeightToBump"));
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ bumpTex->GetRenderTargetView(0, 0, 1) });
 
 		bumpTex->GenerateMips();
 
 		return bumpTex;
 	}
 
-	Ptr<Texture> SpecularToRoughness(const Ptr<Texture> & shininessTex)
+	const std::vector<Ptr<VertexBuffer>> & GetQuadVBs()
 	{
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		auto texDesc = shininessTex->Desc();
-		texDesc.format = RENDER_FORMAT_R8_UNORM;
-		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
-		auto roughnessTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SpecularToRoughness.xml");
-
-		fx->VariableByName("specularTex")->AsShaderResource()->SetValue(shininessTex->CreateTextureView());
-
-		rc->SetRenderTargets({ roughnessTex->CreateTextureView() }, 0);
-
-		RenderQuad(fx->TechniqueByName("SpecularToRoughness"));
-
-		roughnessTex->GenerateMips();
-
-		return roughnessTex;
-	}
-
-	void Transform(
-		const ResourceView & src,
-		const ResourceView & dst,
-		const Vector4<ColorWriteMask> & colorWriteMask,
-		const int4 & dstRect)
-	{
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Transform.xml");
-
-		for (int32_t i = 0; i < 4; ++i)
+		static std::vector<Ptr<VertexBuffer>> quadVBs;
+		if (quadVBs.size() == 0)
 		{
-			auto & writeMask = colorWriteMask[i];
-			String writeChannel = std::to_string(static_cast<uint32_t>(std::log2(static_cast<uint32_t>(writeMask))));
-			fx->AddExtraMacro("COLOR_CHANNEL_" + std::to_string(i), writeChannel);
-		}
-
-		/*if (colorMask & COLOR_WRITE_R)
-			fx->AddExtraMacro("COLOR_WRITE_R", "");
-		else
-			fx->RemoveExtraMacro("COLOR_WRITE_R");
-
-		if (colorMask & COLOR_WRITE_G)
-			fx->AddExtraMacro("COLOR_WRITE_G", "");
-		else
-			fx->RemoveExtraMacro("COLOR_WRITE_G");
-
-		if (colorMask & COLOR_WRITE_B)
-			fx->AddExtraMacro("COLOR_WRITE_B", "");
-		else
-			fx->RemoveExtraMacro("COLOR_WRITE_B");
-
-		if (colorMask & COLOR_WRITE_A)
-			fx->AddExtraMacro("COLOR_WRITE_A", "");
-		else
-			fx->RemoveExtraMacro("COLOR_WRITE_A");*/
-
-		fx->UpdateData();
-
-		/*switch (colorMask)
-		{
-		case COLOR_WRITE_R:
-			fx->SetExtraMacros({ { "COLOR_WRITE_R", "" } });
-			break;
-		case COLOR_WRITE_G:
-			fx->SetExtraMacros({ { "COLOR_WRITE_G", "" } });
-			break;
-		case COLOR_WRITE_B:
-			fx->SetExtraMacros({ { "COLOR_WRITE_B", "" } });
-			break;
-		case COLOR_WRITE_A:
-			fx->SetExtraMacros({ { "COLOR_WRITE_A", "" } });
-			break;
-		default:
-			fx->SetExtraMacros({ { "", "" } });
-			break;
-		}*/
-
-		fx->VariableByName("srcTex")->AsShaderResource()->SetValue(src);
-
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ dst }, 0);
-
-		auto dstTex = std::static_pointer_cast<Texture>(dst.resource);
-
-		RenderQuad(fx->TechniqueByName("Transform"), 
-			dstRect.x < 0 ? 0 : dstRect.x,
-			dstRect.y < 0 ? 0 : dstRect.y,
-			dstRect.z < 0 ? dstTex->Desc().width : dstRect.z,
-			dstRect.w < 0 ? dstTex->Desc().height : dstRect.w);
-	}
-
-	Ptr<Texture> SAT(const Ptr<Texture> & tex)
-	{
-		auto satFX = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"SAT.xml");
-
-		TextureDesc texDesc = tex->Desc();
-		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
-
-		auto tex0 = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		auto tex1 = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-
-		for (int32_t arrayIndex = 0; arrayIndex < texDesc.arraySize; ++arrayIndex)
-		{
-			tex->CopyTo(tex0, 0, arrayIndex, 0, 0, 0, 0, arrayIndex);
-		}
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-
-		auto quadInput = CommonInput::QuadInput();
-		auto preInput = rc->GetRenderInput();
-		rc->SetRenderInput(quadInput);
-
-		auto preRts = rc->GetRenderTargets();
-		auto preDS = rc->GetDepthStencil();
-		rc->SetDepthStencil(ResourceView());
-
-		auto preViewport = rc->GetViewport();
-		RenderViewport vp;
-		vp.topLeftX = 0.0f;
-		vp.topLeftY = 0.0f;
-		vp.width = static_cast<float>(texDesc.width);
-		vp.height = static_cast<float>(texDesc.height);
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		rc->SetViewport(vp);
-
-		int offset = 1;
-		int horzCnt = static_cast<int>(log2(texDesc.width));
-		for (int horzIndex = 0; horzIndex < horzCnt; ++horzIndex)
-		{
-			for (int32_t arrayIndex = 0; arrayIndex < texDesc.arraySize; ++arrayIndex)
+			// Postions
 			{
-				satFX->VariableByName("offset")->AsScalar()->SetValue(&offset, sizeof(offset));
-				satFX->VariableByName("inTex")->AsShaderResource()->SetValue(tex0->CreateTextureView(0, 1, arrayIndex, 1));
-				Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ tex1->CreateTextureView(0, 1, arrayIndex, 1) }, 0);
+				auto quadPositionVB = Global::GetRenderEngine()->GetRenderFactory()->CreateVertexBuffer();
 
-				satFX->TechniqueByName("SAT_Horz")->PassByIndex(0)->Bind();
-				Global::GetRenderEngine()->GetRenderContext()->DrawIndexed();
-				satFX->TechniqueByName("SAT_Horz")->PassByIndex(0)->UnBind();
+				RenderBufferDesc desc;
+				desc.bindFlag = BUFFER_BIND_VERTEX;
+				desc.cpuAccess = 0;
+				desc.elementSize = sizeof(float2);
+				desc.numElements = 4;
+				desc.bStructured = false;
+				quadPositionVB->SetDesc(desc);
+
+				VertexElementDesc elementDesc;
+				elementDesc.bytesOffset = 0;
+				elementDesc.bytesSize = sizeof(float2);
+				elementDesc.format = RENDER_FORMAT_R32G32_FLOAT;
+				elementDesc.name = "POSITION";
+				elementDesc.index = 0;
+				elementDesc.instanceDataRate = 0;
+				quadPositionVB->SetElementsDesc({ elementDesc });
+
+				float2 quadPositions[4] =
+				{
+					{ -1.0f,  1.0f },
+					{ 1.0f,  1.0f },
+					{ -1.0f, -1.0f },
+					{ 1.0f, -1.0f }
+				};
+				quadPositionVB->Init(quadPositions);
+				quadVBs.push_back(quadPositionVB);
 			}
 
-			tex0.swap(tex1);
-
-			offset = offset << 1;
-		}
-
-		offset = 1;
-		int vertCnt = static_cast<int>(log2(texDesc.height));
-		for (int vertIndex = 0; vertIndex < vertCnt; ++vertIndex)
-		{
-			for (int32_t arrayIndex = 0; arrayIndex < texDesc.arraySize; ++arrayIndex)
+			// UVs
 			{
-				satFX->VariableByName("offset")->AsScalar()->SetValue(&offset, sizeof(offset));
-				satFX->VariableByName("inTex")->AsShaderResource()->SetValue(tex0->CreateTextureView(0, 1, arrayIndex, 1));
-				Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ tex1->CreateTextureView(0, 1, arrayIndex, 1) }, 0);
+				auto quadUVVB = Global::GetRenderEngine()->GetRenderFactory()->CreateVertexBuffer();
 
-				satFX->TechniqueByName("SAT_Vert")->PassByIndex(0)->Bind();
-				Global::GetRenderEngine()->GetRenderContext()->DrawIndexed();
-				satFX->TechniqueByName("SAT_Vert")->PassByIndex(0)->UnBind();
+				RenderBufferDesc desc;
+				desc.bindFlag = BUFFER_BIND_VERTEX;
+				desc.cpuAccess = CPU_ACCESS_WRITE;
+				desc.elementSize = sizeof(float2);
+				desc.numElements = 4;
+				desc.bStructured = false;
+				quadUVVB->SetDesc(desc);
+
+				VertexElementDesc elementDesc;
+				elementDesc.bytesOffset = 0;
+				elementDesc.bytesSize = sizeof(float2);
+				elementDesc.format = RENDER_FORMAT_R32G32_FLOAT;
+				elementDesc.name = "TEXCOORD";
+				elementDesc.index = 0;
+				elementDesc.instanceDataRate = 0;
+				quadUVVB->SetElementsDesc({ elementDesc });
+
+				quadUVVB->Init(nullptr);
+				quadVBs.push_back(quadUVVB);
 			}
-
-			tex0.swap(tex1);
-
-			offset = offset << 1;
 		}
 
-		rc->SetRenderInput(preInput);
-		rc->SetRenderTargets(preRts, 0);
-		rc->SetDepthStencil(preDS);
-		rc->SetViewport(preViewport);
-
-		tex1->Release();
-
-		return tex0;
+		return quadVBs;
 	}
 
-	Ptr<Texture> DownSample(const ResourceView & texView, float2 scale)
+	const Ptr<RenderBuffer> & GetQuadIB()
 	{
-		auto tex = std::static_pointer_cast<Texture>(texView.resource);
-		auto texDesc = tex->Desc();
-		texDesc.bindFlag |= TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_SHADER_RESOURCE;
-		texDesc.width = static_cast<int>(static_cast<float>(texDesc.width) * scale.x);
-		texDesc.height = static_cast<int>(static_cast<float>(texDesc.height) * scale.y);
+		static Ptr<RenderBuffer> quadIB;
 
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		if (!quadIB)
+		{
+			quadIB = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+			RenderBufferDesc desc;
+			desc.bindFlag = BUFFER_BIND_INDEX;
+			desc.cpuAccess = 0;
+			desc.elementSize = sizeof(uint32_t);
+			desc.numElements = 6;
+			desc.bStructured = false;
+			quadIB->SetDesc(desc);
 
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"DownSample.xml");
+			uint32_t quadIndices[] =
+			{
+				0, 1, 2,
+				1, 3, 2
+			};
+			quadIB->Init(quadIndices);
+		}
 
-		fx->VariableByName("inTex")->AsShaderResource()->SetValue(texView);
-
-		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-
-		RenderQuad(fx->TechniqueByName("DownSample"));
-
-		return resultTex;
+		return quadIB;
 	}
 
-	void RenderQuad(
-		const Ptr<RenderTechnique> & tech,
-		int32_t topLeftX,
-		int32_t topLeftY,
-		int32_t width,
-		int32_t height,
+	void DrawQuad(
+		const std::vector< Ptr<class RenderTargetView> > & rtvs,
+		float topLeftX,
+		float topLeftY,
+		float width,
+		float height,
 		float topLeftU,
 		float topLeftV,
 		float uvWidth,
 		float uvHeight,
-		const ResourceView & depthStencil)
+		const Ptr<class DepthStencilView> & dsv)
 	{
+		/*if (rtvs.size() == 0)
+			return;*/
+
+		auto & quadVBs = GetQuadVBs();
+		auto & quadIB = GetQuadIB();
+
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		RenderContextStateSave stateSave;
-		rc->SaveState(
-			RENDER_CONTEXT_STATE_INPUT
-			| RENDER_CONTEXT_STATE_VIEWPORT
-			| RENDER_CONTEXT_STATE_RENDERTARGETS
-			| RENDER_CONTEXT_STATE_DEPTHSTENCIL, stateSave);
-
-		auto & rts = Global::GetRenderEngine()->GetRenderContext()->GetRenderTargets();
-
-		if (rts.size() > 0)
+		// Viewport
+		if (width == 0.0f)
 		{
-			auto targetTex = std::static_pointer_cast<Texture>(rts[0].resource);
-			if (width == 0)
-				width = targetTex->Desc().width;
-			if (height == 0)
-				height = targetTex->Desc().height;
+			if (rtvs.size() > 0)
+			{
+				auto tex = rtvs[0]->GetResource()->Cast<Texture>();
+				auto & mipSize = tex->GetMipSize(rtvs[0]->Cast<TextureRenderTargetView>()->mipLevel);
+				width = (float)mipSize.x();
+			}
+			else if (dsv)
+			{
+				auto tex = dsv->GetResource()->Cast<Texture>();
+				auto & mipSize = tex->GetMipSize(dsv->Cast<TextureDepthStencilView>()->mipLevel);
+				width = (float)mipSize.x();
+			}
+		}
+		if (height == 0.0f)
+		{
+			if (rtvs.size() > 0)
+			{
+				auto tex = rtvs[0]->GetResource()->Cast<Texture>();
+				auto & mipSize = tex->GetMipSize(rtvs[0]->Cast<TextureRenderTargetView>()->mipLevel);
+				height = (float)mipSize.y();
+			}
+			else if (dsv)
+			{
+				auto tex = dsv->GetResource()->Cast<Texture>();
+				auto & mipSize = tex->GetMipSize(dsv->Cast<TextureDepthStencilView>()->mipLevel);
+				height = (float)mipSize.y();
+			}
 		}
 
 		RenderViewport vp;
@@ -444,146 +449,229 @@ namespace ToyGE
 		vp.maxDepth = 1.0f;
 		rc->SetViewport(vp);
 
+		// Update uvs
 		float2 uvMap[4];
 		uvMap[0] = float2(topLeftU,				topLeftV);
 		uvMap[1] = float2(topLeftU + uvWidth,	topLeftV);
 		uvMap[2] = float2(topLeftU,				topLeftV + uvHeight);
 		uvMap[3] = float2(topLeftU + uvWidth,	topLeftV + uvHeight);
 
-		auto quadInput = CommonInput::QuadInput();
-		auto uvBufMappedData = quadInput->GetVerticesBuffers()[1]->Map(MAP_WRITE_DISCARD);
+		auto uvBufMappedData = quadVBs[1]->Map(MAP_WRITE_DISCARD);
 		memcpy(uvBufMappedData.pData, uvMap, sizeof(float2) * 4);
-		quadInput->GetVerticesBuffers()[1]->UnMap();
+		quadVBs[1]->UnMap();
 
-		/*auto ri = std::make_shared<RenderInput>();
-		ri->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-		rc->SetRenderInput(ri);*/
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(depthStencil);
+		// Set vbs, ib
+		rc->SetVertexBuffer(quadVBs);
+		rc->SetIndexBuffer(quadIB);
+		rc->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-		for (int32_t i = 0; i < tech->NumPasses(); ++i)
+		// Set rtv
+		rc->SetRenderTargets(rtvs);
+
+		// Set dsv
+		rc->SetDepthStencil(dsv);
+		if (!dsv)
+			rc->SetDepthStencilState(DepthStencilStateTemplate<false>::Get());
+
+		// Bind shader
+		auto drawQuadVS = Shader::FindOrCreate<DrawQuadVS>();
+		drawQuadVS->Flush();
+
+		// Draw
+		rc->DrawIndexed(0, 0);
+
+		if (!dsv)
+			rc->SetDepthStencilState(nullptr);
+	}
+
+	void Fill(
+		const float4 & color,
+		const std::vector< Ptr<class RenderTargetView> > & rtvs,
+		float topLeftX,
+		float topLeftY,
+		float width,
+		float height,
+		float topLeftU,
+		float topLeftV,
+		float uvWidth,
+		float uvHeight,
+		const Ptr<class DepthStencilView> & dsv)
+	{
+		auto ps = Shader::FindOrCreate<FillPS>();
+		ps->SetScalar("fillColor", color);
+		ps->Flush();
+
+		DrawQuad(rtvs, topLeftX, topLeftY, width, height, topLeftU, topLeftV, uvWidth, uvHeight, dsv);
+	}
+
+	//IMPLEMENT_SHADER(TransformPS, SHADER_PS, "TransformPS", "TransformPS");
+
+	void Transform(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		const Vector<ColorWriteMask, 4> & colorWriteMask,
+		const float4 & srcRect,
+		const float4 & dstRect,
+		const Ptr<class Sampler> & sampler)
+	{
+		auto rc = Global::GetRenderEngine()->GetRenderContext();
+
+		std::map<String, String> macros;
+		for (int32_t i = 0; i < 4; ++i)
 		{
-			tech->PassByIndex(i)->Bind();
-			rc->DrawIndexed();
-			tech->PassByIndex(i)->UnBind();
+			auto & writeMask = colorWriteMask[i];
+			String writeChannel = std::to_string(static_cast<uint32_t>(std::log2(static_cast<uint32_t>(writeMask))));
+			macros["COLOR_CHANNEL_" + std::to_string(i)] = writeChannel;
 		}
 
-		rc->RestoreState(stateSave);
+		auto transformPS = Shader::FindOrCreate<TransformPS>(macros);
+		transformPS->SetSampler("transformSampler", sampler ? sampler : SamplerTemplate<>::Get());
+		transformPS->SetSRV("srcTex", src);
+		transformPS->Flush();
+
+		auto srcTex = src->GetResource()->Cast<Texture>();
+		float topLeftU = srcRect.x() / static_cast<float>(srcTex->GetDesc().width);
+		float topLeftV = srcRect.y() / static_cast<float>(srcTex->GetDesc().height);
+		float uvWidth  = srcRect.z() / static_cast<float>(srcTex->GetDesc().width);
+		float uvHeight = srcRect.w() / static_cast<float>(srcTex->GetDesc().height);
+
+		if (uvWidth == 0.0f)
+			uvWidth = 1.0f;
+		if (uvHeight == 0.0f)
+			uvHeight = 1.0f;
+
+		DrawQuad({ dst },
+			dstRect.x(),
+			dstRect.y(),
+			dstRect.z(),
+			dstRect.w(),
+			topLeftU,
+			topLeftV,
+			uvWidth,
+			uvHeight);
 	}
 
 	void TextureFilter(
-		const Ptr<Texture> & src,
-		int32_t srcMipLevel,
-		int32_t srcArrayOffset,
-		const Ptr<Texture> & dst,
-		int32_t dstMipLevel,
-		int32_t dstArrayOffset,
-		int32_t numSamples,
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
 		const std::vector<float2> & uvOffsets,
-		const std::vector<float> & weights)
+		const std::vector<float> & weights,
+		const Ptr<class Sampler> & sampler)
 	{
-		MacroDesc macro;
-		macro.name = "NUM_SAMPLES";
-		macro.value = std::to_string(numSamples);
+		ToyGE_ASSERT(uvOffsets.size() == weights.size());
+		ToyGE_ASSERT(src);
+		ToyGE_ASSERT(dst);
 
-		if (numSamples == 5)
-		{
-			int a = 0;
-		}
-
-		auto filterFX = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"Filter.xml");
-		filterFX->SetExtraMacros({ macro });
+		int32_t numSamples = (int32_t)uvOffsets.size();
+		if (numSamples <= 0)
+			return;
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		RenderContextStateSave stateSave;
-		rc->SaveState(
-			RENDER_CONTEXT_STATE_INPUT
-			| RENDER_CONTEXT_STATE_VIEWPORT
-			| RENDER_CONTEXT_STATE_RENDERTARGETS
-			| RENDER_CONTEXT_STATE_DEPTHSTENCIL, stateSave);
+		rc->SetViewport(GetTextureQuadViewport(dst->GetResource()->Cast<Texture>()));
 
-		auto preVP = rc->GetViewport();
-		auto vp = preVP;
-		auto & mipSize = dst->GetMipSize(dstMipLevel);
-		vp.width = static_cast<float>(std::get<0>(mipSize));
-		vp.height = static_cast<float>(std::get<1>(mipSize));
-		rc->SetViewport(vp);
+		auto filterVS = Shader::FindOrCreate<FilterVS>({ { "NUM_SAMPLES", std::to_string(numSamples) } });
+		auto filterPS = Shader::FindOrCreate<FilterPS>({ { "NUM_SAMPLES", std::to_string(numSamples) } });
 
-		filterFX->VariableByName("samplesOffsets")->AsScalar()->SetValue(&uvOffsets[0], sizeof(float2) * static_cast<size_t>(numSamples));
-		filterFX->VariableByName("samplesWeights")->AsScalar()->SetValue(&weights[0], sizeof(float) * static_cast<size_t>(numSamples));
+		filterVS->SetScalar("samplesOffsets", &uvOffsets[0], (int32_t)(sizeof(uvOffsets[0]) * uvOffsets.size()));
+		filterVS->Flush();
 
-		filterFX->VariableByName("filterTex")->AsShaderResource()->SetValue(src->CreateTextureView(srcMipLevel, 1, srcArrayOffset, 1));
+		filterPS->SetScalar("samplesWeights", &weights[0], (int32_t)(sizeof(weights[0]) * weights.size()));
+		filterPS->SetSRV("filterTex", src);
+		filterPS->SetSampler("filterSampler", sampler ? sampler : SamplerTemplate<>::Get());
+		filterPS->Flush();
 
-		rc->SetDepthStencil(ResourceView());
-		rc->SetRenderTargets({ dst->CreateTextureView(dstMipLevel, 1, dstArrayOffset, 1) }, 0);
-		rc->SetRenderInput(CommonInput::QuadInput());
+		rc->SetRenderTargets({ dst });
 
-		filterFX->TechniqueByName("Filter")->PassByIndex(0)->Bind();
-		rc->DrawIndexed();
-		filterFX->TechniqueByName("Filter")->PassByIndex(0)->UnBind();
+		rc->SetDepthStencil(nullptr);
+		rc->SetDepthStencilState(DepthStencilStateTemplate<false>::Get());
 
-		rc->RestoreState(stateSave);
+		rc->SetVertexBuffer({ GetQuadVBs()[0] });
+		rc->SetIndexBuffer(GetQuadIB());
+		rc->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		rc->DrawIndexed(0, 0);
+	}
+
+	void BilateralBlur(
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		const Ptr<ShaderResourceView> & depthTex,
+		const std::vector<float> & weights,
+		float depthDiffThreshold)
+	{
+		auto srcTex = src->GetResource()->Cast<Texture>();
+
+		auto tmpTexDesc = dst->GetResource()->Cast<Texture>()->GetDesc();
+		auto tmpTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, tmpTexDesc });
+
+		{
+			auto ps = Shader::FindOrCreate<BilateralBlurXPS>();
+			ps->SetScalar("bilateralBlurWeights", &weights[0], (int32_t)(sizeof(float) * weights.size()));
+			ps->SetScalar("texSize", srcTex->GetTexSize());
+			ps->SetScalar("depthDiffThreshold", depthDiffThreshold);
+
+			ps->SetSRV("bilateralDepthTex", depthTex);
+			ps->SetSRV("bilateralBlurInTex", src);
+
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+
+			ps->Flush();
+
+			DrawQuad({ tmpTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+		}
+
+		{
+			auto ps = Shader::FindOrCreate<BilateralBlurYPS>();
+			ps->SetScalar("bilateralBlurWeights", &weights[0], (int32_t)(sizeof(float) * weights.size()));
+			ps->SetScalar("texSize", srcTex->GetTexSize());
+			ps->SetScalar("depthDiffThreshold", depthDiffThreshold);
+
+			ps->SetSRV("bilateralDepthTex", depthTex);
+			ps->SetSRV("bilateralBlurInTex", tmpTexRef->Get()->Cast<Texture>()->GetShaderResourceView());
+
+			ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+
+			ps->Flush();
+
+			DrawQuad({ dst });
+		}
 	}
 
 	void BilateralUpSampling(
-		const ResourceView & src,
-		const ResourceView & lowResDepthTex,
-		const ResourceView & highResDepthTex,
-		const ResourceView & dst,
-		float depthDiffScale)
+		const Ptr<ShaderResourceView> & src,
+		const Ptr<RenderTargetView> & dst,
+		const Ptr<ShaderResourceView> & lowResDepthTex,
+		const Ptr<ShaderResourceView> & highResDepthTex,
+		float depthDiffThreshold)
 	{
-		auto fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"BilateralFilter.xml");
+		auto srcTex = src->GetResource()->Cast<Texture>();
 
-		fx->VariableByName("depthDiffScale")->AsScalar()->SetValue(&depthDiffScale);
+		auto ps = Shader::FindOrCreate<BilateralUpSamplingPS>();
+		ps->SetScalar("texSize", srcTex->GetTexSize());
+		ps->SetScalar("depthDiffThreshold", depthDiffThreshold);
 
-		fx->VariableByName("upSamplingInTex")->AsShaderResource()->SetValue(src);
-		fx->VariableByName("lowResDepthTex")->AsShaderResource()->SetValue(lowResDepthTex);
-		fx->VariableByName("highResDepthTex")->AsShaderResource()->SetValue(highResDepthTex);
+		ps->SetSRV("lowResDepthTex", lowResDepthTex);
+		ps->SetSRV("highResDepthTex", highResDepthTex);
+		ps->SetSRV("upSamplingInTex", src);
 
-		Global::GetRenderEngine()->GetRenderContext()->SetRenderTargets({ dst }, 0);
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
-		int32_t w = std::static_pointer_cast<Texture>(dst.resource)->Desc().width;
-		int32_t h = std::static_pointer_cast<Texture>(dst.resource)->Desc().height;
+		ps->Flush();
 
-		RenderQuad(fx->TechniqueByName("BilateralUpSampling"), 0, 0, w, h);
+		DrawQuad({ dst });
 	}
 
-	bool ResourceView::operator == (const ResourceView & view) const
+	void LinearizeDepth(const Ptr<ShaderResourceView> & depth, const Ptr<RenderView> & view, const Ptr<RenderTargetView> & target)
 	{
-		if (resource != view.resource)
-			return false;
-		if (formatHint != view.formatHint)
-			return false;
-		if (!resource)
-			return true;
-		if (RENDER_RESOURCE_BUFFER == resource->ResourceType())
-		{
-			return subDesc.bufferDesc.firstElement == view.subDesc.bufferDesc.firstElement
-				&& subDesc.bufferDesc.numElements == view.subDesc.bufferDesc.numElements;
-		}
-		else if (RENDER_RESOURCE_TEXTURE == resource->ResourceType())
-		{
-			if (subDesc.textureDesc.bAsCube == true && view.subDesc.textureDesc.bAsCube == true)
-			{
-				return subDesc.textureDesc.firstMipLevel == view.subDesc.textureDesc.firstMipLevel
-					&& subDesc.textureDesc.mipLevels == view.subDesc.textureDesc.mipLevels
-					&& subDesc.textureDesc.firstFaceOffset == view.subDesc.textureDesc.firstFaceOffset
-					&& subDesc.textureDesc.numCubes == view.subDesc.textureDesc.numCubes;
-			}
-			else if (subDesc.textureDesc.bAsCube == false && view.subDesc.textureDesc.bAsCube == false)
-			{
-				return subDesc.textureDesc.firstMipLevel == view.subDesc.textureDesc.firstMipLevel
-					&& subDesc.textureDesc.mipLevels == view.subDesc.textureDesc.mipLevels
-					&& subDesc.textureDesc.firstArray == view.subDesc.textureDesc.firstArray
-					&& subDesc.textureDesc.arraySize == view.subDesc.textureDesc.arraySize;
-			}
-			else
-			{
-				return false;
-			}
-		}
+		auto ps = Shader::FindOrCreate<LinearizeDepthPS>();
 
-		return false;
+		view->BindShaderParams(ps);
+		ps->SetSRV("depthTex", depth);
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ target });
 	}
 }

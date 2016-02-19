@@ -1,0 +1,13 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+
+Texture2D<float> depthTex;
+SamplerState pointSampler;
+
+float LinearizeDepthPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float depth = depthTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float linearDepth = GetDepthFromPespectiveClip(viewNear, viewFar, depth);
+    return (linearDepth - viewNear) / viewLength;
+}

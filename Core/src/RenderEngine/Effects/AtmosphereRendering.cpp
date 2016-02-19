@@ -1,22 +1,14 @@
 #include "ToyGE\RenderEngine\Effects\AtmosphereRendering.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
-#include "ToyGE\RenderEngine\RenderContext.h"
-#include "ToyGE\RenderEngine\RenderFactory.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
-#include "ToyGE\RenderEngine\RenderSharedEnviroment.h"
-#include "ToyGE\RenderEngine\RenderView.h"
-#include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\RenderEngine\RenderUtil.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\RenderEngine\DeferredRenderFramework.h"
 #include "ToyGE\RenderEngine\ShadowTechnique.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 
 namespace ToyGE
 {
+	DECLARE_SHADER(, RenderSampleCoordsVS, SHADER_VS, "AtmosphereRendering", "RenderSampleCoordsVS", SM_4);
+	DECLARE_SHADER(, RenderSampleCoordsPS, SHADER_PS, "AtmosphereRendering", "RenderSampleCoordsPS", SM_4);
+
 	AtmosphereRendering::AtmosphereRendering()
 		: _numSampleLines(1024),
 		_maxSamplesPerLine(1024),
@@ -31,91 +23,155 @@ namespace ToyGE
 		_sunRenderColor(1.0f, 1.0f, 1.0f),
 		_sunRenderRadius(120.0f)
 	{
-		std::vector<MacroDesc> macros;
-		macros.push_back({ "NUM_SAMPLELINES", std::to_string(_numSampleLines) });
-		macros.push_back({ "MAX_SAMPLES_PERLINE", std::to_string(_maxSamplesPerLine) });
-
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"AtmosphereRendering.xml");
-		_fx->SetExtraMacros(macros);
-
-		_refineFX = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"EpipolarSamplingRefineCS.xml");
-		_refineFX->SetExtraMacros(macros);
-
 		_scatteringR = float3(5.8f, 13.5f, 33.1f) * 1e-6f;
 		_scatteringM = float3(2.0f) * 1e-5f;
 		_attenuationR = _scatteringR;
 		_attenuationM = 1.1f * _scatteringM;
+
+		bEpipolarSampling = true;
 	}
 
-	void AtmosphereRendering::Render(const Ptr<RenderSharedEnviroment> & sharedEnviroment)
+	void AtmosphereRendering::Render(const Ptr<RenderView> & view)
 	{
 		if (!_opticalDepthLUT)
 			InitOpticalDepthLUT();
 		if (!_inScatteringLUTR)
 			InitInScatteringLUT();
 
-		//auto targetTex = std::static_pointer_cast<Texture>(sharedEnviroment->GetView()->GetRenderTarget().resource);
+		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");;
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		float2 targetSize = float2(static_cast<float>(sharedEnviroment->GetView()->GetRenderTarget()->Desc().width), static_cast<float>(sharedEnviroment->GetView()->GetRenderTarget()->Desc().height));
+		float2 targetSize = view->GetViewParams().viewSize;
 
-		auto linearDepthTex = sharedEnviroment->ParamByName(CommonRenderShareName::LinearDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
-
-		auto & cameraPos = sharedEnviroment->GetView()->GetCamera()->Pos();
+		auto & cameraPos = view->GetCamera()->GetPos();
 		float sunDist = 1e+10;
 		auto sunPosW = XMFLOAT3(
 			cameraPos.x - _sunDirection.x * sunDist,
 			cameraPos.y - _sunDirection.y * sunDist,
-			cameraPos.z - _sunDirection.z * sunDist); //*reinterpret_cast<XMFLOAT3*>(&_sun->GetPosOffsetVec());
+			cameraPos.z - _sunDirection.z * sunDist);
 		auto sunPosWXM = XMLoadFloat3(&sunPosW);
-		auto viewXM = XMLoadFloat4x4(&sharedEnviroment->GetView()->GetCamera()->ViewMatrix());
+		auto viewXM = XMLoadFloat4x4(&view->GetCamera()->GetViewMatrix());
 		auto sunPosVXM = XMVector3TransformCoord(sunPosWXM, viewXM);
 		sunPosVXM = XMVectorSetW(sunPosVXM, 1.0f);
-		auto projXM = XMLoadFloat4x4(&sharedEnviroment->GetView()->GetCamera()->ProjMatrix());
+		auto projXM = XMLoadFloat4x4(&view->GetCamera()->GetProjMatrix());
 		auto sunPosHXM = XMVector4Transform(sunPosVXM, projXM);
 		float4 sunPosH;
 		XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&sunPosH), sunPosHXM);
-		sunPosH.x /= sunPosH.w;
-		sunPosH.y /= sunPosH.w;
-		sunPosH.z /= sunPosH.w;
+		sunPosH.x() /= sunPosH.w();
+		sunPosH.y() /= sunPosH.w();
+		sunPosH.z() /= sunPosH.w();
 
-		auto sampleLinesTex = InitSampleLines(targetSize, sharedEnviroment->GetView()->GetCamera(), sunPosH.v(VEC_X, VEC_Y));
+		if (bEpipolarSampling)
+		{
+			// Init sample lines
+			auto sampleLinesTexRef = InitSampleLines(sceneTex->GetTexSize(), float2(sunPosH.x(), sunPosH.y()));
+			auto sampleLinesTex = sampleLinesTexRef->Get()->Cast<Texture>();
 
-		Ptr<Texture> sampleCoordsTex, cameraDepthTex, depthStencilTex;
-		InitSampleCoordsTex(sampleLinesTex, linearDepthTex, sampleCoordsTex, cameraDepthTex, depthStencilTex);
+			// Init samples
+			PooledTextureRef sampleCoordsTexRef, sampleDepthTexRef, sampleMaskDSRef;
+			InitSampleCoordsTex(
+				sceneTex->GetTexSize(),
+				sampleLinesTex,
+				sceneLinearClipDepth,
+				sampleCoordsTexRef,
+				sampleDepthTexRef,
+				sampleMaskDSRef);
+			auto sampleCoordsTex = sampleCoordsTexRef->Get()->Cast<Texture>();
+			auto sampleDepthTex = sampleDepthTexRef->Get()->Cast<Texture>();
+			auto sampleMaskDS = sampleMaskDSRef->Get()->Cast<Texture>();
 
-		auto interplationSourceTex = RefineSamples(sampleCoordsTex, cameraDepthTex, sharedEnviroment->GetView()->GetCamera(), sunPosH.v(VEC_X, VEC_Y));
+			// Refine samples
+			float depthBreakThreshold = 0.5f / (view->GetCamera()->GetFar() - view->GetCamera()->GetNear());
+			auto interpolationSourceTexRef =
+				RefineSamples(
+					sceneTex->GetTexSize(),
+					depthBreakThreshold,
+					sampleCoordsTex,
+					sampleDepthTex);
+			auto interpolationSourceTex = interpolationSourceTexRef->Get()->Cast<Texture>();
 
-		MarkRayMarchingSamples(interplationSourceTex, depthStencilTex);
+			// Mark samples
+			MarkRayMarchingSamples(interpolationSourceTex, sampleMaskDS);
 
-		Ptr<Texture> lightAccumTex, attenuationTex;
-		DoRayMarching(sampleCoordsTex, cameraDepthTex, depthStencilTex, sharedEnviroment->GetView()->GetCamera(), lightAccumTex, attenuationTex);
+			// Ray marching
+			PooledTextureRef lightAccumTexRef, attenuationTexRef;
+			DoRayMarching(
+				view,
+				sampleCoordsTex,
+				sampleDepthTex,
+				sampleMaskDS,
+				lightAccumTexRef,
+				attenuationTexRef);
+			auto lightAccumTex = lightAccumTexRef->Get()->Cast<Texture>();
+			auto attenuationTex = attenuationTexRef->Get()->Cast<Texture>();
 
-		Ptr<Texture> lightAccumInterpTex, attenuationInterpTex;
-		InterpolateRestSamples(interplationSourceTex, cameraDepthTex, lightAccumTex, attenuationTex, lightAccumInterpTex, attenuationInterpTex);
+			// Interpolate rest samples
+			PooledTextureRef lightAccumInterpTexRef, attenuationInterpTexRef;
+			InterpolateRestSamples(
+				sceneTex->GetTexSize(),
+				interpolationSourceTex,
+				sampleDepthTex,
+				lightAccumTex,
+				attenuationTex,
+				sampleMaskDS,
+				lightAccumInterpTexRef,
+				attenuationInterpTexRef);
+			auto lightAccumInterpTex = lightAccumInterpTexRef->Get()->Cast<Texture>();
+			auto attenuationInterpTex = attenuationInterpTexRef->Get()->Cast<Texture>();
 
-		//auto sceneTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(targetTex->Desc());
-		//targetTex->CopyTo(sceneTex, 0, 0, 0, 0, 0, 0, 0);
-		//auto tmpTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(targetTex->Desc());
-		UnWarpSamples(lightAccumInterpTex, attenuationInterpTex, sharedEnviroment->GetView()->GetRenderResult(), sharedEnviroment->GetView()->GetRenderTarget()->CreateTextureView());
+			auto targetTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
+			auto targetTex = targetTexRef->Get()->Cast<Texture>();
 
-		auto rawDepthStencil = sharedEnviroment->ParamByName(CommonRenderShareName::RawDepth())->As<SharedParam<Ptr<Texture>>>()->GetValue();
+			// Unwarp samples
+			UnWarpSamples(
+				float2(sunPosH.x(), sunPosH.y()),
+				lightAccumInterpTex,
+				attenuationInterpTex,
+				sampleLinesTex,
+				sampleDepthTex,
+				sceneTex,
+				sceneLinearClipDepth,
+				targetTex->GetRenderTargetView(0, 0, 1));
 
-		if (XMVectorGetZ(sunPosVXM) < 0.0f)
-			sunPosH.x = sunPosH.y = -100.0f;
-		RenderSun(sunPosH, sharedEnviroment->GetView()->GetCamera(), sharedEnviroment->GetView()->GetRenderTarget()->CreateTextureView(), rawDepthStencil);
+			// Render sun
+			if (XMVectorGetZ(sunPosVXM) < 0.0f)
+				sunPosH.x() = sunPosH.y() = -100.0f;
+			RenderSun(
+				float2(sunPosH.x(), sunPosH.y()),
+				view,
+				targetTex->GetRenderTargetView(0, 0, 1),
+				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
 
-		sharedEnviroment->GetView()->FlipRenderTarget();
+			view->GetViewRenderContext()->SetSharedResource("RenderResult", targetTexRef);
+		}
+		else
+		{
+			// Ray marching
+			PooledTextureRef lightAccumTexRef, attenuationTexRef;
+			DoRayMarching(
+				view,
+				nullptr,
+				sceneLinearClipDepth,
+				nullptr,
+				lightAccumTexRef,
+				attenuationTexRef);
+			auto lightAccumTex = lightAccumTexRef->Get()->Cast<Texture>();
+			auto attenuationTex = attenuationTexRef->Get()->Cast<Texture>();
 
-		sampleLinesTex->Release();
-		sampleCoordsTex->Release();
-		cameraDepthTex->Release();
-		depthStencilTex->Release();
-		interplationSourceTex->Release();
-		lightAccumTex->Release();
-		attenuationTex->Release();
-		lightAccumInterpTex->Release();
-		attenuationInterpTex->Release();
-		//sceneTex->Release();
+			// Accum ray marching results
+			AccumRayMarching(lightAccumTex, attenuationTex, sceneTex->GetRenderTargetView(0, 0, 1));
+
+			// Render sun
+			if (XMVectorGetZ(sunPosVXM) < 0.0f)
+				sunPosH.x() = sunPosH.y() = -100.0f;
+			RenderSun(
+				float2(sunPosH.x(), sunPosH.y()),
+				view,
+				sceneTex->GetRenderTargetView(0, 0, 1),
+				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+		}
+		
 	}
 
 	XMFLOAT3 AtmosphereRendering::ComputeSunRadianceAt(const XMFLOAT3 & sunDir, const XMFLOAT3 & sunRadiance, float height)
@@ -133,11 +189,32 @@ namespace ToyGE
 		texDesc.format = RENDER_FORMAT_R32G32B32A32_FLOAT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
+		//texDesc.type = TEXTURE_2D;
 
-		auto radianceTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
+		auto radianceTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		auto radianceTex = radianceTexRef->Get()->Cast<Texture>();
 
-		_fx->VariableByName("opticalDepthLUT")->AsShaderResource()->SetValue(_opticalDepthLUT->CreateTextureView());
+		auto ps = Shader::FindOrCreate<ComputeSunRadiancePS>();
+
+		ps->SetScalar("lightRadiance", sunRadiance);
+		ps->SetScalar("lightDirection", sunDir);
+		ps->SetScalar("computeSunRadianceHeight", height);
+
+		ps->SetScalar("attenuationR", _attenuationR);
+		ps->SetScalar("attenuationM", _attenuationM);
+
+		ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+
+		ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ radianceTex->GetRenderTargetView(0, 0, 1) });
+
+		/*_fx->VariableByName("opticalDepthLUT")->AsShaderResource()->SetValue(_opticalDepthLUT->CreateTextureView());
 
 		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&sunRadiance);
 		_fx->VariableByName("lightDirection")->AsScalar()->SetValue(&sunDir);
@@ -146,26 +223,28 @@ namespace ToyGE
 		_fx->VariableByName("attenuationR")->AsScalar()->SetValue(&_attenuationR);
 		_fx->VariableByName("attenuationM")->AsScalar()->SetValue(&_attenuationM);
 
-		_fx->VariableByName("atmosphereTopHeight")->AsScalar()->SetValue(&_atmosphereTopHeight);
+		_fx->VariableByName("atmosphereTopHeight")->AsScalar()->SetValue(&atmosphereTopHeight);*/
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		/*auto rc = Global::GetRenderEngine()->GetRenderContext();
 
 		rc->SetRenderTargets({ radianceTex->CreateTextureView() }, 0);
 
-		RenderQuad(_fx->TechniqueByName("ComputeSunRadiance"), 0, 0, 1, 1);
+		RenderQuad(_fx->TechniqueByName("ComputeSunRadiance"), 0, 0, 1, 1);*/
 
 		texDesc.bindFlag = 0;
 		texDesc.cpuAccess = CPU_ACCESS_READ;
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		auto resultTex = resultTexRef->Get()->Cast<Texture>();
+
 		radianceTex->CopyTo(resultTex, 0, 0, 0, 0, 0, 0, 0);
 
 		auto mapData = resultTex->Map(MAP_READ, 0, 0);
 		XMFLOAT3 result = *static_cast<XMFLOAT3*>(mapData.pData);
 		resultTex->UnMap();
 
-		radianceTex->Release();
+		/*radianceTex->Release();
 		resultTex->Release();
-
+*/
 		return result;
 	}
 
@@ -190,36 +269,52 @@ namespace ToyGE
 		texDesc.format = RENDER_FORMAT_R32G32_FLOAT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
 
-		_opticalDepthLUT = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
+		_opticalDepthLUT = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+		_opticalDepthLUT->SetDesc(texDesc);
+		_opticalDepthLUT->Init();
 
-		float4 screenSize = 
+		auto ps = Shader::FindOrCreate<InitOpticalDepthLUTPS>();
+
+		ps->SetScalar("texSize", _opticalDepthLUT->GetTexSize());
+		ps->SetScalar("earthRadius", _earthRadius);
+		ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+		ps->SetScalar("particleScaleHeight", float2(_particleScaleHeightR, _particleScaleHeightM));
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ _opticalDepthLUT->GetRenderTargetView(0, 0, 1) });
+
+		/*float4 screenSize = 
 			float4(
 			static_cast<float>(texDesc.width),
 			static_cast<float>(texDesc.height),
 			1.0f / static_cast<float>(texDesc.width),
-			1.0f / static_cast<float>(texDesc.height));
-		_fx->VariableByName("screenSize")->AsScalar()->SetValue(&screenSize);
+			1.0f / static_cast<float>(texDesc.height));*/
+		/*_fx->VariableByName("texSize")->AsScalar()->SetValue(&_op);
 
 		_fx->VariableByName("earthRadius")->AsScalar()->SetValue(&_earthRadius);
 		_fx->VariableByName("atmosphereTopHeight")->AsScalar()->SetValue(&_atmosphereTopHeight);
 		float2 particleScaleHeight = float2(_particleScaleHeightR, _particleScaleHeightM);
-		_fx->VariableByName("particleScaleHeight")->AsScalar()->SetValue(&particleScaleHeight);
+		_fx->VariableByName("particleScaleHeight")->AsScalar()->SetValue(&particleScaleHeight);*/
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		/*auto rc = Global::GetRenderEngine()->GetRenderContext();
 
 		rc->SetRenderTargets({ _opticalDepthLUT->CreateTextureView() }, 0);
 
-		RenderQuad(_fx->TechniqueByName("InitOpticalDepthLUT"), 0, 0, texDesc.width, texDesc.height);
+		RenderQuad(_fx->TechniqueByName("InitOpticalDepthLUT"), 0, 0, texDesc.width, texDesc.height);*/
 	}
 
 	void AtmosphereRendering::InitInScatteringLUT()
 	{
-		int32_t lutSizeX = 32;
-		int32_t lutSizeY = 128;
-		int32_t lutSizeZ = 32;
-		int32_t lutSizeW = 8;
+		_lutSize = int4(32, 128, 32, 8);
+		int32_t lutSizeX = _lutSize.x();
+		int32_t lutSizeY = _lutSize.y();
+		int32_t lutSizeZ = _lutSize.z();
+		int32_t lutSizeW = _lutSize.w();
 
 		TextureDesc texDesc;
 		texDesc.width = lutSizeX;
@@ -229,148 +324,362 @@ namespace ToyGE
 		texDesc.mipLevels = 1;
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
 		texDesc.cpuAccess = 0;
-		texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.format = RENDER_FORMAT_R32G32B32A32_FLOAT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_3D;
+		//texDesc.type = TEXTURE_3D;
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
 		float2 wqTexelSize = 1.0f / float2(static_cast<float>(lutSizeZ), static_cast<float>(lutSizeW));
 
-		float4 lutSize = float4(static_cast<float>(lutSizeX), static_cast<float>(lutSizeY), static_cast<float>(lutSizeZ), static_cast<float>(lutSizeW));
-		_fx->VariableByName("lutSize")->AsScalar()->SetValue(&lutSize);
+		//float4 lutSize = float4(static_cast<float>(lutSizeX), static_cast<float>(lutSizeY), static_cast<float>(lutSizeZ), static_cast<float>(lutSizeW));
+		//_fx->VariableByName("lutSize")->AsScalar()->SetValue(&lutSize);
 
 		float3 earthCenter = float3(0.0f, -_earthRadius, 0.0f);
-		_fx->VariableByName("earthCenter")->AsScalar()->SetValue(&earthCenter);
-		_fx->VariableByName("scatteringR")->AsScalar()->SetValue(&_scatteringR);
-		_fx->VariableByName("scatteringM")->AsScalar()->SetValue(&_scatteringM);
-		_fx->VariableByName("attenuationR")->AsScalar()->SetValue(&_attenuationR);
-		_fx->VariableByName("attenuationM")->AsScalar()->SetValue(&_attenuationM);
-		_fx->VariableByName("phaseG_M")->AsScalar()->SetValue(&_phaseG_M);
+		//_fx->VariableByName("earthCenter")->AsScalar()->SetValue(&earthCenter);
+		//_fx->VariableByName("scatteringR")->AsScalar()->SetValue(&_scatteringR);
+		//_fx->VariableByName("scatteringM")->AsScalar()->SetValue(&_scatteringM);
+		//_fx->VariableByName("attenuationR")->AsScalar()->SetValue(&_attenuationR);
+		//_fx->VariableByName("attenuationM")->AsScalar()->SetValue(&_attenuationM);
+		//_fx->VariableByName("phaseG_M")->AsScalar()->SetValue(&_phaseG_M);
 
-		_fx->VariableByName("earthRadius")->AsScalar()->SetValue(&_earthRadius);
-		_fx->VariableByName("atmosphereTopHeight")->AsScalar()->SetValue(&_atmosphereTopHeight);
+		//_fx->VariableByName("earthRadius")->AsScalar()->SetValue(&_earthRadius);
+		//_fx->VariableByName("atmosphereTopHeight")->AsScalar()->SetValue(&_atmosphereTopHeight);
 		float2 particleScaleHeight = float2(_particleScaleHeightR, _particleScaleHeightM);
-		_fx->VariableByName("particleScaleHeight")->AsScalar()->SetValue(&particleScaleHeight);
+		//_fx->VariableByName("particleScaleHeight")->AsScalar()->SetValue(&particleScaleHeight);
 
-		_fx->VariableByName("opticalDepthLUT")->AsShaderResource()->SetValue(_opticalDepthLUT->CreateTextureView());
+		//_fx->VariableByName("opticalDepthLUT")->AsShaderResource()->SetValue(_opticalDepthLUT->CreateTextureView());
 
-		//Single Scattering
-		auto singleScatteringR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto singleScatteringM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		for (int depth = 0; depth < texDesc.depth; ++depth)
+		// Single Scattering
+		auto singleScatteringR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		singleScatteringR->SetDesc(texDesc);
+		singleScatteringR->Init();
+		auto singleScatteringM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		singleScatteringM->SetDesc(texDesc);
+		singleScatteringM->Init();
 		{
-			float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
-			float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
-			float2 wqCoord = float2(wCoord, qCoord);
-			_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+			auto ps = Shader::FindOrCreate<PreComputeSingleScatteringPS>();
+			for (int depth = 0; depth < texDesc.depth; ++depth)
+			{
+				ps->SetScalar("lutSize", float4((float)lutSizeX, (float)lutSizeY, (float)lutSizeZ, (float)lutSizeW));
+				ps->SetScalar("earthCenter", earthCenter);
+				ps->SetScalar("scatteringR", _scatteringR);
+				ps->SetScalar("scatteringM", _scatteringM);
+				ps->SetScalar("attenuationR", _attenuationR);
+				ps->SetScalar("attenuationM", _attenuationM);
+				ps->SetScalar("phaseG_M", _phaseG_M);
 
-			rc->SetRenderTargets({ singleScatteringR->CreateTextureView(0, 1, depth, 1), singleScatteringM->CreateTextureView(0, 1, depth, 1) }, 0);
+				ps->SetScalar("earthRadius", _earthRadius);
+				ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+				ps->SetScalar("particleScaleHeight", particleScaleHeight);
 
-			RenderQuad(_fx->TechniqueByName("PreComputeSingleScattering"), 0, 0, lutSizeX, lutSizeY);
+				float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x() + 0.5f * wqTexelSize.x();
+				float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y() + 0.5f * wqTexelSize.y();
+				float2 wqCoord = float2(wCoord, qCoord);
+				ps->SetScalar("wqCoord", wqCoord);
+				//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+
+				ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
+
+				ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+				ps->Flush();
+
+				DrawQuad({
+					singleScatteringR->GetRenderTargetView(0, depth, 1),
+					singleScatteringM->GetRenderTargetView(0, depth, 1)
+				});
+
+				/*rc->SetRenderTargets({ singleScatteringR->CreateTextureView(0, 1, depth, 1), singleScatteringM->CreateTextureView(0, 1, depth, 1) }, 0);
+
+				RenderQuad(_fx->TechniqueByName("PreComputeSingleScattering"), 0, 0, lutSizeX, lutSizeY);*/
+			}
 		}
 
-		//Multi Scattering
+		// Multi Scattering
 		texDesc.format = RENDER_FORMAT_R32G32B32A32_FLOAT;
-		auto radianceR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto radianceM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto scatteringOrderR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto scatteringOrderM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto scatteringAccumR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
-		auto scatteringAccumM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(texDesc);
+		auto radianceR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		radianceR->SetDesc(texDesc);
+		radianceR->Init();
+		auto radianceM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		radianceM->SetDesc(texDesc);
+		radianceM->Init();
+		auto scatteringOrderR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		scatteringOrderR->SetDesc(texDesc);
+		scatteringOrderR->Init();
+		auto scatteringOrderM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		scatteringOrderM->SetDesc(texDesc);
+		scatteringOrderM->Init();
+		auto scatteringAccumR = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		scatteringAccumR->SetDesc(texDesc);
+		scatteringAccumR->Init();
+		auto scatteringAccumM = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_3D);
+		scatteringAccumM->SetDesc(texDesc);
+		scatteringAccumM->Init();
 
 		for (int depth = 0; depth < texDesc.depth; ++depth)
 		{
-			rc->ClearRenderTargets(
+			rc->ClearRenderTarget(
 			{ 
-				scatteringAccumR->CreateTextureView(0, 1, depth, 1),
-				scatteringAccumM->CreateTextureView(0, 1, depth, 1) }, 0.0f);
+				scatteringAccumR->GetRenderTargetView(0, depth, 1),
+				scatteringAccumM->GetRenderTargetView(0, depth, 1) 
+			}, 0.0f);
 		}
 
-		int32_t numOrders = 4;
+		int32_t numOrders = 5;
 		for (int32_t orderIndex = 1; orderIndex < numOrders; ++orderIndex)
 		{
-			for (int depth = 0; depth < texDesc.depth; ++depth)
 			{
-				float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
-				float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
-				float2 wqCoord = float2(wCoord, qCoord);
-				_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
-
-				if (orderIndex == 1)
+				auto ps = Shader::FindOrCreate<ComputeOutRadiancePS>();
+				for (int depth = 0; depth < texDesc.depth; ++depth)
 				{
-					_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(singleScatteringR->CreateTextureView(0, 1, 0, 0));
-					_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(singleScatteringM->CreateTextureView(0, 1, 0, 0));
-				}
-				else
-				{
-					_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringAccumR->CreateTextureView(0, 1, 0, 0));
-					_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringAccumM->CreateTextureView(0, 1, 0, 0));
-				}
+					ps->SetScalar("lutSize", float4((float)lutSizeX, (float)lutSizeY, (float)lutSizeZ, (float)lutSizeW));
+					ps->SetScalar("earthCenter", earthCenter);
+					ps->SetScalar("scatteringR", _scatteringR);
+					ps->SetScalar("scatteringM", _scatteringM);
+					ps->SetScalar("attenuationR", _attenuationR);
+					ps->SetScalar("attenuationM", _attenuationM);
+					ps->SetScalar("phaseG_M", _phaseG_M);
 
-				rc->SetRenderTargets({ radianceR->CreateTextureView(0, 1, depth, 1), radianceM->CreateTextureView(0, 1, depth, 1) }, 0);
+					ps->SetScalar("earthRadius", _earthRadius);
+					ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+					ps->SetScalar("particleScaleHeight", particleScaleHeight);
 
-				RenderQuad(_fx->TechniqueByName("ComputeOutRadiance"), 0, 0, lutSizeX, lutSizeY);
+					float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x() + 0.5f * wqTexelSize.x();
+					float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y() + 0.5f * wqTexelSize.y();
+					float2 wqCoord = float2(wCoord, qCoord);
+					ps->SetScalar("wqCoord", wqCoord);
+					//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+					ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
+
+					if (orderIndex == 1)
+					{
+						ps->SetSRV("inScatteringLUTR", singleScatteringR->GetShaderResourceView());
+						ps->SetSRV("inScatteringLUTM", singleScatteringM->GetShaderResourceView());
+
+						/*_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(singleScatteringR->CreateTextureView(0, 1, 0, 0));
+						_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(singleScatteringM->CreateTextureView(0, 1, 0, 0));*/
+					}
+					else
+					{
+						ps->SetSRV("inScatteringLUTR", scatteringOrderR->GetShaderResourceView());
+						ps->SetSRV("inScatteringLUTM", scatteringOrderM->GetShaderResourceView());
+						/*_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringAccumR->CreateTextureView(0, 1, 0, 0));
+						_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringAccumM->CreateTextureView(0, 1, 0, 0));*/
+					}
+
+					ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+					ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+					ps->Flush();
+
+					DrawQuad({
+						radianceR->GetRenderTargetView(0, depth, 1),
+						radianceM->GetRenderTargetView(0, depth, 1)
+					});
+
+					/*rc->SetRenderTargets({ radianceR->CreateTextureView(0, 1, depth, 1), radianceM->CreateTextureView(0, 1, depth, 1) }, 0);
+
+					RenderQuad(_fx->TechniqueByName("ComputeOutRadiance"), 0, 0, lutSizeX, lutSizeY);*/
+				}
 			}
 
-			for (int depth = 0; depth < texDesc.depth; ++depth)
 			{
-				float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
-				float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
-				float2 wqCoord = float2(wCoord, qCoord);
-				_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+				auto ps = Shader::FindOrCreate<PreComputeScatteringOrderPS>();
+				for (int depth = 0; depth < texDesc.depth; ++depth)
+				{
+					ps->SetScalar("lutSize", float4((float)lutSizeX, (float)lutSizeY, (float)lutSizeZ, (float)lutSizeW));
+					ps->SetScalar("earthCenter", earthCenter);
+					ps->SetScalar("scatteringR", _scatteringR);
+					ps->SetScalar("scatteringM", _scatteringM);
+					ps->SetScalar("attenuationR", _attenuationR);
+					ps->SetScalar("attenuationM", _attenuationM);
+					ps->SetScalar("phaseG_M", _phaseG_M);
 
-				_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(radianceR->CreateTextureView(0, 1, 0, 0));
-				_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(radianceM->CreateTextureView(0, 1, 0, 0));
+					ps->SetScalar("earthRadius", _earthRadius);
+					ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+					ps->SetScalar("particleScaleHeight", particleScaleHeight);
 
-				rc->SetRenderTargets({ scatteringOrderR->CreateTextureView(0, 1, depth, 1), scatteringOrderM->CreateTextureView(0, 1, depth, 1) }, 0);
+					float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x() + 0.5f * wqTexelSize.x();
+					float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y() + 0.5f * wqTexelSize.y();
+					float2 wqCoord = float2(wCoord, qCoord);
+					ps->SetScalar("wqCoord", wqCoord);
+					//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+					ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
 
-				RenderQuad(_fx->TechniqueByName("PreComputeScatteringOrder"), 0, 0, lutSizeX, lutSizeY);
+					/*float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
+					float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
+					float2 wqCoord = float2(wCoord, qCoord);
+					_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);*/
+
+					ps->SetSRV("inScatteringLUTR", radianceR->GetShaderResourceView());
+					ps->SetSRV("inScatteringLUTM", radianceM->GetShaderResourceView());
+
+					ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+					ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+					ps->Flush();
+
+					DrawQuad({
+						scatteringOrderR->GetRenderTargetView(0, depth, 1),
+						scatteringOrderM->GetRenderTargetView(0, depth, 1)
+					});
+
+					/*_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(radianceR->CreateTextureView(0, 1, 0, 0));
+					_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(radianceM->CreateTextureView(0, 1, 0, 0));
+
+					rc->SetRenderTargets({ scatteringOrderR->CreateTextureView(0, 1, depth, 1), scatteringOrderM->CreateTextureView(0, 1, depth, 1) }, 0);
+
+					RenderQuad(_fx->TechniqueByName("PreComputeScatteringOrder"), 0, 0, lutSizeX, lutSizeY);*/
+				}
 			}
 
+			{
+				auto ps = Shader::FindOrCreate<AccumScatteringPS>();
+				for (int depth = 0; depth < texDesc.depth; ++depth)
+				{
+					float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x() + 0.5f * wqTexelSize.x();
+					float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y() + 0.5f * wqTexelSize.y();
+					float2 wqCoord = float2(wCoord, qCoord);
+					ps->SetScalar("wqCoord", wqCoord);
+					//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+
+					//uint32_t depthSlice = static_cast<uint32_t>(depth);
+					ps->SetScalar("depthSlice", depth);
+					//_fx->VariableByName("depthSlice")->AsScalar()->SetValue(&depthSlice);
+
+					ps->SetSRV("inScatteringLUTR", scatteringOrderR->GetShaderResourceView());
+					ps->SetSRV("inScatteringLUTM", scatteringOrderM->GetShaderResourceView());
+
+					ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+					ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+					ps->Flush();
+
+					rc->SetBlendState(BlendStateTemplate<false, false,
+						true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD,
+						BLEND_PARAM_ONE, BLEND_PARAM_ZERO, BLEND_OP_ADD, COLOR_WRITE_ALL,
+						true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD,
+						BLEND_PARAM_ONE, BLEND_PARAM_ZERO, BLEND_OP_ADD, COLOR_WRITE_ALL>::Get());
+
+					DrawQuad({
+						scatteringAccumR->GetRenderTargetView(0, depth, 1),
+						scatteringAccumM->GetRenderTargetView(0, depth, 1)
+					});
+
+					rc->SetBlendState(nullptr);
+
+					/*_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringOrderR->CreateTextureView(0, 1, 0, 0));
+					_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringOrderM->CreateTextureView(0, 1, 0, 0));
+
+					rc->SetRenderTargets({ scatteringAccumR->CreateTextureView(0, 1, depth, 1), scatteringAccumM->CreateTextureView(0, 1, depth, 1) }, 0);
+
+					RenderQuad(_fx->TechniqueByName("AddScattering"), 0, 0, lutSizeX, lutSizeY);*/
+				}
+			}
+		}
+
+		{
+			auto ps = Shader::FindOrCreate<AccumScatteringPS>();
 			for (int depth = 0; depth < texDesc.depth; ++depth)
 			{
-				float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
-				float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
+				float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x() + 0.5f * wqTexelSize.x();
+				float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y() + 0.5f * wqTexelSize.y();
 				float2 wqCoord = float2(wCoord, qCoord);
-				_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+				ps->SetScalar("wqCoord", wqCoord);
+				//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
 
-				uint32_t depthSlice = static_cast<uint32_t>(depth);
-				_fx->VariableByName("depthSlice")->AsScalar()->SetValue(&depthSlice);
+				//uint32_t depthSlice = static_cast<uint32_t>(depth);
+				ps->SetScalar("depthSlice", depth);
+				//_fx->VariableByName("depthSlice")->AsScalar()->SetValue(&depthSlice);
 
-				_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringOrderR->CreateTextureView(0, 1, 0, 0));
+				ps->SetSRV("inScatteringLUTR", scatteringAccumR->GetShaderResourceView());
+				ps->SetSRV("inScatteringLUTM", scatteringAccumM->GetShaderResourceView());
+
+				ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+				ps->Flush();
+
+				rc->SetBlendState(BlendStateTemplate<false, false,
+					true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD,
+					BLEND_PARAM_ONE, BLEND_PARAM_ZERO, BLEND_OP_ADD, 0xff,
+					true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD,
+					BLEND_PARAM_ONE, BLEND_PARAM_ZERO, BLEND_OP_ADD, 0xff>::Get());
+
+				DrawQuad({
+					singleScatteringR->GetRenderTargetView(0, depth, 1),
+					singleScatteringM->GetRenderTargetView(0, depth, 1)
+				});
+
+				rc->SetBlendState(nullptr);
+
+				/*_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringOrderR->CreateTextureView(0, 1, 0, 0));
 				_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringOrderM->CreateTextureView(0, 1, 0, 0));
 
 				rc->SetRenderTargets({ scatteringAccumR->CreateTextureView(0, 1, depth, 1), scatteringAccumM->CreateTextureView(0, 1, depth, 1) }, 0);
 
-				RenderQuad(_fx->TechniqueByName("AddScattering"), 0, 0, lutSizeX, lutSizeY);
+				RenderQuad(_fx->TechniqueByName("AddScattering"), 0, 0, lutSizeX, lutSizeY);*/
 			}
 		}
 
-		for (int depth = 0; depth < texDesc.depth; ++depth)
-		{
-			float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
-			float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
-			float2 wqCoord = float2(wCoord, qCoord);
-			_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
+		//{
+		//	auto ps = Shader::FindOrCreate<AccumSingleScatteringPS>();
+		//	for (int depth = 0; depth < texDesc.depth; ++depth)
+		//	{
+		//		ps->SetScalar("lutSize", float4((float)lutSizeX, (float)lutSizeY, (float)lutSizeZ, (float)lutSizeW));
+		//		ps->SetScalar("earthCenter", earthCenter);
+		//		ps->SetScalar("scatteringR", _scatteringR);
+		//		ps->SetScalar("scatteringM", _scatteringM);
+		//		ps->SetScalar("attenuationR", _attenuationR);
+		//		ps->SetScalar("attenuationM", _attenuationM);
+		//		ps->SetScalar("phaseG_M", _phaseG_M);
 
-			uint32_t depthSlice = static_cast<uint32_t>(depth);
-			_fx->VariableByName("depthSlice")->AsScalar()->SetValue(&depthSlice);
+		//		ps->SetScalar("earthRadius", _earthRadius);
+		//		ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+		//		ps->SetScalar("particleScaleHeight", particleScaleHeight);
 
-			_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringAccumR->CreateTextureView(0, 1, 0, 0));
-			_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringAccumM->CreateTextureView(0, 1, 0, 0));
+		//		float wCoord = static_cast<float>(depth % lutSizeZ) * wqTexelSize.x + 0.5f * wqTexelSize.x;
+		//		float qCoord = static_cast<float>(depth / lutSizeZ) * wqTexelSize.y + 0.5f * wqTexelSize.y;
+		//		float2 wqCoord = float2(wCoord, qCoord);
+		//		ps->SetScalar("wqCoord", wqCoord);
+		//		//_fx->VariableByName("wqCoord")->AsScalar()->SetValue(&wqCoord);
 
-			rc->SetRenderTargets({ singleScatteringR->CreateTextureView(0, 1, depth, 1) }, 0);
+		//		//uint32_t depthSlice = static_cast<uint32_t>(depth);
+		//		ps->SetScalar("depthSlice", depth);
+		//		//_fx->VariableByName("depthSlice")->AsScalar()->SetValue(&depthSlice);
 
-			RenderQuad(_fx->TechniqueByName("AddSingleScattering"), 0, 0, lutSizeX, lutSizeY);
-		}
+		//		ps->SetSRV("inScatteringLUTR", scatteringAccumR->GetShaderResourceView());
+		//		ps->SetSRV("inScatteringLUTM", scatteringAccumM->GetShaderResourceView());
+
+		//		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		//		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		//		ps->Flush();
+
+		//		DrawQuad({
+		//			singleScatteringR->GetRenderTargetView(0, depth, 1),
+		//			singleScatteringM->GetRenderTargetView(0, depth, 1),
+		//		});
+
+		//		//_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(scatteringAccumR->CreateTextureView(0, 1, 0, 0));
+		//		//_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(scatteringAccumM->CreateTextureView(0, 1, 0, 0));
+
+		//		//rc->SetRenderTargets({ singleScatteringR->CreateTextureView(0, 1, depth, 1) }, 0);
+
+		//		//RenderQuad(_fx->TechniqueByName("AddSingleScattering"), 0, 0, lutSizeX, lutSizeY);
+		//	}
+		//}
 
 		_inScatteringLUTR = singleScatteringR;
 		_inScatteringLUTM = singleScatteringM;
 	}
 
-	Ptr<Texture> AtmosphereRendering::InitSampleLines(const float2 & renderTargetSize, const Ptr<Camera> & camera, const float2 & lightPosH)
+	PooledTextureRef AtmosphereRendering::InitSampleLines(
+		const float4 & viewSize,
+		const float2 & lightClipPos)
 	{
 		TextureDesc texDesc;
 		texDesc.width = _numSampleLines;
@@ -382,36 +691,37 @@ namespace ToyGE
 		texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
 
-		auto resultTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		std::map<String, String> macros;
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
 
-		float4 screenSize = float4(renderTargetSize.x, renderTargetSize.y, 1.0f / renderTargetSize.x, 1.0f / renderTargetSize.y);
-		_fx->VariableByName("screenSize")->AsScalar()->SetValue(&screenSize);
+		auto ps = Shader::FindOrCreate<InitSampleLinesPS>(macros);
 
-		
-		_fx->VariableByName("lightPosH")->AsScalar()->SetValue(&lightPosH);
+		ps->SetScalar("texSize", viewSize);
+		ps->SetScalar("lightClipPos", lightClipPos);
 
-		bool bLightInScreen = 
-				std::abs(lightPosH.x) <= 1.0f - screenSize.z
-			&&	std::abs(lightPosH.y) <= 1.0f - screenSize.w;
-		uint32_t bLightInScreenU = bLightInScreen;
-		_fx->VariableByName("bLightInScreen")->AsScalar()->SetValue(&bLightInScreenU);
+		uint32_t bLightInScreen = 
+				std::abs(lightClipPos.x()) <= 1.0f - viewSize.z()
+			&&	std::abs(lightClipPos.y()) <= 1.0f - viewSize.w();
+		ps->SetScalar("bLightInScreen", bLightInScreen);
 
-		rc->SetRenderTargets({ resultTex->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("InitSampleLines"), 0, 0, texDesc.width, texDesc.height);
+		ps->Flush();
 
-		return resultTex;
+		DrawQuad({ resultTexRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+
+		return resultTexRef;
 	}
 
 	void AtmosphereRendering::InitSampleCoordsTex(
+		const float4 & viewSize,
 		const Ptr<Texture> & sampleLinesTex,
-		const Ptr<Texture> & linearDepthTex,
-		Ptr<Texture> & outSampleCoordTex,
-		Ptr<Texture> & outCameraDepthTex,
-		Ptr<Texture> & outDepthStencilTex)
+		const Ptr<Texture> & sceneLinearDepthTex,
+		PooledTextureRef & outSampleCoordTex,
+		PooledTextureRef & outSampleDepthTex,
+		PooledTextureRef & outSampleMaskDS)
 	{
 		//Init textures
 		TextureDesc texDesc;
@@ -424,45 +734,67 @@ namespace ToyGE
 		texDesc.cpuAccess = 0;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
 
 		texDesc.format = RENDER_FORMAT_R16G16_FLOAT;
-		outSampleCoordTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		outSampleCoordTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
 		texDesc.format = RENDER_FORMAT_R32_FLOAT;
-		outCameraDepthTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		outSampleDepthTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
 		texDesc.format = RENDER_FORMAT_D24_UNORM_S8_UINT;
 		texDesc.bindFlag = TEXTURE_BIND_DEPTH_STENCIL;
-		outDepthStencilTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		outSampleMaskDS = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+		std::map<String, String> macros;
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+
+		auto ps = Shader::FindOrCreate<InitSampleCoordsPS>(macros);
+
+		ps->SetScalar("texSize", viewSize);
+
+		ps->SetSRV("sampleLinesTex", sampleLinesTex->GetShaderResourceView());
+		ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		rc->ClearRenderTarget({
+			outSampleCoordTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+			outSampleDepthTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1)
+		}, -1e+30f);
 
-		_fx->VariableByName("sampleLinesTex")->AsShaderResource()->SetValue(sampleLinesTex->CreateTextureView());
-		_fx->VariableByName("linearDepthTex")->AsShaderResource()->SetValue(linearDepthTex->CreateTextureView());
+		rc->ClearDepthStencil(outSampleMaskDS->Get()->Cast<Texture>()->GetDepthStencilView(0, 0, 1), 1.0f, 0);
 
-		rc->SetRenderTargets({ outSampleCoordTex->CreateTextureView(), outCameraDepthTex->CreateTextureView() }, 0);
-		float invalidValue = -1e+30f;
-		rc->ClearRenderTargets({ invalidValue, invalidValue, invalidValue, invalidValue });
+		rc->SetDepthStencilState(
+			DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true, 0xff, 0xff,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_INCR,
+			COMPARISON_ALWAYS>::Get());
 
-		rc->ClearDepthStencil({ outDepthStencilTex->CreateTextureView() }, 1.0f, 0);
-
-		float4 screenSize = float4(1280.0f, 720.0f, 1.0f / 1280.0f, 1.0f / 720.0f);
-		_fx->VariableByName("screenSize")->AsScalar()->SetValue(&screenSize);
-
-		RenderQuad(
-			_fx->TechniqueByName("InitSampleCoords"),
-			0, 0,
-			_maxSamplesPerLine, _numSampleLines,
+		DrawQuad({
+			outSampleCoordTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+			outSampleDepthTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) },
+			0.0f, 0.0f, 0.0f, 0.0f,
 			0.0f, 0.0f, 1.0f, 1.0f,
-			outDepthStencilTex->CreateTextureView());
+			outSampleMaskDS->Get()->Cast<Texture>()->GetDepthStencilView(0, 0, 1));
+
+		rc->SetDepthStencilState(nullptr);
 	}
 
-	Ptr<Texture> AtmosphereRendering::RefineSamples(
+	PooledTextureRef AtmosphereRendering::RefineSamples(
+		const float4 & viewSize,
+		float depthBreakThreshold,
 		const Ptr<Texture> & sampleCoordsTex,
-		const Ptr<Texture> & cameraDepthTex,
-		const Ptr<Camera> & camera,
-		const float2 & lightPosH)
+		const Ptr<Texture> & sampleDepthTex)
 	{
 		TextureDesc texDesc;
 		texDesc.width = _maxSamplesPerLine;
@@ -474,59 +806,83 @@ namespace ToyGE
 		texDesc.format = RENDER_FORMAT_R16G16_UINT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
 
-		auto interpolationSourceTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto interpolationSourceTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+		std::map<String, String> macros;
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+		macros["INITIAL_SAMPLE_STEP"] = std::to_string(_initalSampleStep);
+
+		auto cs = Shader::FindOrCreate<RefineSamplesCS>(macros);
+		
+		cs->SetScalar("depthBreakThreshold", depthBreakThreshold);
+		cs->SetScalar("texSize", viewSize);
+
+		cs->SetUAV("interpolationSourceTex", interpolationSourceTex->Get()->Cast<Texture>()->GetUnorderedAccessView(0, 0, 1));
+		cs->SetSRV("sampleCoordsTex", sampleCoordsTex->GetShaderResourceView());
+		cs->SetSRV("sampleDepthTex", sampleDepthTex->GetShaderResourceView());
+
+		cs->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		//_refineFX->VariableByName("lightPosH")->AsScalar()->SetValue(&lightPosH);
-		//uint32_t sampleDensityFactor = 2;
-		//_refineFX->VariableByName("sampleDensityFactor")->AsScalar()->SetValue(&sampleDensityFactor);
-
-		_refineFX->VariableByName("interpolationSourceTex")->AsUAV()->SetValue(interpolationSourceTex->CreateTextureView());
-		_refineFX->VariableByName("sampleCoordsTex")->AsShaderResource()->SetValue(sampleCoordsTex->CreateTextureView());
-		_refineFX->VariableByName("cameraDepthTex")->AsShaderResource()->SetValue(cameraDepthTex->CreateTextureView());
-
-		float depthBreakThreshold = 0.5f / (camera->Far() - camera->Near());
-		_refineFX->VariableByName("depthBreakThreshold")->AsScalar()->SetValue(&depthBreakThreshold, sizeof(depthBreakThreshold));
-
-		rc->SetRenderTargets({}, 0);
-
-		_refineFX->TechniqueByName("RefineSamples")->PassByIndex(0)->Bind();
 		rc->Compute(_maxSamplesPerLine / std::max<int32_t>(_initalSampleStep, 32), _numSampleLines, 1);
-		_refineFX->TechniqueByName("RefineSamples")->PassByIndex(0)->UnBind();
+
+		rc->ResetShader(SHADER_CS);
 
 		return interpolationSourceTex;
 	}
 
-	void AtmosphereRendering::MarkRayMarchingSamples(const Ptr<Texture> & interpolationSourceTex, const Ptr<Texture> & depthStencilTex)
+	void AtmosphereRendering::MarkRayMarchingSamples(
+		const Ptr<Texture> & interpolationSourceTex, 
+		const Ptr<Texture> & sampleMaskDS)
 	{
+		auto ps = Shader::FindOrCreate<MarkRayMarchingSamplesPS>();
+
+		ps->SetSRV("interpolationSourceTex", interpolationSourceTex->GetShaderResourceView());
+
+		ps->Flush();
+
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		rc->SetDepthStencilState(
+			DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true, 0xff, 0xff,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_INCR,
+			COMPARISON_EQUAL>::Get(), 1);
 
-		_fx->VariableByName("interpolationSourceTex")->AsShaderResource()->SetValue(interpolationSourceTex->CreateTextureView());
-
-		rc->SetRenderTargets({}, 0);
-		
-		RenderQuad(
-			_fx->TechniqueByName("MarkRayMarchingSamples"),
-			0, 0,
-			_maxSamplesPerLine, _numSampleLines,
+		DrawQuad({},
+			0.0f, 0.0f, 0.0f, 0.0f,
 			0.0f, 0.0f, 1.0f, 1.0f,
-			depthStencilTex->CreateTextureView());
+			sampleMaskDS->GetDepthStencilView(0, 0, 1));
+
+		rc->SetDepthStencilState(nullptr);
 	}
 
 	void AtmosphereRendering::DoRayMarching(
+		const Ptr<RenderView> & view,
 		const Ptr<Texture> & sampleCoordsTex,
-		const Ptr<Texture> & cameraDepthTex,
-		const Ptr<Texture> & depthStencilTex,
-		const Ptr<Camera> & camera,
-		Ptr<Texture> & outLightAccumTex,
-		Ptr<Texture> & outAttenuationTex)
+		const Ptr<Texture> & depthTex,
+		const Ptr<Texture> & sampleMaskDS,
+		PooledTextureRef & outLightAccumTex,
+		PooledTextureRef & outAttenuationTex)
 	{
 		TextureDesc texDesc;
-		texDesc.width = _maxSamplesPerLine;
-		texDesc.height = _numSampleLines;
+		if (bEpipolarSampling)
+		{
+			texDesc.width = _maxSamplesPerLine;
+			texDesc.height = _numSampleLines;
+		}
+		else
+		{
+			texDesc.width = (int32_t)view->GetViewParams().viewSize.x();
+			texDesc.height = (int32_t)view->GetViewParams().viewSize.y();
+		}
 		texDesc.arraySize = 1;
 		texDesc.mipLevels = 1;
 		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
@@ -534,146 +890,252 @@ namespace ToyGE
 		texDesc.format = RENDER_FORMAT_R11G11B10_FLOAT;
 		texDesc.sampleCount = 1;
 		texDesc.sampleQuality = 0;
-		texDesc.type = TEXTURE_2D;
 
-		auto lightAccumTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		auto attenuationTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		auto lightAccumTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		auto attenuationTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		_fx->VariableByName("sampleCoordsTex")->AsShaderResource()->SetValue(sampleCoordsTex->CreateTextureView());
-		_fx->VariableByName("cameraDepthTex")->AsShaderResource()->SetValue(cameraDepthTex->CreateTextureView());
-		_fx->VariableByName("opticalDepthLUT")->AsShaderResource()->SetValue(_opticalDepthLUT->CreateTextureView());
-		_fx->VariableByName("inScatteringLUTR")->AsShaderResource()->SetValue(_inScatteringLUTR->CreateTextureView(0, 1, 0, 0));
-		_fx->VariableByName("inScatteringLUTM")->AsShaderResource()->SetValue(_inScatteringLUTM->CreateTextureView(0, 1, 0, 0));
+		std::map<String, String> macros;
+		if (bEpipolarSampling)
+			macros["EPIPOLAR_SAMPLING"] = "";
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
 
-		_fx->VariableByName("proj")->AsScalar()->SetValue(&camera->ProjMatrix());
-		_fx->VariableByName("view")->AsScalar()->SetValue(&camera->ViewMatrix());
-		auto viewXM = XMLoadFloat4x4(&camera->ViewMatrix());
-		auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
-		XMFLOAT4X4 invView;
-		XMStoreFloat4x4(&invView, invViewXM);
-		_fx->VariableByName("invView")->AsScalar()->SetValue(&invView);
+		auto ps = Shader::FindOrCreate<RayMarchingPS>(macros);
 
-		_fx->VariableByName("lightRadiance")->AsScalar()->SetValue(&_sunRadiance);
-		_fx->VariableByName("lightDirection")->AsScalar()->SetValue(&_sunDirection);
-		_fx->VariableByName("cameraPos")->AsScalar()->SetValue(&camera->Pos());
-		float2 cameraNearFar = float2(camera->Near(), camera->Far());
-		_fx->VariableByName("cameraNearFar")->AsScalar()->SetValue(&cameraNearFar);
+		view->BindShaderParams(ps);
 
-		float3 earthCenter = float3(0.0f, -_earthRadius, 0.0f);
-		_fx->VariableByName("earthCenter")->AsScalar()->SetValue(&earthCenter);
-		_fx->VariableByName("scatteringR")->AsScalar()->SetValue(&_scatteringR);
-		_fx->VariableByName("scatteringM")->AsScalar()->SetValue(&_scatteringM);
-		_fx->VariableByName("attenuationR")->AsScalar()->SetValue(&_attenuationR);
-		_fx->VariableByName("attenuationM")->AsScalar()->SetValue(&_attenuationM);
-		_fx->VariableByName("phaseG_M")->AsScalar()->SetValue(&_phaseG_M);
+		ps->SetScalar("lightRadiance", _sunRadiance);
+		ps->SetScalar("lightDirection", _sunDirection);
 
-		//int4 shadowConfig = 0;
-		//if (_sun->IsCastShadow())
-		//{
-		//	shadowConfig.x = 1;
-		//	shadowConfig.y = _sun->GetShadowTechnique()->RenderTechnique()->Type();
-		//	_sun->GetShadowTechnique()->BindShadowRenderParams(_fx, _sun, camera);
-		//}
-		//_fx->VariableByName("shadowConfig")->AsScalar()->SetValue(&shadowConfig, sizeof(shadowConfig));
+		ps->SetScalar("lutSize", float4((float)_lutSize.x(), (float)_lutSize.y(), (float)_lutSize.z(), (float)_lutSize.w()));
 
-		auto rc = Global::GetRenderEngine()->GetRenderContext();
-		
-		rc->SetRenderTargets({ lightAccumTex->CreateTextureView(), attenuationTex->CreateTextureView() }, 0);
+		ps->SetScalar("earthCenter", float3(0.0f, -_earthRadius, 0.0f));
+		ps->SetScalar("earthRadius", _earthRadius);
+		ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
 
-		RenderQuad(
-			_fx->TechniqueByName("RayMarching"),
-			0, 0,
-			texDesc.width, texDesc.height,
-			//1280, 720);
-			0.0f, 0.0f, 1.0f, 1.0f,
-			depthStencilTex->CreateTextureView());
+		ps->SetScalar("particleScaleHeight", float2(_particleScaleHeightR, _particleScaleHeightM));
+		ps->SetScalar("scatteringR", _scatteringR);
+		ps->SetScalar("scatteringM", _scatteringM);
+		ps->SetScalar("attenuationR", _attenuationR);
+		ps->SetScalar("attenuationM", _attenuationM);
+		ps->SetScalar("phaseG_M", _phaseG_M);
+
+		if (bEpipolarSampling)
+		{
+			ps->SetSRV("sampleCoordsTex", sampleCoordsTex->GetShaderResourceView());
+			ps->SetSRV("sampleDepthTex", depthTex->GetShaderResourceView());
+		}
+		else
+		{
+			ps->SetSRV("sceneLinearDepthTex", depthTex->GetShaderResourceView());
+		}
+		ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
+		ps->SetSRV("inScatteringLUTR", _inScatteringLUTR->GetShaderResourceView());
+		ps->SetSRV("inScatteringLUTM", _inScatteringLUTM->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		if (bEpipolarSampling)
+		{
+			auto rc = Global::GetRenderEngine()->GetRenderContext();
+			rc->SetDepthStencilState(
+				DepthStencilStateTemplate<
+				false,
+				DEPTH_WRITE_ZERO,
+				COMPARISON_LESS,
+				true, 0xff, 0xff,
+				STENCIL_OP_KEEP,
+				STENCIL_OP_KEEP,
+				STENCIL_OP_KEEP,
+				COMPARISON_EQUAL>::Get(), 2);
+
+			DrawQuad({
+				lightAccumTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+				attenuationTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) },
+				0.0f, 0.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f, 1.0f,
+				sampleMaskDS->GetDepthStencilView(0, 0, 1));
+
+			rc->SetDepthStencilState(nullptr);
+		}
+		else
+		{
+			DrawQuad({
+				lightAccumTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+				attenuationTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) }
+			);
+		}
 
 		outLightAccumTex = lightAccumTex;
 		outAttenuationTex = attenuationTex;
 	}
 
 	void AtmosphereRendering::InterpolateRestSamples(
+		const float4 & viewSize,
 		const Ptr<Texture> & interpolationSourceTex,
-		const Ptr<Texture> & cameraDepthTex,
+		const Ptr<Texture> & sampleDepthTex,
 		const Ptr<Texture> & lightAccumTex,
 		const Ptr<Texture> & attenuationTex,
-		Ptr<Texture> & outLightAccumTex,
-		Ptr<Texture> & outAttenuationTex)
+		const Ptr<Texture> & sampleMaskDS,
+		PooledTextureRef & outLightAccumTex,
+		PooledTextureRef & outAttenuationTex)
 	{
-		TextureDesc texDesc = lightAccumTex->Desc();
+		TextureDesc texDesc = lightAccumTex->GetDesc();
 
-		outLightAccumTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
-		outAttenuationTex = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
+		outLightAccumTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		outAttenuationTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 
-		_fx->VariableByName("interpolationSourceTex")->AsShaderResource()->SetValue(interpolationSourceTex->CreateTextureView());
-		_fx->VariableByName("cameraDepthTex")->AsShaderResource()->SetValue(cameraDepthTex->CreateTextureView());
-		_fx->VariableByName("lightAccumTex")->AsShaderResource()->SetValue(lightAccumTex->CreateTextureView());
-		_fx->VariableByName("attenuationTex")->AsShaderResource()->SetValue(attenuationTex->CreateTextureView());
+		std::map<String, String> macros;
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+
+		auto ps = Shader::FindOrCreate<InterpolateRestSamplesPS>(macros);
+
+		ps->SetScalar("texSize", viewSize);
+
+		ps->SetSRV("interpolationSourceTex", interpolationSourceTex->GetShaderResourceView());
+		ps->SetSRV("sampleDepthTex", sampleDepthTex->GetShaderResourceView());
+		ps->SetSRV("lightAccumTex", lightAccumTex->GetShaderResourceView());
+		ps->SetSRV("attenuationTex", attenuationTex->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
+		rc->SetDepthStencilState(
+			DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true, 0xff, 0xff,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			COMPARISON_NOT_EQUAL>::Get(), 0);
 
-		rc->SetRenderTargets({ outLightAccumTex->CreateTextureView(), outAttenuationTex->CreateTextureView() }, 0);
+		DrawQuad({
+			outLightAccumTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1),
+			outAttenuationTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) },
+			0.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 1.0f,
+			sampleMaskDS->GetDepthStencilView(0, 0, 1));
 
-		RenderQuad(_fx->TechniqueByName("InterpolateRestSamples"), 0, 0, texDesc.width, texDesc.height);
+		rc->SetDepthStencilState(nullptr);
 	}
 
 	void AtmosphereRendering::UnWarpSamples(
+		const float2 & lightClipPos,
 		const Ptr<Texture> & lightAccumTex,
 		const Ptr<Texture> & attenuationTex,
+		const Ptr<Texture> & sampleLinesTex,
+		const Ptr<Texture> & sampleDepthTex,
 		const Ptr<Texture> & sceneTex,
-		const ResourceView & target)
+		const Ptr<Texture> & sceneLinearDepthTex,
+		const Ptr<RenderTargetView> & target)
 	{
-		_fx->VariableByName("lightAccumTex")->AsShaderResource()->SetValue(lightAccumTex->CreateTextureView());
-		_fx->VariableByName("attenuationTex")->AsShaderResource()->SetValue(attenuationTex->CreateTextureView());
-		_fx->VariableByName("sceneTex")->AsShaderResource()->SetValue(sceneTex->CreateTextureView());
+		std::map<String, String> macros;
+		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
+		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+
+		auto ps = Shader::FindOrCreate<UnWarpSamplesPS>(macros);
+
+		ps->SetScalar("lightClipPos", lightClipPos);
+		ps->SetScalar("texSize", sceneTex->GetTexSize());
+
+		ps->SetSRV("lightAccumTex", lightAccumTex->GetShaderResourceView());
+		ps->SetSRV("attenuationTex", attenuationTex->GetShaderResourceView());
+		ps->SetSRV("sampleLinesTex", sampleLinesTex->GetShaderResourceView());
+		ps->SetSRV("sampleDepthTex", sampleDepthTex->GetShaderResourceView());
+		ps->SetSRV("sceneTex", sceneTex->GetShaderResourceView());
+		ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ target });
+	}
+
+	void AtmosphereRendering::AccumRayMarching(
+		const Ptr<Texture> & lightAccumTex,
+		const Ptr<Texture> & attenuationTex,
+		const Ptr<RenderTargetView> & target)
+	{
+		auto ps = Shader::FindOrCreate<AccumRayMarchingPS>();
+
+		ps->SetSRV("lightAccumTex", lightAccumTex->GetShaderResourceView());
+		ps->SetSRV("attenuationTex", attenuationTex->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+
+		ps->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		rc->SetRenderTargets({ target }, 0);
+		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_SRC1_COLOR, BLEND_OP_ADD>::Get());
 
-		RenderQuad(_fx->TechniqueByName("UnWarpSamples"), 0, 0, sceneTex->Desc().width, sceneTex->Desc().height);
+		DrawQuad({ target });
+
+		rc->SetBlendState(nullptr);
 	}
 
 	void AtmosphereRendering::RenderSun(
-		const float2 & lightPosH,
-		const Ptr<Camera> & camera,
-		const ResourceView & target,
-		const Ptr<Texture> & cullDepthStencil)
+		const float2 & lightClipPos,
+		const Ptr<RenderView> & view,
+		const Ptr<RenderTargetView> & target,
+		const Ptr<DepthStencilView> & sceneDepthTex)
 	{
+		auto vs = Shader::FindOrCreate<RenderSunVS>();
+		auto ps = Shader::FindOrCreate<RenderSunPS>();
+
+		view->BindShaderParams(vs);
+		view->BindShaderParams(ps);
+
 		float sunAngularRadius = _sunRenderRadius / 60.0f * (XM_2PI / 360.0f);
 		float sunRadius = std::tan(sunAngularRadius);
-		_fx->VariableByName("sunRadius")->AsScalar()->SetValue(&sunRadius);
+		vs->SetScalar("sunRadius", sunRadius);
+		ps->SetScalar("sunRadius", sunRadius);
 
-		_fx->VariableByName("proj")->AsScalar()->SetValue(&camera->ProjMatrix());
+		vs->SetScalar("lightClipPos", lightClipPos);
+		ps->SetScalar("lightClipPos", lightClipPos);
 
-		_fx->VariableByName("sunRadiance")->AsScalar()->SetValue(&_sunRenderColor);
-		_fx->VariableByName("lightPosH")->AsScalar()->SetValue(&lightPosH);
+		ps->SetScalar("sunRadiance", _sunRenderColor);
+
+		vs->Flush();
+		ps->Flush();
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		rc->SetRenderTargets({ target }, 0);
-		rc->SetDepthStencil(cullDepthStencil->CreateTextureView(0, 1, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+		rc->SetViewport(GetTextureQuadViewport(target->GetResource()->Cast<Texture>()));
 
-		auto ri = std::make_shared<RenderInput>();
-		ri->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
-		rc->SetRenderInput(ri);
+		rc->SetRenderTargets({ target });
+		rc->SetDepthStencil(sceneDepthTex);
+		rc->SetDepthStencilState(
+			DepthStencilStateTemplate<
+			false,
+			DEPTH_WRITE_ZERO,
+			COMPARISON_LESS,
+			true, 0xff, 0xff,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			STENCIL_OP_KEEP,
+			COMPARISON_EQUAL>::Get(), 0);
 
-		auto targetTex = std::static_pointer_cast<Texture>(target.resource);
+		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_SRC_ALPHA, BLEND_PARAM_ONE>::Get());
 
-		auto preVP = rc->GetViewport();
-		RenderViewport vp;
-		vp.topLeftX = 0.0f;
-		vp.topLeftY = 0.0f;
-		vp.width = static_cast<float>(targetTex->Desc().width);
-		vp.height = static_cast<float>(targetTex->Desc().height);
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;
-		rc->SetViewport(vp);
+		rc->SetVertexBuffer({});
+		rc->SetIndexBuffer(nullptr);
+		rc->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
-		_fx->TechniqueByName("RenderSun")->PassByIndex(0)->Bind();
 		rc->DrawVertices(4, 0);
-		_fx->TechniqueByName("RenderSun")->PassByIndex(0)->UnBind();
 
-		rc->SetViewport(preVP);
+		rc->SetDepthStencil(nullptr);
+		rc->SetBlendState(nullptr);
 	}
 }

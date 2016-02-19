@@ -8,16 +8,19 @@ namespace ToyGE
 	void WindowsLooper::EnterLoop()
 	{
 		MSG msg;
-		while (true)
+		while (!_bExit)
 		{
 			if ( ::PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) )
 			{
 				if (msg.message == WM_QUIT)
 				{
-					break;
+					_bExit = true;
 				}
-				::TranslateMessage(&msg);
-				::DispatchMessage(&msg);
+				else
+				{
+					::TranslateMessage(&msg);
+					::DispatchMessage(&msg);
+				}
 			}
 			else
 			{

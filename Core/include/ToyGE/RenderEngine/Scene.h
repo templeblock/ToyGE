@@ -2,9 +2,11 @@
 #ifndef SCENE_H
 #define SCENE_H
 
-#include "ToyGE\Kernel\PreIncludes.h"
-#include "ToyGE\Kernel\CorePreDeclare.h"
+#include "ToyGE\Kernel\PreInclude.h"
+#include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\Math\Math.h"
+#include "ToyGE\RenderEngine\SceneObject.h"
+#include "ToyGE\RenderEngine\SceneCuller.h"
 
 namespace ToyGE
 {
@@ -40,13 +42,15 @@ namespace ToyGE
 		CLASS_SET(AmbientColor, float3, _ambientColor);
 		CLASS_GET(AmbientColor, float3, _ambientColor);
 
-		void BindParams(const Ptr<RenderEffect> & fx);
+		CLASS_SET(AmbientTexture, Ptr<class Texture>, _ambientTex);
+		CLASS_GET(AmbientTexture, Ptr<class Texture>, _ambientTex);
 
 	private:
 		static int32_t objID;
 		std::map<int32_t, Ptr<SceneObject>> _sceneObjsMap;
 		std::vector<Ptr<RenderView>> _views;
 		float3 _ambientColor;
+		Ptr<class Texture> _ambientTex;
 	};
 }
 

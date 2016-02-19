@@ -1,159 +1,105 @@
 #include "ToyGE\RenderEngine\ReflectionMap.h"
-#include "ToyGE\Kernel\Global.h"
-#include "ToyGE\Kernel\ResourceManager.h"
-#include "ToyGE\RenderEngine\RenderEffect.h"
+#include "ToyGE\Kernel\Core.h"
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderContext.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\Texture.h"
-#include "ToyGE\RenderEngine\RenderCommonDefines.h"
-#include "ToyGE\RenderEngine\RenderInput.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
 
 namespace ToyGE
 {
-	int32_t ReflectionMap::_defaultMapSize = 1024;
-	int32_t ReflectionMap::_idAll = -1;
+	Ptr<Texture> ReflectionMap::_lut;
+	int32_t ReflectionMap::_lutSize = 512;
 
-	std::map<int32_t, Ptr<ReflectionMap>> ReflectionMap::_reflectionMaps;
-
-	Ptr<ReflectionMap> ReflectionMap::Create()
+	void ReflectionMap::InitLUT()
 	{
-		auto pMap = new ReflectionMap();
-		auto result = std::shared_ptr<ReflectionMap>(pMap);
-		_reflectionMaps[result->_id] = result;
-		return result;
-	}
+		_lut = nullptr;
 
-	Ptr<ReflectionMap> ReflectionMap::GetReflectionMap(int32_t id)
-	{
-		auto mapFind = _reflectionMaps.find(id);
-		return mapFind == _reflectionMaps.end() ? Ptr<ReflectionMap>() : mapFind->second;
-	}
+		TextureDesc texDesc;
+		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
+		texDesc.width = _lutSize;
+		texDesc.height = _lutSize;
+		texDesc.depth = 1;
+		texDesc.arraySize = 1;
+		texDesc.cpuAccess = 0;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
 
-	void ReflectionMap::RemoveReflectionMap(int32_t id)
-	{
-		_reflectionMaps.erase(_reflectionMaps.find(id));
-	}
+		texDesc.mipLevels = 1;
+		texDesc.format = RENDER_FORMAT_R16G16_FLOAT;
+		_lut = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+		_lut->SetDesc(texDesc);
+		_lut->Init();
 
-	void ReflectionMap::Clear()
-	{
-		_reflectionMaps.clear();
+		auto ps = Shader::FindOrCreate<PreComputedLUTPS>();
+		ps->SetScalar("texSize", _lut->GetTexSize());
+		ps->Flush();
+
+		DrawQuad({ _lut->GetRenderTargetView(0, 0, 1) });
 	}
 
 	ReflectionMap::ReflectionMap()
-		: _mapSize(_defaultMapSize),
-		_id(++_idAll)
 	{
-		_fx = Global::GetResourceManager(RESOURCE_EFFECT)->As<EffectManager>()->AcquireResource(L"IBLPreCompute.xml");
-		InitMapTextures();
+		_preComputedMapSize = 512;
 	}
 
 	void ReflectionMap::InitPreComputedData()
 	{
-		if (!_envMap)
-			return;
+		_prefiltedEnviromentMapRef = nullptr;
 
-		auto re = Global::GetRenderEngine();
-		auto rc = re->GetRenderContext();
+		TextureDesc texDesc;
+		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
+		texDesc.width = _preComputedMapSize;
+		texDesc.height = _preComputedMapSize;
+		texDesc.depth = 1;
+		texDesc.arraySize = 1;
+		texDesc.cpuAccess = 0;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
+		texDesc.bCube = true;
 
-		/*RenderContextStateSave save;
-		rc->SaveState(
-			RENDER_CONTEXT_STATE_DEPTHSTENCIL
-			| RENDER_CONTEXT_STATE_RENDERTARGETS
-			| RENDER_CONTEXT_STATE_VIEWPORT
-			| RENDER_CONTEXT_STATE_INPUT, save);
+		texDesc.mipLevels = 0;
+		texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
+		_prefiltedEnviromentMapRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		auto prefiltedEnviromentMap = _prefiltedEnviromentMapRef->Get()->Cast<Texture>();
 
-		rc->SetRenderInput(CommonInput::QuadInput());
-		rc->SetDepthStencil(ResourceView());
-
-		RenderViewport vp;
-		vp.topLeftX = vp.topLeftY = 0.0f;
-		vp.minDepth = 0.0f;
-		vp.maxDepth = 1.0f;*/
-
-		//LUT
-		//vp.width = static_cast<float>(_LUT->Desc().width);
-		//vp.height = static_cast<float>(_LUT->Desc().height);
-		//rc->SetViewport(vp);
-
-		//PrefilterEnvMap
-		auto numMips = _prefiltedEnvMap->Desc().mipLevels;
-		int32_t width = _prefiltedEnvMap->Desc().width;
-		int32_t height = _prefiltedEnvMap->Desc().height;
-		for (int32_t mipLevel = 0; mipLevel < numMips; ++mipLevel)
 		{
-			float4 textureSize;
-			textureSize.x = static_cast<float>(width);
-			textureSize.y = static_cast<float>(height);
-			textureSize.z = static_cast<float>(mipLevel) / static_cast<float>(numMips - 1);
+			auto ps = Shader::FindOrCreate<PrefilterEnvMapPS>();
 
-			//vp.width = textureSize.x;
-			//vp.height = textureSize.y;
-			//rc->SetViewport(vp);
+			auto numMips = prefiltedEnviromentMap->GetDesc().mipLevels;
+			for (int32_t mipLevel = 0; mipLevel < numMips; ++mipLevel)
+			{
+				for (int32_t cubeFace = 0; cubeFace < 6; ++cubeFace)
+				{
+					auto mipSize = prefiltedEnviromentMap->GetMipSize(mipLevel);
 
-			_fx->VariableByName("textureSize")->AsScalar()->SetValue(&textureSize);
-			_fx->VariableByName("envMap")->AsShaderResource()->SetValue(_envMap->CreateTextureView_Cube(0, 1, 0, 1));
+					float4 texSize = float4((float)mipSize.x(), (float)mipSize.y(), 1.0f / (float)mipSize.x(), 1.0f / (float)mipSize.y());
 
-			rc->SetRenderTargets({ _prefiltedEnvMap->CreateTextureView(mipLevel, 1, 0, 6) }, 0);
-			rc->ClearRenderTargets(0.0f);
+					ps->SetScalar("arrayIndex", cubeFace);
+					ps->SetScalar("texSize", texSize);
+					ps->SetScalar("mipCoord", (float)mipLevel / (float)(numMips - 1));
 
-			RenderQuad(_fx->TechniqueByName("PrefilterEnvMap"), 0, 0, width, height);
+					ps->SetSRV("envMap", _enviromentMap->GetShaderResourceView(0, 0, 0, 0, true));
 
-			/*_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->Bind();
-			rc->DrawIndexed();
-			_fx->TechniqueByName("PrefilterEnvMap")->PassByIndex(0)->UnBind();*/
+					ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
 
-			width = std::max<int32_t>(1, width >> 1);
-			height = std::max<int32_t>(1, height >> 1);
+					ps->Flush();
+
+					DrawQuad({ prefiltedEnviromentMap->GetRenderTargetView(mipLevel, cubeFace, 1) });
+				}
+			}
 		}
-
-		float4 textureSize = 0.0f;
-		textureSize.x = static_cast<float>(_LUT->Desc().width);
-		textureSize.y = static_cast<float>(_LUT->Desc().height);
-		_fx->VariableByName("textureSize")->AsScalar()->SetValue(&textureSize);
-
-		rc->SetRenderTargets({ _LUT->CreateTextureView() }, 0);
-		RenderQuad(_fx->TechniqueByName("LUT"));
-		
-		//_fx->TechniqueByName("LUT")->PassByIndex(0)->Bind();
-		//rc->DrawIndexed();
-		//_fx->TechniqueByName("LUT")->PassByIndex(0)->UnBind();
-		
-
-		//rc->RestoreState(save);
 	}
 
-	void ReflectionMap::BindEffectParams(const Ptr<RenderEffect> & fx)
+	void ReflectionMap::BindShaderParams(const Ptr<Shader> & shader)
 	{
-		//InitPreComputedData();
+		float4 iblLUTSize = float4((float)_lutSize, (float)_lutSize, 1.0f / (float)_lutSize, 1.0f / (float)_lutSize);
+		shader->SetScalar("iblLUTSize", iblLUTSize);
+		shader->SetScalar("numEnvMapMipLevels", (float)_prefiltedEnviromentMapRef->Get()->Cast<Texture>()->GetDesc().mipLevels);
 
-		fx->VariableByName("prefiltedEnvMap")->AsShaderResource()->SetValue(_prefiltedEnvMap->CreateTextureView_Cube(0, 0, 0, 1));
-		fx->VariableByName("LUT")->AsShaderResource()->SetValue(_LUT->CreateTextureView());
-		float numMipLevels = static_cast<float>(_prefiltedEnvMap->Desc().mipLevels);
-		fx->VariableByName("numMipLevels")->AsScalar()->SetValue(&numMipLevels, sizeof(numMipLevels));
-	}
+		shader->SetSRV("iblLUT", _lut->GetShaderResourceView());
+		shader->SetSRV("iblPreFilteredEnvMap", _prefiltedEnviromentMapRef->Get()->Cast<Texture>()->GetShaderResourceView(0, 0, 0, 0, true));
 
-	void ReflectionMap::InitMapTextures()
-	{
-		TextureDesc desc;
-		desc.width = _mapSize;
-		desc.height = _mapSize;
-		desc.depth = 1;
-		desc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
-		desc.cpuAccess = 0;
-		desc.sampleCount = 1;
-		desc.sampleQuality = 0;
-		desc.arraySize = 1;
-
-		desc.mipLevels = 0;
-		desc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
-		desc.type = TEXTURE_CUBE;
-		_prefiltedEnvMap = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(desc);
-
-		desc.mipLevels = 1;
-		desc.format = RENDER_FORMAT_R16G16_FLOAT;
-		desc.type = TEXTURE_2D;
-		_LUT = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(desc);
+		shader->SetSampler("iblSampler", SamplerTemplate<>::Get());
 	}
 }
