@@ -158,9 +158,9 @@ namespace ToyGE
 
 	Ptr<RenderMeshComponent> Mesh::AddInstanceToScene(
 		const Ptr<Scene> & scene,
-		const XMFLOAT3 & pos,
-		const XMFLOAT3 & scale,
-		const XMFLOAT4 & orientation)
+		const float3 & pos,
+		const float3 & scale,
+		const Quaternion & orientation)
 	{
 		auto sceneObj = std::make_shared<SceneObject>();
 		scene->AddSceneObject(sceneObj);
@@ -512,10 +512,10 @@ namespace ToyGE
 
 		for (int32_t thetaIndex = 0; thetaIndex <= numSplits; ++thetaIndex)
 		{
-			float theta = static_cast<float>(thetaIndex) / static_cast<float>(numSplits) * XM_PI;
+			float theta = static_cast<float>(thetaIndex) / static_cast<float>(numSplits) * PI2;
 			for (int32_t phiIndex = 0; phiIndex <= numSplits; ++phiIndex)
 			{
-				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits)* XM_2PI;
+				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits)* PI2;
 				float x = radius * sin(theta) * sin(phi);
 				float y = radius * cos(theta);
 				float z = radius * sin(theta) * cos(phi);
@@ -576,7 +576,7 @@ namespace ToyGE
 			float r = (height - h) * tan(angle * 0.5f);
 			for (int32_t phiIndex = 0; phiIndex <= numSplits; ++phiIndex)
 			{
-				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits) * XM_2PI;
+				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits) * PI2;
 				float x = r * sin(phi);
 				float y = h;
 				float z = r * cos(phi);

@@ -55,9 +55,9 @@ namespace ToyGE
 			ss.str("");
 			auto & pos = traceCamera->GetPos();
 			ss  << "CameraPos "
-				<< "X:" << pos.x << " "
-				<< "Y:" << pos.y << " "
-				<< "Z:" << pos.z;
+				<< "X:" << pos.x() << " "
+				<< "Y:" << pos.y() << " "
+				<< "Z:" << pos.z();
 			_cameraInfoRenderer->SetText(ss.str());
 			_cameraInfoRenderer->Render(target, float2(0.0f, y), drawTextSize);
 		}

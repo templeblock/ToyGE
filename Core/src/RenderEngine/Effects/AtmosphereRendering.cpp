@@ -46,21 +46,22 @@ namespace ToyGE
 
 		auto & cameraPos = view->GetCamera()->GetPos();
 		float sunDist = 1e+10;
-		auto sunPosW = XMFLOAT3(
+		auto sunPosW = cameraPos - _sunDirection * sunDist;
+		/*float3(
 			cameraPos.x - _sunDirection.x * sunDist,
 			cameraPos.y - _sunDirection.y * sunDist,
-			cameraPos.z - _sunDirection.z * sunDist);
-		auto sunPosWXM = XMLoadFloat3(&sunPosW);
-		auto viewXM = XMLoadFloat4x4(&view->GetCamera()->GetViewMatrix());
-		auto sunPosVXM = XMVector3TransformCoord(sunPosWXM, viewXM);
-		sunPosVXM = XMVectorSetW(sunPosVXM, 1.0f);
-		auto projXM = XMLoadFloat4x4(&view->GetCamera()->GetProjMatrix());
-		auto sunPosHXM = XMVector4Transform(sunPosVXM, projXM);
-		float4 sunPosH;
-		XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&sunPosH), sunPosHXM);
-		sunPosH.x() /= sunPosH.w();
+			cameraPos.z - _sunDirection.z * sunDist);*/
+		/*auto sunPosWXM = XMLoadFloat3(&sunPosW);
+		auto viewXM = XMLoadFloat4x4(&view->GetCamera()->GetViewMatrix());*/
+		auto sunPosV= transform_coord(sunPosW, view->GetCamera()->GetViewMatrix());
+		//sunPosVXM = XMVectorSetW(sunPosVXM, 1.0f);
+		//auto projXM = XMLoadFloat4x4(&view->GetCamera()->GetProjMatrix());
+		auto sunPosH = transform_coord(sunPosV, view->GetCamera()->GetProjMatrix());
+		/*float4 sunPosH;
+		XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&sunPosH), sunPosHXM);*/
+		/*sunPosH.x() /= sunPosH.w();
 		sunPosH.y() /= sunPosH.w();
-		sunPosH.z() /= sunPosH.w();
+		sunPosH.z() /= sunPosH.w();*/
 
 		if (bEpipolarSampling)
 		{
@@ -135,7 +136,7 @@ namespace ToyGE
 				targetTex->GetRenderTargetView(0, 0, 1));
 
 			// Render sun
-			if (XMVectorGetZ(sunPosVXM) < 0.0f)
+			if (sunPosH.z() < 0.0f)
 				sunPosH.x() = sunPosH.y() = -100.0f;
 			RenderSun(
 				float2(sunPosH.x(), sunPosH.y()),
@@ -163,7 +164,7 @@ namespace ToyGE
 			AccumRayMarching(lightAccumTex, attenuationTex, sceneTex->GetRenderTargetView(0, 0, 1));
 
 			// Render sun
-			if (XMVectorGetZ(sunPosVXM) < 0.0f)
+			if (sunPosH.z() < 0.0f)
 				sunPosH.x() = sunPosH.y() = -100.0f;
 			RenderSun(
 				float2(sunPosH.x(), sunPosH.y()),
@@ -174,7 +175,7 @@ namespace ToyGE
 		
 	}
 
-	XMFLOAT3 AtmosphereRendering::ComputeSunRadianceAt(const XMFLOAT3 & sunDir, const XMFLOAT3 & sunRadiance, float height)
+	float3 AtmosphereRendering::ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height)
 	{
 		if (!_opticalDepthLUT)
 			InitOpticalDepthLUT();
@@ -239,7 +240,7 @@ namespace ToyGE
 		radianceTex->CopyTo(resultTex, 0, 0, 0, 0, 0, 0, 0);
 
 		auto mapData = resultTex->Map(MAP_READ, 0, 0);
-		XMFLOAT3 result = *static_cast<XMFLOAT3*>(mapData.pData);
+		float3 result = *static_cast<float3*>(mapData.pData);
 		resultTex->UnMap();
 
 		/*radianceTex->Release();
@@ -1097,7 +1098,7 @@ namespace ToyGE
 		view->BindShaderParams(vs);
 		view->BindShaderParams(ps);
 
-		float sunAngularRadius = _sunRenderRadius / 60.0f * (XM_2PI / 360.0f);
+		float sunAngularRadius = _sunRenderRadius / 60.0f * (PI2 / 360.0f);
 		float sunRadius = std::tan(sunAngularRadius);
 		vs->SetScalar("sunRadius", sunRadius);
 		ps->SetScalar("sunRadius", sunRadius);

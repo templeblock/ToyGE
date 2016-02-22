@@ -336,12 +336,12 @@ namespace ToyGE
 			auto viewPos = view->GetCamera()->GetPos();
 
 			auto pos0 = obj0.renderComponent->GetPos();
-			auto vec0 = XMFLOAT3(pos0.x - viewPos.x, pos0.y - viewPos.y, pos0.z - viewPos.z);
-			auto dist0 = vec0.x * viewDir.x + vec0.y * viewDir.y + vec0.z * viewDir.z;
+			auto vec0 = pos0 - viewPos;// XMFLOAT3(pos0.x - viewPos.x, pos0.y - viewPos.y, pos0.z - viewPos.z);
+			auto dist0 = dot(vec0, viewDir);// vec0.x * viewDir.x + vec0.y * viewDir.y + vec0.z * viewDir.z;
 
 			auto pos1 = obj0.renderComponent->GetPos();
-			auto vec1 = XMFLOAT3(pos1.x - viewPos.x, pos1.y - viewPos.y, pos1.z - viewPos.z);
-			auto dist1 = vec1.x * viewDir.x + vec1.y * viewDir.y + vec1.z * viewDir.z;
+			auto vec1 = pos1 - viewPos; // XMFLOAT3(pos1.x - viewPos.x, pos1.y - viewPos.y, pos1.z - viewPos.z);
+			auto dist1 = dot(vec1, viewDir);//vec1.x * viewDir.x + vec1.y * viewDir.y + vec1.z * viewDir.z;
 
 			return dist0 > dist1;
 		});

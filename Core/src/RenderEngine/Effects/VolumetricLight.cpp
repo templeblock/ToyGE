@@ -17,7 +17,7 @@ namespace ToyGE
 		_pointLightVolumeGeo = std::make_shared<RenderMeshComponent>();
 		_pointLightVolumeGeo->SetMesh(pointLightVolumeMesh);
 
-		auto spotLightVolumeMesh = CommonMesh::CreateCone(1.0f, XM_PIDIV2, 50);
+		auto spotLightVolumeMesh = CommonMesh::CreateCone(1.0f, PI_DIV2, 50);
 		_spotLightVolumeGeo = std::make_shared<RenderMeshComponent>();
 		_spotLightVolumeGeo->SetMesh(spotLightVolumeMesh);
 
@@ -159,7 +159,7 @@ namespace ToyGE
 		auto & lightPos = light->GetPos();
 		_pointLightVolumeGeo->SetPos(lightPos);
 		float maxDist = light->MaxDistance();
-		_pointLightVolumeGeo->SetScale(XMFLOAT3(maxDist, maxDist, maxDist));
+		_pointLightVolumeGeo->SetScale(maxDist);
 		_pointLightVolumeGeo->UpdateTransform();
 		_pointLightVolumeGeo->BindShaderParams(vs);
 
@@ -231,11 +231,11 @@ namespace ToyGE
 		float3 lightPosf3 = *(reinterpret_cast<const float3*>(&lightPos));
 		float3 lightDirf3 = *(reinterpret_cast<const float3*>(&light->Direction()));
 		float3 geoPos = lightPosf3 + maxDist * lightDirf3;
-		_spotLightVolumeGeo->SetPos(XMFLOAT3(geoPos.x(), geoPos.y(), geoPos.z()));
+		_spotLightVolumeGeo->SetPos(geoPos);
 
 		float angle = light->MaxAngle();
 		float xzScale = tan(angle) * maxDist;
-		_spotLightVolumeGeo->SetScale(XMFLOAT3(xzScale, maxDist, xzScale));
+		_spotLightVolumeGeo->SetScale(float3(xzScale, maxDist, xzScale));
 
 		float3 v0 = float3(0.0f, -1.0f, 0.0f);
 		float3 v1 = *(reinterpret_cast<const float3*>(&light->Direction()));
@@ -251,7 +251,7 @@ namespace ToyGE
 			rotateAxis.y() * sinAngle_d2,
 			rotateAxis.z() * sinAngle_d2,
 			cosAngle_d2);
-		_spotLightVolumeGeo->SetOrientation(XMFLOAT4(orientation.x(), orientation.y(), orientation.z(), orientation.w()));
+		_spotLightVolumeGeo->SetOrientation(orientation);
 		_spotLightVolumeGeo->UpdateTransform();
 		_spotLightVolumeGeo->BindShaderParams(vs);
 

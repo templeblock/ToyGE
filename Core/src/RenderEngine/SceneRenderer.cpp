@@ -9,16 +9,17 @@ namespace ToyGE
 		_atmosphereRendering = std::make_shared<AtmosphereRendering>();
 	}
 
-	void SceneRenderer::SetSunDirection(const XMFLOAT3 & sunDirection)
+	void SceneRenderer::SetSunDirection(const float3 & sunDirection)
 	{
-		auto xmDir = XMLoadFloat3(&sunDirection);
+		/*auto xmDir = XMLoadFloat3(&sunDirection);
 		xmDir = XMVector3Normalize(xmDir);
-		XMStoreFloat3(&_sunDirection, xmDir);
+		XMStoreFloat3(&_sunDirection, xmDir);*/
+		_sunDirection = normalize(sunDirection);
 		_atmosphereRendering->SetSunDirection(_sunDirection);
 		_atmosphereRendering->RecomputeSunRenderColor();
 	}
 
-	void SceneRenderer::SetSunRadiance(const XMFLOAT3 & sunRadiance)
+	void SceneRenderer::SetSunRadiance(const float3 & sunRadiance)
 	{
 		_sunRadiance = sunRadiance;
 		_atmosphereRendering->SetSunRadiance(sunRadiance);
@@ -40,11 +41,11 @@ namespace ToyGE
 	{
 		if (_sunLight)
 		{
-			auto radiance = _atmosphereRendering->ComputeSunRadianceAt(_sunDirection, XMFLOAT3(_sunRadiance.x, _sunRadiance.y, _sunRadiance.z), 1.0f);
-			auto maxV = std::max<float>(std::max<float>(radiance.x, radiance.y), radiance.z);
+			auto radiance = _atmosphereRendering->ComputeSunRadianceAt(_sunDirection, _sunRadiance, 1.0f);
+			auto maxV = std::max<float>(std::max<float>(radiance.x(), radiance.y()), radiance.z());
 			if (maxV > 1e-4f)
 			{
-				float3 color = float3(radiance.x, radiance.y, radiance.z) / maxV;
+				float3 color = radiance / maxV;
 				_sunLight->SetColor(color);
 				_sunLight->SetIntensity(maxV);
 			}

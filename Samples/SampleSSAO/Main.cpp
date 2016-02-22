@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleSSAO : public SampleCommon
 {
@@ -42,15 +41,15 @@ public:
 		_renderView->SetPostProcessing(pp);
 
 		auto camera = _renderView->GetCamera();
-		camera->SetPos(XMFLOAT3(10.0f, 2.0f, 0.0f));
-		camera->Yaw(XM_PIDIV2);
+		camera->SetPos(float3(10.0f, 2.0f, 0.0f));
+		camera->Yaw(PI_DIV2);
 
 		//Init Scene
 		auto scene = Global::GetScene();
 
 		//Add Light
 		auto pointLightCom = std::make_shared<PointLightComponent>();
-		pointLightCom->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
+		pointLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
 		pointLightCom->SetColor(1.0f);
 		pointLightCom->SetIntensity(30.0f);
 		pointLightCom->SetCastShadow(true);
@@ -66,14 +65,14 @@ public:
 			auto model = Asset::Find<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f)); 
+			model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.01f, 0.01f, 0.01f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 		}
 
 		{
 			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);

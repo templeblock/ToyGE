@@ -20,11 +20,11 @@ namespace ToyGE
 
 	struct ViewParams
 	{
-		XMFLOAT4X4	worldToViewMatrix;
-		XMFLOAT4X4	viewToClipMatrix;
-		XMFLOAT4X4	worldToClipMatrix;
-		XMFLOAT4X4	viewToWorldMatrix;
-		XMFLOAT4X4	preWorldToViewMatrix;
+		float4x4	worldToViewMatrix;
+		float4x4	viewToClipMatrix;
+		float4x4	worldToClipMatrix;
+		float4x4	viewToWorldMatrix;
+		float4x4	preWorldToViewMatrix;
 		float3		viewPos;
 		float		_pad_0;
 		float		viewNear;

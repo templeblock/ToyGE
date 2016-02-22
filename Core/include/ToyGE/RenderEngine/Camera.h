@@ -18,39 +18,40 @@ namespace ToyGE
 
 		virtual ~Camera() = default;
 
-		void SetPos(const XMFLOAT3 & pos);
-		CLASS_GET(Pos, XMFLOAT3, _pos);
+		void SetPos(const float3 & pos);
+		CLASS_GET(Pos, float3, _pos);
 
-		void SetViewMatrix(const XMFLOAT4X4 & matrix);
-		const XMFLOAT4X4 & GetViewMatrix() const
+		void SetViewMatrix(const float4x4 & matrix);
+		const float4x4 & GetViewMatrix() const
 		{
 			return _viewMatrix;
 		}
 
-		virtual void SetProjMatrix(const XMFLOAT4X4 & matrix)
+		virtual void SetProjMatrix(const float4x4 & matrix)
 		{
 			_projMatrix = matrix;
+			auto a = matrix[0];
 		}
-		const XMFLOAT4X4 & GetProjMatrix() const
+		const float4x4 & GetProjMatrix() const
 		{
 			return _projMatrix;
 		}
 
-		XMFLOAT4X4 GetViewProjMatrix() const;
+		float4x4 GetViewProjMatrix() const;
 
-		void LookTo(const XMFLOAT3 & pos, const XMFLOAT3 & look, const XMFLOAT3 & up);
+		void LookTo(const float3 & pos, const float3 & look, const float3 & up);
 
-		void LookAt(const XMFLOAT3 & lookPos);
+		void LookAt(const float3 & lookPos);
 
-		const XMFLOAT3 & GetXAxis() const
+		const float3 & GetXAxis() const
 		{
 			return _xAxis;
 		}
-		const XMFLOAT3 & GetYAxis() const
+		const float3 & GetYAxis() const
 		{
 			return _yAxis;
 		}
-		const XMFLOAT3 & GetZAxis() const
+		const float3 & GetZAxis() const
 		{
 			return _zAxis;
 		}
@@ -73,30 +74,30 @@ namespace ToyGE
 			return _farDepth;
 		}
 
-		virtual XNA::Frustum GetFrustum() const { return XNA::Frustum{ 0 }; };
+		virtual Frustum GetFrustum() const { return Frustum(); };
 
 		void Walk(float value);
 		void Strafe(float value);
 		void Fly(float value);
 
-		void Rotate(const XMFLOAT3 & axis, float angle);
+		void Rotate(const float3 & axis, float angle);
 		void Yaw(float angle);
 		void Pitch(float angle);
 		void Roll(float angle);
 
-		CLASS_GET(ViewMatrixCache, XMFLOAT4X4, _viewMatrixCache);
-		CLASS_SET(ViewMatrixCache, XMFLOAT4X4, _viewMatrixCache);
+		CLASS_GET(ViewMatrixCache, float4x4, _viewMatrixCache);
+		CLASS_SET(ViewMatrixCache, float4x4, _viewMatrixCache);
 
 		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements) = 0;
 
 	protected:
-		XMFLOAT3 _pos;
-		XMFLOAT3 _xAxis;
-		XMFLOAT3 _yAxis;
-		XMFLOAT3 _zAxis;
-		XMFLOAT4X4 _viewMatrix;
-		XMFLOAT4X4 _viewMatrixCache;
-		XMFLOAT4X4 _projMatrix;
+		float3 _pos;
+		float3 _xAxis;
+		float3 _yAxis;
+		float3 _zAxis;
+		float4x4 _viewMatrix;
+		float4x4 _viewMatrixCache;
+		float4x4 _projMatrix;
 		float _nearDepth;
 		float _farDepth;
 
@@ -108,9 +109,9 @@ namespace ToyGE
 	public:
 		PerspectiveCamera(float fovAngle, float aspectRatio, float nearZ, float farZ);
 
-		virtual void SetProjMatrix(const XMFLOAT4X4 & matrix) override;
+		virtual void SetProjMatrix(const float4x4 & matrix) override;
 
-		virtual XNA::Frustum GetFrustum() const override;
+		virtual Frustum GetFrustum() const override;
 
 		virtual void SetNear(float nearDepth) override;
 
@@ -131,7 +132,7 @@ namespace ToyGE
 		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements) override;
 
 	protected:
-		XNA::Frustum _frustum;
+		Frustum _frustum;
 		float _fovAngle;
 		float _aspectRatio;
 
@@ -143,7 +144,7 @@ namespace ToyGE
 	public:
 		OrthogonalCamera();
 
-		virtual void SetProjMatrix(const XMFLOAT4X4 & matrix) override;
+		virtual void SetProjMatrix(const float4x4 & matrix) override;
 
 		virtual void SetNear(float nearDepth) override;
 
@@ -222,7 +223,7 @@ namespace ToyGE
 	//	}
 
 	//private:
-	//	//XMFLOAT4X4 _projMatrix;
+	//	//float4x4 _projMatrix;
 	//	//XNA::Frustum _frustum;
 	//	//float _fovAngle;
 	//	//float _aspectRatio;

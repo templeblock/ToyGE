@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleIBL : public SampleCommon
 {
@@ -98,7 +97,7 @@ public:
 		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 		if (!model->IsInit())
 			model->Init();
-		_objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+		_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 		for (auto & obj : _objs->GetSubRenderComponents())
 		{
@@ -107,8 +106,8 @@ public:
 		}
 
 		auto camera = scene->GetView(0)->GetCamera();
-		camera->SetPos(XMFLOAT3(0.0f, 1.0f, 2.0f));
-		camera->Yaw(-XM_PI);
+		camera->SetPos(float3(0.0f, 1.0f, 2.0f));
+		camera->Yaw(-PI);
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "IBL");

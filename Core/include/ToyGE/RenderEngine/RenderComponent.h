@@ -57,12 +57,12 @@ namespace ToyGE
 			return _material;
 		}
 
-		const XNA::AxisAlignedBox & GetLocalAABB() const
+		const AABBox & GetLocalAABB() const
 		{
 			return _localAABB;
 		}
 
-		XNA::AxisAlignedBox GetBoundsAABB() const override;
+		AABBox GetBoundsAABB() const override;
 
 		void SetReflectionMap(const Ptr<ReflectionMap> & reflectionMap)
 		{
@@ -108,8 +108,8 @@ namespace ToyGE
 		std::weak_ptr<class RenderMeshComponent> _renderMeshComponent;
 		Ptr<MeshElementRenderData> _meshElement;
 		Ptr<Material> _material;
-		XNA::AxisAlignedBox _localAABB;
-		XNA::AxisAlignedBox _boundsAABB;
+		AABBox _localAABB;
+		AABBox _boundsAABB;
 		Ptr<ReflectionMap> _reflectionMap;
 		Ptr<Texture> _envMap;
 		bool _bCastShadows;

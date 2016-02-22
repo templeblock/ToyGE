@@ -50,7 +50,7 @@ namespace ToyGE
 
 		void UpdateRenderBuffers();
 
-		XMFLOAT4X4 ComputeTransform(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width);
+		float4x4 ComputeTransform(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width);
 	};
 }
 

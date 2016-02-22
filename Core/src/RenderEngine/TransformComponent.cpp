@@ -16,12 +16,15 @@ namespace ToyGE
 	TransformComponent::TransformComponent()
 		: _pos(0.0f, 0.0f, 0.0f),
 		_scale(1.0f, 1.0f, 1.0f),
-		_orientation(0.0f, 0.0f, 0.0f, 1.0f),
+		_orientation(identity_quat<float>()),
 		_bDirty(false)
 	{
-		XMStoreFloat4x4(&_transformMatrix, XMMatrixIdentity());
-		XMStoreFloat4x4(&_transformMatrixCache, XMMatrixIdentity());
-		XMStoreFloat4x4(&_relativetransformMatrix, XMMatrixIdentity());
+		//XMStoreFloat4x4(&_transformMatrix, XMMatrixIdentity());
+		//XMStoreFloat4x4(&_transformMatrixCache, XMMatrixIdentity());
+		//XMStoreFloat4x4(&_relativetransformMatrix, XMMatrixIdentity());
+		_transformMatrix = identity_mat<float, 4>();
+		_transformMatrixCache = identity_mat<float, 4>();
+		_relativetransformMatrix = identity_mat<float, 4>();
 	}
 
 	void TransformComponent::BindShaderParams(const Ptr<class Shader> & shader)
@@ -49,15 +52,18 @@ namespace ToyGE
 
 	void TransformComponent::UpdateTransformMatrix()
 	{
-		auto scaleXM = XMMatrixScaling(_scale.x, _scale.y, _scale.z);
+		/*auto scaleXM = XMMatrixScaling(_scale.x, _scale.y, _scale.z);
 		auto translateXM = XMMatrixTranslation(_pos.x, _pos.y, _pos.z);
 		auto orientationXM = XMLoadFloat4(&_orientation);
 		auto rotateXM = XMMatrixRotationQuaternion(orientationXM);
 		auto relativeTransformXM = XMMatrixMultiply(XMMatrixMultiply(scaleXM, rotateXM), translateXM);
-		XMStoreFloat4x4(&_relativetransformMatrix, relativeTransformXM);
+		XMStoreFloat4x4(&_relativetransformMatrix, relativeTransformXM);*/
 
-		auto parentTransform = _parent ? XMLoadFloat4x4(&_parent->GetWorldTransformMatrix()) : XMMatrixIdentity();
-		auto transformXM = XMMatrixMultiply(relativeTransformXM, parentTransform);
-		XMStoreFloat4x4(&_transformMatrix, transformXM);
+		_relativetransformMatrix = transformation<float>(nullptr, nullptr, &_scale, nullptr, &_orientation, &_pos);
+
+		auto parentTransform = _parent ? _parent->GetWorldTransformMatrix() : identity_mat<float, 4>();
+		/*auto transformXM = XMMatrixMultiply(relativeTransformXM, parentTransform);
+		XMStoreFloat4x4(&_transformMatrix, transformXM);*/
+		_transformMatrix = mul(_relativetransformMatrix, parentTransform);
 	}
 }

@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleAtmosphere : public SampleCommon
 {
@@ -41,7 +40,7 @@ public:
 		_renderView->SetPostProcessing(pp);
 
 		auto camera =  std::static_pointer_cast<PerspectiveCamera>(_renderView->GetCamera());
-		camera->SetPos(XMFLOAT3(-0.5f, 0.5f, -3.0f));
+		camera->SetPos(float3(-0.5f, 0.5f, -3.0f));
 		camera->SetFar(1e4);
 
 		//Init Scene
@@ -64,7 +63,7 @@ public:
 			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);
@@ -83,9 +82,9 @@ public:
 			auto sphere = CommonMesh::CreateSphere(1.0f, 500);
 			auto sphereObj = sphere->AddInstanceToScene(
 				scene,
-				XMFLOAT3(0.0f, -6370000.0f, 0.0f),
-				XMFLOAT3(6370000.0f, 6370000.0f, 6370000.0f),
-				XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+				float3(0.0f, -6370000.0f, 0.0f),
+				float3(6370000.0f, 6370000.0f, 6370000.0f),
+				Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 			for (auto & obj : sphereObj->GetSubRenderComponents())
 			{
 				obj->SetMaterial(mat);
@@ -123,8 +122,8 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunRadiance(XMFLOAT3(_sunRadiance.x(), _sunRadiance.y(), _sunRadiance.z()));
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunDirection(XMFLOAT3(_sunDir.x(), _sunDir.y(), _sunDir.z()));
+		Global::GetRenderEngine()->GetSceneRenderer()->SetSunRadiance(_sunRadiance);
+		Global::GetRenderEngine()->GetSceneRenderer()->SetSunDirection(_sunDir);
 
 		Global::GetRenderEngine()->GetSceneRenderer()->UpdateSunLight();
 

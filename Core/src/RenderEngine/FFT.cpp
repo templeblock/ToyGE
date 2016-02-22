@@ -258,7 +258,7 @@ namespace ToyGE
 			uint32_t ostride = threadCount;
 
 			uint32_t istride = threadCount;
-			float phaseBase = -XM_2PI / texDesc.width;
+			float phaseBase = -PI2 / texDesc.width;
 			if (bInverse)
 				phaseBase *= -1.0f;
 			while (istride > 0)
@@ -310,7 +310,7 @@ namespace ToyGE
 			uint32_t ostride = threadCount;
 
 			uint32_t istride = threadCount;
-			float phaseBase = -XM_2PI / texDesc.height;
+			float phaseBase = -PI2 / texDesc.height;
 			if (bInverse)
 				phaseBase *= -1.0f;
 			while (istride > 0)

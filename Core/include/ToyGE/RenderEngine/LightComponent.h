@@ -117,9 +117,9 @@ namespace ToyGE
 
 		float MaxDistance() const;
 
-		virtual XNA::AxisAlignedBox GetBoundsAABB() const override;
+		virtual AABBox GetBoundsAABB() const override;
 
-		XNA::Sphere GetBoundsSphere() const;
+		Sphere GetBoundsSphere() const;
 
 		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros) override;
 
@@ -133,14 +133,15 @@ namespace ToyGE
 	public:
 		SpotLightComponent();
 
-		void SetDirection(const XMFLOAT3 & direction)
+		void SetDirection(const float3 & direction)
 		{
-			auto xmDir = XMLoadFloat3(&direction);
+			/*auto xmDir = XMLoadFloat3(&direction);
 			xmDir = XMVector3Normalize(xmDir);
-			XMStoreFloat3(&_direction, xmDir);
+			XMStoreFloat3(&_direction, xmDir);*/
+			_direction = direction;
 		}
 
-		const XMFLOAT3 & Direction() const
+		const float3 & Direction() const
 		{
 			return _direction;
 		}
@@ -159,14 +160,14 @@ namespace ToyGE
 
 		float MaxDistance() const;
 
-		XNA::AxisAlignedBox GetBoundsAABB() const override;
+		AABBox GetBoundsAABB() const override;
 
 		virtual void BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros) override;
 
 		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view) override;
 
 	private:
-		XMFLOAT3 _direction;
+		float3 _direction;
 		float _decreaseSpeed;
 	};
 
@@ -177,14 +178,15 @@ namespace ToyGE
 	public:
 		DirectionalLightComponent();
 
-		void SetDirection(const XMFLOAT3 & direction)
+		void SetDirection(const float3 & direction)
 		{
-			auto xmDir = XMLoadFloat3(&direction);
+			/*auto xmDir = XMLoadFloat3(&direction);
 			xmDir = XMVector3Normalize(xmDir);
-			XMStoreFloat3(&_direction, xmDir);
+			XMStoreFloat3(&_direction, xmDir);*/
+			_direction = direction;
 		}
 
-		const XMFLOAT3 & Direction() const
+		const float3 & Direction() const
 		{
 			return _direction;
 		}
@@ -196,17 +198,17 @@ namespace ToyGE
 			return _bInfluenceAll;
 		}
 
-		void SetInfluenceArea(const XNA::AxisAlignedBox & aabb)
+		void SetInfluenceArea(const AABBox & aabb)
 		{
 			_influenceAABB = aabb;
 		}
 
-		const XNA::AxisAlignedBox & GetInfluenceAre() const
+		const AABBox & GetInfluenceAre() const
 		{
 			return _influenceAABB;
 		}
 
-		XNA::AxisAlignedBox GetBoundsAABB() const override;
+		AABBox GetBoundsAABB() const override;
 
 		CLASS_GET(Distance, float, _dist);
 		CLASS_SET(Distance, float, _dist);
@@ -224,8 +226,8 @@ namespace ToyGE
 
 	private:
 		bool _bInfluenceAll;
-		XNA::AxisAlignedBox _influenceAABB;
-		XMFLOAT3 _direction;
+		AABBox _influenceAABB;
+		float3 _direction;
 		float _dist;
 	};
 }

@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleDeferredRendering : public SampleCommon
 {
@@ -46,7 +45,7 @@ public:
 
 		//Add Light
 		auto pointLightCom = std::make_shared<PointLightComponent>();
-		pointLightCom->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
+		pointLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
 		pointLightCom->SetColor(1.0f);
 		pointLightCom->SetIntensity(30.0f);
 		pointLightCom->SetCastShadow(true);
@@ -60,7 +59,7 @@ public:
 		auto model = Asset::Find<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
 		if (!model->IsInit())
 			model->Init();
-		model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.01f, 0.01f, 0.01f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+		model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.01f, 0.01f, 0.01f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 
 		//Init UI

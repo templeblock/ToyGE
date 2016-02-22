@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleOIT : public SampleCommon
 {
@@ -28,8 +27,8 @@ public:
 		_renderView->SetPostProcessing(pp);
 
 		auto camera = std::static_pointer_cast<PerspectiveCamera>(_renderView->GetCamera());
-		camera->SetPos(XMFLOAT3(1.7f, 2.5f, -1.8f));
-		camera->LookAt(XMFLOAT3(0.0f, 2.5f, 0.0f));
+		camera->SetPos(float3(1.7f, 2.5f, -1.8f));
+		camera->LookAt(float3(0.0f, 2.5f, 0.0f));
 
 		//Init Scene
 		auto scene = Global::GetScene();
@@ -40,7 +39,7 @@ public:
 			auto model = Asset::Find<MeshAsset>("Models/robot_clean_max/robot_clean.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			_objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 1.0f, 0.0f), XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			for (auto obj : _objs->GetSubRenderComponents())
 			{

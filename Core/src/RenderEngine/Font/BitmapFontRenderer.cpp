@@ -150,7 +150,7 @@ namespace ToyGE
 		_bNeedUpdate = false;
 	}
 
-	XMFLOAT4X4 BitmapFontRenderer::ComputeTransform(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width)
+	float4x4 BitmapFontRenderer::ComputeTransform(const Ptr<RenderTargetView> & target, const float2 & screenPos, float height, float width)
 	{
 		float2 targetSize = float2(
 			static_cast<float>(target->GetResource()->Cast<Texture>()->GetDesc().width),
@@ -162,15 +162,15 @@ namespace ToyGE
 			scalingX = height / targetSize.x() * 2.0f;
 		else
 			scalingX = width / targetSize.x() * 2.0f;
-		auto scaling = XMMatrixScaling(scalingX, scalingY, 0.0f);
+		auto scalingMat = scaling(float3(scalingX, scalingY, 0.0f));
 
 		float2 posH = (screenPos / targetSize) * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
-		auto trans = XMMatrixTranslation(posH.x(), posH.y(), 0.0f);
+		auto transMat = translation(posH.x(), posH.y(), 0.0f);
 
-		auto transformXM = XMMatrixMultiply(scaling, trans);
+		/*auto transformXM = XMMatrixMultiply(scaling, trans);
 		XMFLOAT4X4 transform;
-		XMStoreFloat4x4(&transform, transformXM);
+		XMStoreFloat4x4(&transform, transformXM);*/
 
-		return transform;
+		return mul(scalingMat, transMat);
 	}
 }

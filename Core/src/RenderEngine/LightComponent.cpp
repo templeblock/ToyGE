@@ -30,17 +30,19 @@ namespace ToyGE
 	float2 LightComponent::GetClipSpacePos(const Ptr<Camera> & camera) const
 	{
 		auto posW = this->GetPos();
-		auto posWXM = XMLoadFloat3(&posW);
+
+		/*auto posWXM = XMLoadFloat3(reinterpret_cast<XMFLOAT3*>( &posW));
 		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
 		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
 		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
-		XMFLOAT4 posH;
-		XMStoreFloat4(&posH, posHXM);
-		posH.x /= posH.w;
-		posH.y /= posH.w;
+		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);*/
+		auto posH = transform_coord(posW, camera->GetViewProjMatrix());
+		/*XMFLOAT4 posH;
+		XMStoreFloat4(&posH, posHXM);*/
+		/*posH.x() /= posH.w;
+		posH.y() /= posH.w;*/
 
-		return float2(posH.x, posH.y);
+		return float2(posH.x(), posH.y());
 	}
 
 	void LightComponent::BindMacros(bool enableShadow, const Ptr<RenderView> & view, std::map<String, String> & outMacros)
@@ -93,19 +95,23 @@ namespace ToyGE
 		return maxDist;
 	}
 
-	XNA::AxisAlignedBox PointLightComponent::GetBoundsAABB() const
+	AABBox PointLightComponent::GetBoundsAABB() const
 	{
-		XNA::AxisAlignedBox aabb;
+		/*XNA::AxisAlignedBox aabb;
 		aabb.Center = GetPos();
-		aabb.Extents.x = aabb.Extents.y = aabb.Extents.z = MaxDistance();
+		aabb.Extents.x = aabb.Extents.y = aabb.Extents.z = MaxDistance();*/
+		AABBox aabb;
+		aabb.min = GetPos() - MaxDistance();
+		aabb.max = GetPos() + MaxDistance();
 		return aabb;
 	}
 
-	XNA::Sphere PointLightComponent::GetBoundsSphere() const
+	Sphere PointLightComponent::GetBoundsSphere() const
 	{
-		XNA::Sphere sp;
-		sp.Center = GetPos();
-		sp.Radius = MaxDistance();
+		Sphere sp(GetPos(), MaxDistance());
+
+		/*sp.Center = GetPos();
+		sp.Radius = MaxDistance();*/
 		return sp;
 	}
 
@@ -150,9 +156,8 @@ namespace ToyGE
 		return maxDist;
 	}
 
-	XNA::AxisAlignedBox SpotLightComponent::GetBoundsAABB() const
+	AABBox SpotLightComponent::GetBoundsAABB() const
 	{
-		XNA::AxisAlignedBox aabb;
 		float3 pos = *(reinterpret_cast<const float3*>(&GetPos()));
 		float3 dir = *(reinterpret_cast<const float3*>(&Direction()));
 		float3 u = abs(dir.y()) > 0.99f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
@@ -168,7 +173,8 @@ namespace ToyGE
 		float3 v5 = v1 - r * t;
 		float3 vMin = min_vec({ v0, v1, v2, v3, v4, v5 });
 		float3 vMax = max_vec({ v0, v1, v2, v3, v4, v5 });
-		Math::MinMaxToAxisAlignedBox(vMin, vMax, aabb);
+		AABBox aabb(vMin, vMax);
+		//Math::MinMaxToAxisAlignedBox(vMin, vMax, aabb);
 
 		return aabb;
 	}
@@ -213,10 +219,10 @@ namespace ToyGE
 			memset(&_influenceAABB, 0, sizeof(_influenceAABB));
 	}
 
-	XNA::AxisAlignedBox DirectionalLightComponent::GetBoundsAABB() const
+	AABBox DirectionalLightComponent::GetBoundsAABB() const
 	{
 		if (_bInfluenceAll)
-			return XNA::AxisAlignedBox{ { 0.0f, 0.0f, 0.0f }, { FLT_MAX * 0.5f, FLT_MAX * 0.5f, FLT_MAX * 0.5f } };
+			return AABBox(-FLT_MAX, FLT_MAX);
 		else
 			return _influenceAABB;
 	}
@@ -253,20 +259,20 @@ namespace ToyGE
 	{
 		auto & cameraPos = camera->GetPos();
 		float dist = GetDistance();
-		auto posW = XMFLOAT3(
+		auto posW = cameraPos - Direction() * dist;/*float3(
 			cameraPos.x - Direction().x * dist,
 			cameraPos.y - Direction().y * dist,
-			cameraPos.z - Direction().z * dist);
-		auto posWXM = XMLoadFloat3(&posW);
+			cameraPos.z - Direction().z * dist);*/
+		/*auto posWXM = XMLoadFloat3(&posW);
 		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
 		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
 		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);
-		XMFLOAT4 posH;
-		XMStoreFloat4(&posH, posHXM);
+		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);*/
+		auto posH = transform_coord(posW, camera->GetViewProjMatrix());
+		/*XMStoreFloat4(&posH, posHXM);
 		posH.x /= posH.w;
-		posH.y /= posH.w;
+		posH.y /= posH.w;*/
 
-		return float2(posH.x, posH.y);
+		return float2(posH.x(), posH.y());
 	}
 }

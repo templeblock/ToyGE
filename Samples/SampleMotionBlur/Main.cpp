@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleMotionBlur : public SampleCommon
 {
@@ -13,7 +12,7 @@ public:
 	Ptr<MotionBlur> _mb;
 
 	SampleMotionBlur()
-		: _rotateSpeed(XM_2PI / 0.2f),
+		: _rotateSpeed(PI2 / 0.2f),
 		_rotateAngle(0.0f),
 		_enableMB(true)
 	{
@@ -34,7 +33,7 @@ public:
 
 		Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap = true;
 
-		_renderView->GetCamera()->Pitch(XM_PIDIV2);
+		_renderView->GetCamera()->Pitch(PI_DIV2);
 
 		//Init Scene
 		auto scene = Global::GetScene();
@@ -51,7 +50,7 @@ public:
 		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 		if (!model->IsInit())
 			model->Init();
-		_objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+		_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 		auto texAsset = Asset::Find<TextureAsset>("Textures/uffizi_cross.dds");
 		if (!texAsset->IsInit())
@@ -83,11 +82,11 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		auto rotateOrienXM = XMQuaternionRotationAxis(XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), _rotateAngle);
-		XMFLOAT4 rotateOrien;
-		XMStoreFloat4(&rotateOrien, rotateOrienXM);
+		//auto rotateOrienXM = rotation_axis(float3(0.0f, 1.0f, 0.0f), _rotateAngle);
+		//XMFLOAT4 rotateOrien;
+		//XMStoreFloat4(&rotateOrien, rotateOrienXM);
 
-		_objs->SetOrientation(rotateOrien);
+		_objs->SetOrientation(rotation_axis(float3(0.0f, 1.0f, 0.0f), _rotateAngle));
 		_objs->UpdateTransform();
 
 		_rotateAngle += _rotateSpeed * elapsedTime;

@@ -104,8 +104,8 @@ void SampleCommon::Init()
 	_renderView->SetRenderTarget(Global::GetRenderEngine()->GetFrameBuffer()->GetRenderTargetView(0, 0, 1));
 
 	//Create Camera
-	auto camera = std::make_shared<PerspectiveCamera>(XM_PIDIV2, vp.width / vp.height, 0.1f, 1e+2f);
-	camera->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
+	auto camera = std::make_shared<PerspectiveCamera>(PI_DIV2, vp.width / vp.height, 0.1f, 1e+2f);
+	camera->SetPos(float3(0.0f, 3.0f, 0.0f));
 	_renderView->SetCamera(camera);
 	FrameInfoRender::traceCamera = camera;
 
@@ -186,10 +186,10 @@ void SampleCommon::MouseMove(const ToyGE::Ptr<ToyGE::InputMouse> & mouse, int re
 {
 	if (_bMouseDown)
 	{
-		float angleX = _cameraRotateSpeed * XMConvertToRadians((float)(relativeX));
-		float angleY = _cameraRotateSpeed * XMConvertToRadians((float)(relativeY));
+		float angleX = _cameraRotateSpeed * deg2rad((float)(relativeX));
+		float angleY = _cameraRotateSpeed * deg2rad((float)(relativeY));
 
-		_renderView->GetCamera()->Rotate(XMFLOAT3(0.0f, 1.0f, 0.0f), angleX);
+		_renderView->GetCamera()->Rotate(float3(0.0f, 1.0f, 0.0f), angleX);
 		_renderView->GetCamera()->Pitch(angleY);
 	}
 }

@@ -30,6 +30,85 @@ namespace ToyGE
 		std::vector<MeshVertexElementDesc> elementsDesc;
 	};
 
+	template <typename T>
+	class VertexBufferIterator
+	{
+	public:
+		typedef typename std::random_access_iterator_tag iterator_category;
+		typedef typename T value_type;
+		typedef typename std::ptrdiff_t difference_type;
+
+		typedef typename T* pointer;
+		typedef typename T& reference;
+
+		VertexBufferIterator(T * begin, std::ptrdiff_t bytesStride)
+		{
+			_cur = begin;
+			_bytesStride = bytesStride;
+		}
+
+		bool operator==(const VertexBufferIterator<T> & rhs) const
+		{
+			return (const uint8_t*)_cur == (const uint8_t*)rhs._cur;
+		}
+		bool operator!=(const VertexBufferIterator<T> & rhs) const
+		{
+			return !((*this) == rhs);
+		}
+
+		T & operator*()
+		{
+			return *_cur;
+		}
+
+		T * operator->() const
+		{
+			return _cur;
+		}
+
+		VertexBufferIterator<T> & operator+=(std::ptrdiff_t dist)
+		{
+			auto p = (uint8_t*)_cur;
+			p += _bytesStride * dist;
+			_cur = (T*)p;
+
+			return *this;
+		}
+		VertexBufferIterator<T> & operator++()
+		{
+			return (*this) += 1;
+		}
+		VertexBufferIterator<T> operator++(int)
+		{
+			auto tmp = *this;
+			++(*this);
+			return tmp;
+		}
+
+		VertexBufferIterator<T> & operator-=(std::ptrdiff_t dist)
+		{
+			auto p = (uint8_t*)_cur;
+			p -= _bytesStride * dist;
+			_cur = (T*)p;
+
+			return *this;
+		}
+		VertexBufferIterator<T> & operator--()
+		{
+			return (*this) -= 1;
+		}
+		VertexBufferIterator<T> operator--(int)
+		{
+			auto tmp = *this;
+			--(*this);
+			return tmp;
+		}
+		
+	private:
+		T * _cur;
+		std::ptrdiff_t _bytesStride;
+	};
+
 	class TOYGE_CORE_API MeshVertexSlotData
 	{
 	public:

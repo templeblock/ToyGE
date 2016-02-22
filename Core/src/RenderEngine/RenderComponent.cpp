@@ -24,7 +24,7 @@ namespace ToyGE
 		return RenderComponent::Name();
 	}
 
-	XNA::AxisAlignedBox RenderComponent::GetBoundsAABB() const
+	AABBox RenderComponent::GetBoundsAABB() const
 	{
 		return _boundsAABB;
 	}
@@ -44,7 +44,7 @@ namespace ToyGE
 		}
 	}
 
-	void GetMeshElementAABB(const Ptr<MeshElement> & meshElement, XNA::AxisAlignedBox & outAABB)
+	void GetMeshElementAABB(const Ptr<MeshElement> & meshElement, AABBox & outAABB)
 	{
 		Ptr<MeshVertexSlotData> positionVertexSlot;
 		for (auto & vertexSlot : meshElement->vertexData)
@@ -55,24 +55,33 @@ namespace ToyGE
 
 		if (positionVertexSlot)
 		{
-			XNA::ComputeBoundingAxisAlignedBoxFromPoints(
+			VertexBufferIterator<float3> begin(
+				positionVertexSlot->GetElement<float3>(0, MeshVertexElementSignature::MVET_POSITION, 0), 
+				positionVertexSlot->vertexDesc.bytesSize);
+			VertexBufferIterator<float3> end(
+				positionVertexSlot->GetElement<float3>(positionVertexSlot->GetNumVertices(), MeshVertexElementSignature::MVET_POSITION, 0),
+				positionVertexSlot->vertexDesc.bytesSize);
+			outAABB = compute_aabbox(begin, end);
+
+			/*XNA::ComputeBoundingAxisAlignedBoxFromPoints(
 				&outAABB,
 				static_cast<UINT>(positionVertexSlot->GetNumVertices()),
 				positionVertexSlot->GetElement<XMFLOAT3>(0, MeshVertexElementSignature::MVET_POSITION, 0),
-				static_cast<UINT>(positionVertexSlot->vertexDesc.bytesSize));
+				static_cast<UINT>(positionVertexSlot->vertexDesc.bytesSize));*/
 		}
 		else
-			Math::MinMaxToAxisAlignedBox(1.0f, -1.0f, outAABB);
+			outAABB = AABBox(1.0f, 1.0f);
 	}
 
 	void RenderComponent::UpdateLocalAABB()
 	{
 		if (!_meshElement)
-			_localAABB.Extents = XMFLOAT3(-1.0f, -1.0f, -1.0f);
+		{
+			_localAABB.min = 1.0f;
+			_localAABB.max = -1.0f;
+		}
 		else
 		{
-			XNA::AxisAlignedBox aabb;
-			
 			GetMeshElementAABB(_meshElement->GetElementData(), _localAABB);
 		}
 	}
@@ -82,23 +91,25 @@ namespace ToyGE
 		float3 min = FLT_MAX;
 		float3 max = -FLT_MAX;
 
-		auto transXM = XMLoadFloat4x4(&GetWorldTransformMatrix());
+		//auto transXM = XMLoadFloat4x4(reinterpret_cast<const XMFLOAT4X4*>( &GetWorldTransformMatrix()));
 
 		for (int i = 0; i < 8; ++i)
 		{
 			float3 posLocal;
-			posLocal.x() = (i & 1) ? (_localAABB.Center.x + _localAABB.Extents.x) : (_localAABB.Center.x - _localAABB.Extents.x);
-			posLocal.y() = (i & 2) ? (_localAABB.Center.y + _localAABB.Extents.y) : (_localAABB.Center.y - _localAABB.Extents.y);
-			posLocal.z() = (i & 4) ? (_localAABB.Center.z + _localAABB.Extents.z) : (_localAABB.Center.z - _localAABB.Extents.z);
+			posLocal.x() = (i & 1) ? (_localAABB.Center().x() + _localAABB.Extents().x()) : (_localAABB.Center().x() - _localAABB.Extents().x());
+			posLocal.y() = (i & 2) ? (_localAABB.Center().y() + _localAABB.Extents().y()) : (_localAABB.Center().y() - _localAABB.Extents().y());
+			posLocal.z() = (i & 4) ? (_localAABB.Center().z() + _localAABB.Extents().z()) : (_localAABB.Center().z() - _localAABB.Extents().z());
 
-			auto posTransXM = XMVector3TransformCoord(XMLoadFloat3(reinterpret_cast<XMFLOAT3*>(&posLocal)), transXM);
-			float3 pos;
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&pos), posTransXM);
-			min = min_vec(min, pos);
-			max = max_vec(max, pos);
+			auto posTrans = transform_coord(posLocal, GetWorldTransformMatrix());
+			/*float3 pos;
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&pos), posTransXM);*/
+			min = min_vec(min, posTrans);
+			max = max_vec(max, posTrans);
 		}
 
-		Math::MinMaxToAxisAlignedBox(min, max, _boundsAABB);
+		//Math::MinMaxToAxisAlignedBox(min, max, _boundsAABB);
+		_boundsAABB.min = min;
+		_boundsAABB.max = max;
 	}
 
 

@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleDepthOfField : public SampleCommon
 {
@@ -42,7 +41,7 @@ public:
 		auto scene = Global::GetScene();
 
 		auto pointLightCom = std::make_shared<PointLightComponent>();
-		pointLightCom->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
+		pointLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
 		pointLightCom->SetColor(1.0f);
 		pointLightCom->SetIntensity(60.0f);
 
@@ -103,7 +102,7 @@ public:
 		{
 			float x = posX[i];
 
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(x, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(x, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(color[i]);
@@ -117,9 +116,9 @@ public:
 			}
 		}
 
-		_renderView->GetCamera()->SetPos(XMFLOAT3(8.0f, 0.8f, -2.0f));
-		_renderView->GetCamera()->LookAt(XMFLOAT3(0.0f, 0.8f, 0.0f));
-		_renderView->GetCamera()->Cast<PerspectiveCamera>()->SetFovAngle(XM_PI / 10.0f);
+		_renderView->GetCamera()->SetPos(float3(8.0f, 0.8f, -2.0f));
+		_renderView->GetCamera()->LookAt(float3(0.0f, 0.8f, 0.0f));
+		_renderView->GetCamera()->Cast<PerspectiveCamera>()->SetFovAngle(PI / 10.0f);
 		/*_renderView->GetCamera()->SetFocalLength(100.0f);
 		_renderView->GetCamera()->SetFocalDistance(8000.0f);
 		_renderView->GetCamera()->SetFarPlane(1500.0f);*/

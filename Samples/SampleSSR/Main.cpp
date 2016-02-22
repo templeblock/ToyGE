@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleSSR : public SampleCommon
 {
@@ -32,8 +31,8 @@ public:
 		_renderView->SetPostProcessing(pp);
 
 		auto camera = _renderView->GetCamera();
-		camera->SetPos(XMFLOAT3(-14.0f, 1.0f, -1.0f));
-		camera->LookAt(XMFLOAT3(0.0f, 0.0f, 0.0f));
+		camera->SetPos(float3(-14.0f, 1.0f, -1.0f));
+		camera->LookAt(float3(0.0f, 0.0f, 0.0f));
 
 		//Init Scene
 		auto scene = Global::GetScene();
@@ -41,8 +40,8 @@ public:
 		//Add Light
 		{
 			auto spotLightCom = std::make_shared<SpotLightComponent>();
-			spotLightCom->SetPos(XMFLOAT3(2.0f, 0.2f, 0.0f));
-			spotLightCom->SetDirection(XMFLOAT3(-1.0f, -0.0f, 0.0f));
+			spotLightCom->SetPos(float3(2.0f, 0.2f, 0.0f));
+			spotLightCom->SetDirection(float3(-1.0f, -0.0f, 0.0f));
 			spotLightCom->SetColor(float3(1.0f, 0.0f, 0.0f));
 			spotLightCom->SetIntensity(5.0f);
 			spotLightCom->SetDecreaseSpeed(50.0f);
@@ -53,7 +52,7 @@ public:
 		}
 		{
 			auto pointLightCom = std::make_shared<PointLightComponent>();
-			pointLightCom->SetPos(XMFLOAT3(0.0f, 6.0f, -0.0f));
+			pointLightCom->SetPos(float3(0.0f, 6.0f, -0.0f));
 			pointLightCom->SetColor(1.0f);
 			pointLightCom->SetIntensity(50.0f);
 			pointLightCom->SetCastShadow(true);
@@ -67,14 +66,14 @@ public:
 			auto model = Asset::Find<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 		}
 
 		{
 			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(-5.0f, 0.0f, 0.0f), XMFLOAT3(0.1f, 0.1f, 0.1f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(-5.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);

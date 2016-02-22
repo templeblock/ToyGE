@@ -16,53 +16,53 @@ namespace ToyGE
 
 		String GetComponentName() const override;
 
-		void SetPos(const XMFLOAT3 & pos)
+		void SetPos(const float3 & pos)
 		{
 			_pos = pos;
 			_bDirty = true;
 		}
 
-		virtual const XMFLOAT3 & GetPos() const
+		virtual const float3 & GetPos() const
 		{
 			return _pos;
 		}
 
-		void SetScale(const XMFLOAT3 & scale)
+		void SetScale(const float3 & scale)
 		{
 			_scale = scale;
 			_bDirty = true;
 		}
 
-		const XMFLOAT3 & GetScale() const
+		const float3 & GetScale() const
 		{
 			return _scale;
 		}
 
-		void SetOrientation(const XMFLOAT4 & orientation)
+		void SetOrientation(const Quaternion & orientation)
 		{
 			_orientation = orientation;
 			_bDirty = true;
 		}
 
-		const XMFLOAT4 & GetOrientation() const
+		const Quaternion & GetOrientation() const
 		{
 			return _orientation;
 		}
 
-		const XMFLOAT4X4 & GetTransformMatrix() const
+		const float4x4 & GetTransformMatrix() const
 		{
 			return _relativetransformMatrix;
 		}
 
-		const XMFLOAT4X4 & GetWorldTransformMatrix() const
+		const float4x4 & GetWorldTransformMatrix() const
 		{
 			return _transformMatrix;
 		}
 
 		void UpdateTransform();
 
-		CLASS_GET(TransformMatrixCache, XMFLOAT4X4, _transformMatrixCache);
-		CLASS_SET(TransformMatrixCache, XMFLOAT4X4, _transformMatrixCache);
+		CLASS_GET(TransformMatrixCache, float4x4, _transformMatrixCache);
+		CLASS_SET(TransformMatrixCache, float4x4, _transformMatrixCache);
 
 		void BindShaderParams(const Ptr<class Shader> & shader);
 
@@ -70,13 +70,13 @@ namespace ToyGE
 
 	protected:
 		Ptr<TransformComponent> _parent;
-		XMFLOAT3 _pos;
-		XMFLOAT3 _scale;
-		XMFLOAT4 _orientation;
-		XMFLOAT4X4 _transformMatrix;
-		XMFLOAT4X4 _relativetransformMatrix;
+		float3 _pos;
+		float3 _scale;
+		Quaternion _orientation;
+		float4x4 _transformMatrix;
+		float4x4 _relativetransformMatrix;
 		bool _bDirty;
-		XMFLOAT4X4 _transformMatrixCache;
+		float4x4 _transformMatrixCache;
 
 		virtual void OnTranformUpdated(){};
 

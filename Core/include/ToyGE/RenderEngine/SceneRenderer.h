@@ -21,9 +21,9 @@ namespace ToyGE
 
 		virtual ~SceneRenderer() = default;
 
-		void SetSunDirection(const XMFLOAT3 & sunDirection);
+		void SetSunDirection(const float3 & sunDirection);
 
-		void SetSunRadiance(const XMFLOAT3 & sunRadiance);
+		void SetSunRadiance(const float3 & sunRadiance);
 
 		void SetSunRenderRadius(float sunRenderRadius);
 
@@ -38,8 +38,8 @@ namespace ToyGE
 		virtual void Render(const Ptr<RenderView> & view) = 0;
 
 	protected:
-		XMFLOAT3 _sunDirection;
-		XMFLOAT3 _sunRadiance;
+		float3 _sunDirection;
+		float3 _sunRadiance;
 		float _sunRenderRadius;
 		Ptr<class DirectionalLightComponent> _sunLight;
 

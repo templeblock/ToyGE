@@ -1,7 +1,6 @@
 #include "SampleCommon.h"
 
 using namespace ToyGE;
-using namespace XNA;
 
 class SampleLPV : public SampleCommon
 {
@@ -42,12 +41,12 @@ public:
 		auto scene = Global::GetScene();
 
 		//Set Camera
-		_renderView->GetCamera()->SetPos(XMFLOAT3(0.0f, 3.0f, 0.0f));
-		_renderView->GetCamera()->Yaw(-XM_PIDIV2);
+		_renderView->GetCamera()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		_renderView->GetCamera()->Yaw(-PI_DIV2);
 
 		//Add Light
 		auto dirLightCom = std::make_shared<DirectionalLightComponent>();
-		dirLightCom->SetDirection(XMFLOAT3(_lightDir.x(), _lightDir.y(), _lightDir.z()));
+		dirLightCom->SetDirection(_lightDir);
 		dirLightCom->SetColor(1.0f);
 		dirLightCom->SetIntensity(8.0f);
 		dirLightCom->SetCastShadow(true);
@@ -63,14 +62,14 @@ public:
 			auto model = Asset::Find<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(1.0f, 1.0f, 1.0f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 		}
 
 		{
 			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 			if (!model->IsInit())
 				model->Init();
-			_meshObj = model->GetMesh()->AddInstanceToScene(scene, XMFLOAT3(-5.0f, 0.0f, 0.0f), XMFLOAT3(0.2f, 0.2f, 0.2f), XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			_meshObj = model->GetMesh()->AddInstanceToScene(scene, float3(-5.0f, 0.0f, 0.0f), float3(0.2f, 0.2f, 0.2f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(_color);
@@ -123,7 +122,7 @@ public:
 		_lpvRender->SetNumPropagationItrs(_numPropagationItrs);
 		_lpvRender->SetGeometryOcclusion(_enableGeometryOcclusion);
 
-		_dirLight->SetDirection(XMFLOAT3(_lightDir.x(), _lightDir.y(), _lightDir.z()));
+		_dirLight->SetDirection(_lightDir);
 
 		for (auto obj : _meshObj->GetSubRenderComponents())
 			obj->GetMaterial()->SetBaseColor(_color);

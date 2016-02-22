@@ -48,9 +48,9 @@ namespace ToyGE
 
 		Ptr<RenderMeshComponent> AddInstanceToScene(
 			const Ptr<Scene> & scene,
-			const XMFLOAT3 & pos = XMFLOAT3(0.0f, 0.0f, 0.0f),
-			const XMFLOAT3 & scale = XMFLOAT3(1.0f, 1.0f, 1.0f),
-			const XMFLOAT4 & orientation = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
+			const float3 & pos = float3(0.0f, 0.0f, 0.0f),
+			const float3 & scale = float3(1.0f, 1.0f, 1.0f),
+			const Quaternion & orientation = float3(0.0f, 0.0f, 0.0f, 1.0f));
 
 		void SetDirty(bool bDirty)
 		{

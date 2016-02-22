@@ -50,13 +50,13 @@ namespace ToyGE
 		auto vplListBuffer = vplListBufferRef->Get()->Cast<RenderBuffer>();
 
 		auto sceneAABB = Global::GetRenderEngine()->GetSceneRenderObjsCuller()->GetSceneAABB();
-		float3 sceneMin, sceneMax;
-		Math::AxisAlignedBoxToMinMax(sceneAABB, sceneMin, sceneMax);
+		//float3 sceneMin, sceneMax;
+		//Math::AxisAlignedBoxToMinMax(sceneAABB, sceneMin, sceneMax);
 
 		auto worldToGridScale =
 			float3(static_cast<float>(lpvGridDims.x()), static_cast<float>(lpvGridDims.y()), static_cast<float>(lpvGridDims.z()))
-			/ (sceneMax - sceneMin);
-		auto worldToGridOffset = sceneMin * -1.0f;
+			/ (sceneAABB.max - sceneAABB.min);
+		auto worldToGridOffset = sceneAABB.min * -1.0f;
 
 		ClearVPL(vplHeadBuffer);
 
@@ -161,10 +161,10 @@ namespace ToyGE
 
 		cs->SetScalar("rsmTexSize", rsm.rsmRadiance->Get()->Cast<Texture>()->GetTexSize());
 
-		auto rsmWorldToClipXM = XMLoadFloat4x4(&light->GetShadowTechnique()->Cast<CascadedShadow>()->GetRSMView().shadowWorldToClipMatrix[0]);
-		auto rsmClipToWorldXM = XMMatrixInverse(&XMMatrixDeterminant(rsmWorldToClipXM), rsmWorldToClipXM);
-		XMFLOAT4X4 rsmClipToWorld;
-		XMStoreFloat4x4(&rsmClipToWorld, rsmClipToWorldXM);
+		auto rsmWorldToClip = light->GetShadowTechnique()->Cast<CascadedShadow>()->GetRSMView().shadowWorldToClipMatrix[0];
+		auto rsmClipToWorld = inverse(rsmWorldToClip);
+		/*XMFLOAT4X4 rsmClipToWorld;
+		XMStoreFloat4x4(&rsmClipToWorld, rsmClipToWorldXM);*/
 		cs->SetScalar("rsmClipToWorld", rsmClipToWorld);
 
 		cs->SetUAV("vplCounter", vplCounter->GetUnorderedAccessView(0, 0, RENDER_FORMAT_UNKNOWN, BUFFER_UAV_COUNTER), 0);

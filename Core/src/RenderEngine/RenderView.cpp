@@ -157,13 +157,15 @@ namespace ToyGE
 			_viewParams.worldToViewMatrix = GetCamera()->GetViewMatrix();
 			_viewParams.viewToClipMatrix = GetCamera()->GetProjMatrix();
 
-			auto viewXM = XMLoadFloat4x4(&GetCamera()->GetViewMatrix());
+			/*auto viewXM = XMLoadFloat4x4(&GetCamera()->GetViewMatrix());
 			auto projXM = XMLoadFloat4x4(&GetCamera()->GetProjMatrix());
 			auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-			XMStoreFloat4x4(&_viewParams.worldToClipMatrix, viewProjXM);
+			XMStoreFloat4x4(&_viewParams.worldToClipMatrix, viewProjXM);*/
+			_viewParams.worldToClipMatrix = GetCamera()->GetViewProjMatrix();
 
-			auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
-			XMStoreFloat4x4(&_viewParams.viewToWorldMatrix, invViewXM);
+			/*auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
+			XMStoreFloat4x4(&_viewParams.viewToWorldMatrix, invViewXM);*/
+			_viewParams.viewToWorldMatrix = inverse(GetCamera()->GetViewMatrix());
 
 			_viewParams.preWorldToViewMatrix = GetCamera()->GetViewMatrixCache();
 			_viewParams.viewPos = *(reinterpret_cast<const float3*>(&GetCamera()->GetPos()));

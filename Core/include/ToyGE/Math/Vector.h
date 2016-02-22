@@ -2,14 +2,37 @@
 #ifndef VECTOR_H
 #define VECTOR_H
 
-#include "ToyGE\Kernel\PreInclude.h"
-
 namespace ToyGE
 {
+	//class VectorBase
+	//{
+	//public:
+	//	virtual int NumElements() const = 0;
+
+	//	virtual size_t ElementSize() const = 0;
+
+	//	template <typename P>
+	//	P Get(int index) const
+	//	{
+	//		return *reinterpret_cast<const P*>(this + ElementSize() * static_cast<size_t>(index));
+	//	}
+	//};
+
 	template <typename T, int N>
-	class Vector
+	class Vector 
 	{
 	public:
+		typedef T value_type;
+
+		typedef value_type*			pointer;
+		typedef value_type const *	const_pointer;
+
+		typedef value_type&			reference;
+		typedef value_type const &	const_reference;
+
+		typedef value_type*			iterator;
+		typedef value_type const *	const_iterator;
+
 		T value[N];
 
 		Vector()
@@ -35,6 +58,13 @@ namespace ToyGE
 				i = v;
 		}
 
+		template <typename RT>
+		Vector(const RT & v)
+		{
+			for (auto & i : value)
+				i = static_cast<T>(v);
+		}
+
 		Vector(const std::initializer_list<T> & v)
 		{
 			auto itr = v.begin();
@@ -43,30 +73,35 @@ namespace ToyGE
 		}
 
 		template <typename RT>
-		Vector(const RT & v)
-		{
-			for (auto & i : value)
-				i = static_cast<RT>(v);
-		}
-
-		template <typename RT>
 		Vector(const std::initializer_list<RT> & v)
 		{
 			auto itr = v.begin();
 			for (int i = 0; i < N && itr != v.end(); ++i)
-				value[i] = static_cast<RT>(*(itr++));
+				value[i] = static_cast<T>(*(itr++));
 		}
+
+		/*Vector(const std::initializer_list<const VectorBase*> & v)
+		{
+			int index = 0;
+			for (auto & vec : v)
+			{
+				int vecIndex = 0;
+				while (index < N && vecIndex < vec->NumElements())
+				{
+					value[index++] = vec->Get<T>(vecIndex++);
+				}
+			}
+		}*/
 
 		Vector(const Vector<T, N> & rhs)
 		{
 			*this = rhs;
 		}
 
-		template <typename RT>
-		Vector(const Vector<RT, N> & rhs)
+		template <typename RT, int M>
+		Vector(const Vector<RT, M> & rhs)
 		{
-			for (int i = 0; i < N; ++i)
-				value[i] = static_cast<RT>(rhs.value[i]);
+			*this = rhs;
 		}
 
 		const T & operator[](int index) const
@@ -90,6 +125,15 @@ namespace ToyGE
 		Vector<T, N> & operator=(const Vector<T, N> & rhs)
 		{
 			std::copy(std::begin(rhs.value), std::end(rhs.value), std::begin(value));
+			return *this;
+		}
+
+		template <typename RT, int M>
+		Vector<T, N> & operator=(const Vector<RT, M> & rhs)
+		{
+			int K = std::min<int>(M, N);
+			for (int i = 0; i < K; ++i)
+				value[i] = static_cast<T>(rhs.value[i]);
 			return *this;
 		}
 
@@ -266,8 +310,22 @@ namespace ToyGE
 		{
 			return (*this)[3];
 		}
+
+		template<int M>
+		Vector<T, M> recombine(const std::array<int, M> & indices) const
+		{
+			Vector<T, M> r;
+			for (int i = 0; i < M; ++i)
+				r[i] = (*this)[indices[i]];
+			return r;
+		}
 	};
 
+	template <typename T, int N>
+	void swap(const Vector<T, N> & lhs, const Vector<T, N> & rhs)
+	{
+		lhs.swap(rhs);
+	}
 }
 
 #endif

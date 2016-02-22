@@ -118,9 +118,9 @@ namespace ToyGE
 	template <int32_t numViews>
 	struct ShadowView
 	{
-		XMFLOAT4X4 shadowWorldToViewMatrix[numViews];
-		XMFLOAT4X4 shadowViewToClipMatrix[numViews];
-		XMFLOAT4X4 shadowWorldToClipMatrix[numViews];
+		float4x4 shadowWorldToViewMatrix[numViews];
+		float4x4 shadowViewToClipMatrix[numViews];
+		float4x4 shadowWorldToClipMatrix[numViews];
 		float    shadowViewNear;
 		float    shadowViewFar;
 		float    shadowViewLength; // far - near

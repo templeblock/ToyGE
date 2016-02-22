@@ -41,13 +41,13 @@ namespace ToyGE
 
 		void Render(const Ptr<RenderView> & view) override;
 
-		CLASS_SET(SunDirection, XMFLOAT3, _sunDirection);
+		CLASS_SET(SunDirection, float3, _sunDirection);
 
-		CLASS_SET(SunRadiance, XMFLOAT3, _sunRadiance);
+		CLASS_SET(SunRadiance, float3, _sunRadiance);
 
 		CLASS_SET(SunRenderRadius, float, _sunRenderRadius);
 
-		XMFLOAT3 ComputeSunRadianceAt(const XMFLOAT3 & sunDir, const XMFLOAT3 & sunRadiance, float height);
+		float3 ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height);
 
 		void RecomputeSunRenderColor();
 
@@ -71,10 +71,10 @@ namespace ToyGE
 		Ptr<Texture> _inScatteringLUTR;
 		Ptr<Texture> _inScatteringLUTM;
 
-		XMFLOAT3 _sunDirection;
-		XMFLOAT3 _sunRadiance;
+		float3 _sunDirection;
+		float3 _sunRadiance;
 		float	 _sunRenderRadius;
-		XMFLOAT3 _sunRenderColor;
+		float3 _sunRenderColor;
 
 		void InitOpticalDepthLUT();
 

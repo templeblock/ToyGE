@@ -292,20 +292,20 @@ namespace ToyGE
 
 		// Init camera
 		auto spotLight = std::static_pointer_cast<SpotLightComponent>(GetLight());
-		auto lightPosXM = XMLoadFloat3(&spotLight->GetPos());
-		auto lightDirXM = XMLoadFloat3(&spotLight->Direction());
-		XMFLOAT3 lightUp = abs(spotLight->Direction().y) == 1.0f ? XMFLOAT3(1.0f, 0.0f, 0.0f) : XMFLOAT3(0.0f, 1.0f, 0.0f);
-		auto lightUpXM = XMLoadFloat3(&lightUp);
-		auto viewXM = XMMatrixLookToLH(lightPosXM, lightDirXM, lightUpXM);
+		//auto lightPos = spotLight->GetPos();
+		//auto lightDir = spotLight->Direction();
+		float3 lightUp = abs(spotLight->Direction().y()) == 1.0f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+		////auto lightUpXM = XMLoadFloat3(&lightUp);
+		//auto viewXM = look_at_lh(lightPos, lightPos + lightDir, lightUp);
 		auto spotCamera = std::make_shared<PerspectiveCamera>(2.0f * spotLight->MaxAngle(), 1.0f, 0.1f, spotLight->MaxDistance());
 		spotCamera->LookTo(spotLight->GetPos(), spotLight->Direction(), lightUp);
-		auto projXM = XMLoadFloat4x4(&spotCamera->GetProjMatrix());
-		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
+		/*auto projXM = XMLoadFloat4x4(&spotCamera->GetProjMatrix());
+		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);*/
 
 		// Update cb
 		_spotShadowView.shadowWorldToViewMatrix[0] = spotCamera->GetViewMatrix();
 		_spotShadowView.shadowViewToClipMatrix[0] = spotCamera->GetProjMatrix();
-		XMStoreFloat4x4(&_spotShadowView.shadowWorldToClipMatrix[0], viewProjXM);
+		_spotShadowView.shadowWorldToClipMatrix[0] = spotCamera->GetViewProjMatrix();
 		_spotShadowView.shadowViewNear = spotCamera->GetNear();
 		_spotShadowView.shadowViewFar = spotCamera->GetFar();
 		_spotShadowView.shadowViewLength = _spotShadowView.shadowViewFar - _spotShadowView.shadowViewNear;
@@ -401,41 +401,41 @@ namespace ToyGE
 		}*/
 
 		// Init camera
-		static std::vector<XMFLOAT3> viewDir =
+		static std::vector<float3> viewDir =
 		{
-			XMFLOAT3(1.0f, 0.0f, 0.0f),
-			XMFLOAT3(-1.0f, 0.0f, 0.0f),
-			XMFLOAT3(0.0f, 1.0f, 0.0f),
-			XMFLOAT3(0.0f, -1.0f, 0.0f),
-			XMFLOAT3(0.0f, 0.0f, 1.0f),
-			XMFLOAT3(0.0f, 0.0f, -1.0f)
+			float3(1.0f, 0.0f, 0.0f),
+			float3(-1.0f, 0.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, -1.0f, 0.0f),
+			float3(0.0f, 0.0f, 1.0f),
+			float3(0.0f, 0.0f, -1.0f)
 		};
-		static std::vector<XMFLOAT3> upDir =
+		static std::vector<float3> upDir =
 		{
-			XMFLOAT3(0.0f, 1.0f, 0.0f),
-			XMFLOAT3(0.0f, 1.0f, 0.0f),
-			XMFLOAT3(0.0f, 0.0f, -1.0f),
-			XMFLOAT3(0.0f, 0.0f, 1.0f),
-			XMFLOAT3(0.0f, 1.0f, 0.0f),
-			XMFLOAT3(0.0f, 1.0f, 0.0f)
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 0.0f, -1.0f),
+			float3(0.0f, 0.0f, 1.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f)
 		};
 
 		auto pointLight = std::static_pointer_cast<PointLightComponent>(GetLight());
 		for (int32_t i = 0; i < 6; ++i)
 		{
-			auto lightPosXM = XMLoadFloat3(&pointLight->GetPos());
-			auto lightDirXM = XMLoadFloat3(&viewDir[i]);
-			auto lightUpXM = XMLoadFloat3(&upDir[i]);
-			auto viewXM = XMMatrixLookToLH(lightPosXM, lightDirXM, lightUpXM);
-			auto pointCamera = std::make_shared<PerspectiveCamera>(XM_PIDIV2, 1.0f, 0.1f, pointLight->MaxDistance());
+			/*const auto & lightPos = pointLight->GetPos());
+			const auto & lightDir = viewDir[i];
+			const auto & lightUp = upDir[i];
+			auto viewXM = look_at_lh(lightPos, lightPos + lightDir, lightUp);*/
+			auto pointCamera = std::make_shared<PerspectiveCamera>(PI_DIV2, 1.0f, 0.1f, pointLight->MaxDistance());
 			pointCamera->LookTo(pointLight->GetPos(), viewDir[i], upDir[i]);
-			auto projXM = XMLoadFloat4x4(&pointCamera->GetProjMatrix());
-			auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
+			/*auto projXM = XMLoadFloat4x4(&pointCamera->GetProjMatrix());
+			auto viewProjXM = XMMatrixMultiply(viewXM, projXM);*/
 
 			// Update cb
 			_pointShadowView.shadowWorldToViewMatrix[i] = pointCamera->GetViewMatrix();
 			_pointShadowView.shadowViewToClipMatrix[i] = pointCamera->GetProjMatrix();
-			XMStoreFloat4x4(&_pointShadowView.shadowWorldToClipMatrix[i], viewProjXM);
+			_pointShadowView.shadowWorldToClipMatrix[i] = pointCamera->GetViewProjMatrix();
 			_pointShadowView.shadowViewNear = pointCamera->GetNear();
 			_pointShadowView.shadowViewFar = pointCamera->GetFar();
 			_pointShadowView.shadowViewLength = _pointShadowView.shadowViewFar - _pointShadowView.shadowViewNear;
@@ -559,7 +559,7 @@ namespace ToyGE
 		float aspectRatio = view->GetCamera()->Cast<PerspectiveCamera>()->GetAspectRatio();
 
 		auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(GetLight());
-		XMFLOAT3 _lightUp = abs(dirLight->Direction().y) == 1.0f ? XMFLOAT3(1.0f, 0.0f, 0.0f) : XMFLOAT3(0.0f, 1.0f, 0.0f);
+		float3 _lightUp = abs(dirLight->Direction().y()) == 1.0f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
 
 		_splits.clear();
 		_splitsShadowViewMin.clear();
@@ -569,17 +569,17 @@ namespace ToyGE
 			auto dirCamera = std::make_shared<OrthogonalCamera>();
 			dirCamera->LookTo(dirLight->GetPos(), dirLight->Direction(), _lightUp);
 
-			auto dirViewXM = XMLoadFloat4x4(&dirCamera->GetViewMatrix());
-			auto cameraDirPosXM = XMVector3TransformCoord(XMLoadFloat3(&view->GetCamera()->GetPos()), dirViewXM);
-			auto cameraDirXAxisXM = XMVector3TransformCoord(XMLoadFloat3(&view->GetCamera()->GetXAxis()), dirViewXM);
-			auto cameraDirYAxisXM = XMVector3TransformCoord(XMLoadFloat3(&view->GetCamera()->GetYAxis()), dirViewXM);
-			auto cameraDirZAxisXM = XMVector3TransformCoord(XMLoadFloat3(&view->GetCamera()->GetZAxis()), dirViewXM);
+			const auto & dirView = dirCamera->GetViewMatrix();
+			auto cameraDirPos = transform_coord(view->GetCamera()->GetPos(), dirView);
+			auto cameraDirXAxis = transform_coord(view->GetCamera()->GetXAxis(), dirView);
+			auto cameraDirYAxis = transform_coord(view->GetCamera()->GetYAxis(), dirView);
+			auto cameraDirZAxis = transform_coord(view->GetCamera()->GetZAxis(), dirView);
 
-			float3 cameraDirPos, cameraDirXAxis, cameraDirYAxis, cameraDirZAxis;
+			/*float3 cameraDirPos, cameraDirXAxis, cameraDirYAxis, cameraDirZAxis;
 			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&cameraDirPos), cameraDirPosXM);
 			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&cameraDirXAxis), cameraDirXAxisXM);
 			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&cameraDirYAxis), cameraDirYAxisXM);
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&cameraDirZAxis), cameraDirZAxisXM);
+			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&cameraDirZAxis), cameraDirZAxisXM);*/
 
 			auto split = ComputeSplit(splitNearFar, splitIndex, _numSplits);
 
@@ -682,17 +682,17 @@ namespace ToyGE
 		float aspectRatio = view->GetCamera()->Cast<PerspectiveCamera>()->GetAspectRatio();
 
 		auto dirLight = std::static_pointer_cast<DirectionalLightComponent>(GetLight());
-		XMFLOAT3 _lightUp = abs(dirLight->Direction().y) == 1.0f ? XMFLOAT3(1.0f, 0.0f, 0.0f) : XMFLOAT3(0.0f, 1.0f, 0.0f);
+		float3 _lightUp = abs(dirLight->Direction().y()) == 1.0f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
 
 		for (int32_t splitIndex = 0; splitIndex < 1; ++splitIndex)
 		{
 			auto dirCamera = std::make_shared<OrthogonalCamera>();
 			dirCamera->LookTo(dirLight->GetPos(), dirLight->Direction(), _lightUp);
 
-			auto dirViewXM = XMLoadFloat4x4(&dirCamera->GetViewMatrix());
+			const auto & dirView = dirCamera->GetViewMatrix();
 
 			auto sceneAABB = Global::GetRenderEngine()->GetSceneRenderObjsCuller()->GetSceneAABB();
-			float3 center = *reinterpret_cast<const float3*>(&sceneAABB.Center);
+			float3 center = sceneAABB.Center();
 
 			float3 lightViewMin = FLT_MAX;
 			float3 lightViewMax = -FLT_MAX;
@@ -700,13 +700,13 @@ namespace ToyGE
 			for (int i = 0; i < 8; ++i)
 			{
 				float3 p = center;
-				p += (i & 1) ? float3(1.0f, 0.0f, 0.0f) * sceneAABB.Extents.x : float3(1.0f, 0.0f, 0.0f) * -sceneAABB.Extents.x;
-				p += (i & 2) ? float3(0.0f, 1.0f, 0.0f) * sceneAABB.Extents.y : float3(0.0f, 1.0f, 0.0f) * -sceneAABB.Extents.y;
-				p += (i & 4) ? float3(0.0f, 0.0f, 1.0f) * sceneAABB.Extents.z : float3(0.0f, 0.0f, 1.0f) * -sceneAABB.Extents.z;
+				p += (i & 1) ? float3(1.0f, 0.0f, 0.0f) * sceneAABB.Extents().x() : float3(1.0f, 0.0f, 0.0f) * -sceneAABB.Extents().x();
+				p += (i & 2) ? float3(0.0f, 1.0f, 0.0f) * sceneAABB.Extents().y() : float3(0.0f, 1.0f, 0.0f) * -sceneAABB.Extents().y();
+				p += (i & 4) ? float3(0.0f, 0.0f, 1.0f) * sceneAABB.Extents().z() : float3(0.0f, 0.0f, 1.0f) * -sceneAABB.Extents().z();
 
-				auto p_lightViewXM = XMVector3TransformCoord(XMLoadFloat3(reinterpret_cast<XMFLOAT3*>(&p)), dirViewXM);
-				float3 p_lightView;
-				XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&p_lightView), p_lightViewXM);
+				auto p_lightView = transform_coord(p, dirView);
+				/*float3 p_lightView;
+				XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&p_lightView), p_lightViewXM);*/
 
 				lightViewMin = min_vec(lightViewMin, p_lightView);
 				lightViewMax = max_vec(lightViewMax, p_lightView);
