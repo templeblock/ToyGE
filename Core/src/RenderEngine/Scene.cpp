@@ -4,11 +4,10 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
 #include "ToyGE\RenderEngine\Camera.h"
-//#include "ToyGE\RenderEngine\LightComponent.h"
 
 namespace ToyGE
 {
-	int32_t Scene::objID = 0;
+	int32_t Scene::actorID = 0;
 
 	Scene::Scene()
 		: _ambientColor(0.0f)
@@ -16,33 +15,33 @@ namespace ToyGE
 
 	}
 
-	int32_t Scene::AddSceneObject(const Ptr<SceneObject> & obj)
+	int32_t Scene::AddActor(const Ptr<Actor> & actor)
 	{
-		_sceneObjsMap[objID] = obj;
-		return objID++;
+		_actorsMap[actorID] = actor;
+		return actorID++;
 	}
 
-	Ptr<SceneObject> Scene::GetSceneObject(int32_t objID) const
+	Ptr<Actor> Scene::GetActor(int32_t objID) const
 	{
-		auto objFind = _sceneObjsMap.find(objID);
-		if (objFind != _sceneObjsMap.end())
+		auto objFind = _actorsMap.find(objID);
+		if (objFind != _actorsMap.end())
 			return objFind->second;
 		else
-			return Ptr<SceneObject>();
+			return nullptr;
 	}
 
-	void Scene::RemoveSceneObject(const Ptr<SceneObject> & obj)
+	void Scene::RemoveActor(const Ptr<Actor> & obj)
 	{
-		_sceneObjsMap.erase(std::find_if(_sceneObjsMap.begin(), _sceneObjsMap.end(),
-			[&](const std::pair<int32_t, Ptr<SceneObject>> & e) -> bool
+		_actorsMap.erase(std::find_if(_actorsMap.begin(), _actorsMap.end(),
+			[&](const std::pair<int32_t, Ptr<Actor>> & e) -> bool
 		{
 			return e.second == obj;
 		}));
 	}
 
-	void Scene::RemoveSceneObject(int32_t objID)
+	void Scene::RemoveActor(int32_t objID)
 	{
-		_sceneObjsMap.erase(objID);
+		_actorsMap.erase(objID);
 	}
 
 	void Scene::AddView(const Ptr<RenderView> & view)

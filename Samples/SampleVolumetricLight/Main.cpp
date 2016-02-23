@@ -43,41 +43,33 @@ public:
 		auto scene = Global::GetScene();
 
 		//Add Light
-		auto spotLightCom = std::make_shared<SpotLightComponent>();
-		spotLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
-		spotLightCom->SetDirection(float3(0.0f, -1.0f, 0.0f));
-		spotLightCom->SetColor(1.0f);
-		spotLightCom->SetIntensity(10.0f);
-		spotLightCom->SetDecreaseSpeed(10.0f);
-		spotLightCom->SetCastShadow(true);
-		spotLightCom->SetCastLightVolume(true);
-		auto spotLightObj = std::make_shared<SceneObject>();
-		spotLightObj->AddComponent(spotLightCom);
-		spotLightObj->ActiveAllComponents();
-		scene->AddSceneObject(spotLightObj);
-		_light = spotLightCom;
+		auto spotLight = LightActor::Create<SpotLightComponent>(scene);
+		spotLight->GetLight<SpotLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		spotLight->GetLight<SpotLightComponent>()->SetDirection(float3(0.0f, -1.0f, 0.0f));
+		spotLight->GetLight<SpotLightComponent>()->SetColor(1.0f);
+		spotLight->GetLight<SpotLightComponent>()->SetIntensity(10.0f);
+		spotLight->GetLight<SpotLightComponent>()->SetDecreaseSpeed(10.0f);
+		spotLight->GetLight<SpotLightComponent>()->SetCastShadow(true);
+		spotLight->GetLight<SpotLightComponent>()->SetCastLightVolume(true);
+		_light = spotLight->GetLight<SpotLightComponent>();
 
 		std::vector<Ptr<RenderComponent>> objs;
 
 		{
-			auto model = Asset::Find<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
-			if (!model->IsInit())
-				model->Init();
+			auto model = Asset::FindAndInit<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
 			model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 		}
 
 		{
-			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-			if (!model->IsInit())
-				model->Init();
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+			auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+			auto actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);
 			mat->SetRoughness(0.0f);
 			mat->SetMetallic(0.0f);
 
-			for (auto obj : objs->GetSubRenderComponents())
+			for (auto obj : actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 				obj->SetMaterial(mat);
 		}
 

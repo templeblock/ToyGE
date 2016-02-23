@@ -47,22 +47,16 @@ public:
 		auto scene = Global::GetScene();
 
 		//Add Light
-		auto dirLightCom = std::make_shared<DirectionalLightComponent>();
-		dirLightCom->SetCastShadow(true);
-		auto dirLightObj = std::make_shared<SceneObject>();
-		dirLightObj->AddComponent(dirLightCom);
-		dirLightObj->ActiveAllComponents();
-		scene->AddSceneObject(dirLightObj);
-		_light = dirLightCom;
+		auto dirLight = LightActor::Create<DirectionalLightComponent>(scene);
+		dirLight->GetLight<DirectionalLightComponent>()->SetCastShadow(true);
+		_light = dirLight->GetLight<DirectionalLightComponent>();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunLight(dirLightCom);
+		Global::GetRenderEngine()->GetSceneRenderer()->SetSunLight(dirLight->GetLight<DirectionalLightComponent>());
 		_ppvl->SetLight(_light);
 
 		//Add Objs
 		{
-			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-			if (!model->IsInit())
-				model->Init();
+			auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
@@ -70,7 +64,7 @@ public:
 			mat->SetRoughness(0.0f);
 			mat->SetMetallic(0.0f);
 
-			for (auto obj : objs->GetSubRenderComponents())
+			for (auto obj : objs->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 				obj->SetMaterial(mat);
 		}
 
@@ -85,7 +79,7 @@ public:
 				float3(0.0f, -6370000.0f, 0.0f),
 				float3(6370000.0f, 6370000.0f, 6370000.0f),
 				Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
-			for (auto & obj : sphereObj->GetSubRenderComponents())
+			for (auto & obj : sphereObj->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 			{
 				obj->SetMaterial(mat);
 				obj->SetCastShadows(false);

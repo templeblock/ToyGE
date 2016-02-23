@@ -44,21 +44,15 @@ public:
 		auto scene = Global::GetScene();
 
 		//Add Light
-		auto pointLightCom = std::make_shared<PointLightComponent>();
-		pointLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
-		pointLightCom->SetColor(1.0f);
-		pointLightCom->SetIntensity(30.0f);
-		pointLightCom->SetCastShadow(true);
-		auto pointLightObj = std::make_shared<SceneObject>();
-		pointLightObj->AddComponent(pointLightCom);
-		pointLightObj->ActiveAllComponents();
-		scene->AddSceneObject(pointLightObj);
+		auto pointLight = LightActor::Create<PointLightComponent>(scene);
+		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
+		pointLight->GetLight<PointLightComponent>()->SetIntensity(30.0f);
+		pointLight->GetLight<PointLightComponent>()->SetCastShadow(true);
 
 		std::vector<Ptr<RenderComponent>> objs;
 
-		auto model = Asset::Find<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
-		if (!model->IsInit())
-			model->Init();
+		auto model = Asset::FindAndInit<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
 		model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.01f, 0.01f, 0.01f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 

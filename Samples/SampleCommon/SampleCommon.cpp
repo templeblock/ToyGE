@@ -110,8 +110,7 @@ void SampleCommon::Init()
 	FrameInfoRender::traceCamera = camera;
 
 	//Set Background Render
-	auto skyboxTex = Asset::Find<TextureAsset>("Textures/uffizi_cross.dds");
-	skyboxTex->Init();
+	auto skyboxTex = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 	scene->SetAmbientTexture(skyboxTex->GetTexture());
 
 	//UI

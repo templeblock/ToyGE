@@ -26,7 +26,7 @@ public:
 
 	std::map<SceneType, SceneData> _sceneMap;
 	SceneType _curScene;
-	Ptr<RenderMeshComponent> _objs;
+	Ptr<Actor> _actor;
 
 	SampleIBL()
 		: _matBaseColor(1.0f),
@@ -71,9 +71,7 @@ public:
 		for (int32_t i = 0; i < _countof(bkTexs); ++i)
 		{
 			SceneData sceneData;
-			auto texAsset = Asset::Find<TextureAsset>(bkTexs[i]);
-			if (!texAsset->IsInit())
-				texAsset->Init();
+			auto texAsset = Asset::FindAndInit<TextureAsset>(bkTexs[i]);
 			sceneData.tex = texAsset->GetTexture();
 
 			auto reflectionMap = std::make_shared<ReflectionMap>();
@@ -94,12 +92,10 @@ public:
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
-		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-		if (!model->IsInit())
-			model->Init();
-		_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+		auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+		_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
-		for (auto & obj : _objs->GetSubRenderComponents())
+		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
 			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
@@ -147,7 +143,7 @@ public:
 
 		Global::GetScene()->SetAmbientTexture(_sceneMap[_curScene].tex);
 
-		for (auto & obj : _objs->GetSubRenderComponents())
+		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
 			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);

@@ -10,7 +10,6 @@
 
 namespace ToyGE
 {
-
 	class TOYGE_CORE_API Camera : public StaticCastable
 	{
 	public:
@@ -18,26 +17,22 @@ namespace ToyGE
 
 		virtual ~Camera() = default;
 
-		void SetPos(const float3 & pos);
-		CLASS_GET(Pos, float3, _pos);
-
 		void SetViewMatrix(const float4x4 & matrix);
 		const float4x4 & GetViewMatrix() const
 		{
 			return _viewMatrix;
 		}
 
-		virtual void SetProjMatrix(const float4x4 & matrix)
-		{
-			_projMatrix = matrix;
-			auto a = matrix[0];
-		}
+		virtual void SetProjMatrix(const float4x4 & matrix);
 		const float4x4 & GetProjMatrix() const
 		{
 			return _projMatrix;
 		}
 
 		float4x4 GetViewProjMatrix() const;
+
+		void SetPos(const float3 & pos);
+		CLASS_GET(Pos, float3, _pos);
 
 		void LookTo(const float3 & pos, const float3 & look, const float3 & up);
 
@@ -74,7 +69,7 @@ namespace ToyGE
 			return _farDepth;
 		}
 
-		virtual Frustum GetFrustum() const { return Frustum(); };
+		virtual Frustum GetFrustum() const { return _frustum; };
 
 		void Walk(float value);
 		void Strafe(float value);
@@ -88,7 +83,7 @@ namespace ToyGE
 		CLASS_GET(ViewMatrixCache, float4x4, _viewMatrixCache);
 		CLASS_SET(ViewMatrixCache, float4x4, _viewMatrixCache);
 
-		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements) = 0;
+		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements);
 
 	protected:
 		float3 _pos;
@@ -96,22 +91,27 @@ namespace ToyGE
 		float3 _yAxis;
 		float3 _zAxis;
 		float4x4 _viewMatrix;
-		float4x4 _viewMatrixCache;
 		float4x4 _projMatrix;
+		float4x4 _viewProjMatrix;
+		float4x4 _viewMatrixCache;
 		float _nearDepth;
 		float _farDepth;
 
+		Frustum _frustum;
+
 		void UpdateViewMatrix();
+
+		void UpdateFrustum();
 	};
 
 	class TOYGE_CORE_API PerspectiveCamera : public Camera
 	{
 	public:
+		PerspectiveCamera();
+
 		PerspectiveCamera(float fovAngle, float aspectRatio, float nearZ, float farZ);
 
 		virtual void SetProjMatrix(const float4x4 & matrix) override;
-
-		virtual Frustum GetFrustum() const override;
 
 		virtual void SetNear(float nearDepth) override;
 
@@ -129,20 +129,17 @@ namespace ToyGE
 			return _aspectRatio;
 		}
 
-		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements) override;
-
 	protected:
-		Frustum _frustum;
 		float _fovAngle;
 		float _aspectRatio;
-
-		void UpdateProjMatrix();
 	};
 
 	class TOYGE_CORE_API OrthogonalCamera : public Camera
 	{
 	public:
 		OrthogonalCamera();
+
+		OrthogonalCamera(float left, float right, float bottom, float up, float front, float back);
 
 		virtual void SetProjMatrix(const float4x4 & matrix) override;
 
@@ -151,8 +148,6 @@ namespace ToyGE
 		virtual void SetFar(float farDepth) override;
 
 		void SetViewBox(float left, float right, float bottom, float up, float front, float back);
-
-		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements) override;
 
 	protected:
 		float _left = 0.0f;

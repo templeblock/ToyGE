@@ -1593,8 +1593,7 @@ namespace ToyGE
 		frustum.planes[2] = column4 - column2;	// top
 		frustum.planes[3] = column4 + column2;	// bottom
 		frustum.planes[4] = column4 - column3;	// far
-										// TODO: Should be column3 only
-		frustum.planes[5] = column4 + column3;	// near
+		frustum.planes[5] = column3;	// near
 
 										// Loop through each side of the frustum and normalize it.
 		for (auto& plane : frustum.planes)
@@ -1635,15 +1634,25 @@ namespace ToyGE
 	}
 
 	template <typename T>
+	AABBox_T<T> transform_aabb(AABBox_T<T> const & aabb, Matrix4<T> const & mat)
+	{
+		Vector<T, 3> scale, trans;
+		Quaternion_T<T> rot;
+		decompose(mat, scale, rot, trans);
+
+		return transform_aabb(aabb, scale, rot, trans);
+	}
+
+	template <typename T>
 	AABBox_T<T> transform_aabb(AABBox_T<T> const & aabb, Vector<T, 3> const & scale, Quaternion_T<T> const & rot, Vector<T, 3> const & trans) 
 	{
 		Vector<T, 3> min, max;
 		min = max = transform_quat(aabb.Corner(0) * scale, rot) + trans;
-		for (size_t j = 1; j < 8; ++j)
+		for (int j = 1; j < 8; ++j)
 		{
 			Vector<T, 3> vec = transform_quat(aabb.Corner(j) * scale, rot) + trans;
-			min = minimize(min, vec);
-			max = maximize(max, vec);
+			min = min_vec(min, vec);
+			max = max_vec(max, vec);
 		}
 
 		return AABBox_T<T>(min, max);
@@ -1654,7 +1663,7 @@ namespace ToyGE
 	{
 		Vector<T, 3> scale, trans;
 		Quaternion_T<T> rot;
-		decompose(scale, rot, trans, mat);
+		decompose(mat, scale, rot, trans);
 
 		return transform_obb(obb, scale, rot, trans);
 	}
@@ -1673,7 +1682,7 @@ namespace ToyGE
 	{
 		Vector<T, 3> scale, trans;
 		Quaternion_T<T> rot;
-		decompose(scale, rot, trans, mat);
+		decompose(mat, scale, rot, trans);
 
 		return transform_sphere(sphere, scale.x(), rot, trans);
 	}

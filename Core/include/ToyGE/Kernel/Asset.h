@@ -45,6 +45,15 @@ namespace ToyGE
 				return nullptr;
 		}
 
+		template<class AssetType>
+		static Ptr<AssetType> FindAndInit(const String & path)
+		{
+			auto find = Find<AssetType>(path);
+			if (find && !find->IsInit())
+				find->Init();
+			return find;
+		}
+
 		static const std::map<String, Ptr<Asset>> & GetAssetsMap()
 		{
 			return _assetsMap;

@@ -40,19 +40,12 @@ public:
 		//Init Scene
 		auto scene = Global::GetScene();
 
-		auto pointLightCom = std::make_shared<PointLightComponent>();
-		pointLightCom->SetPos(float3(0.0f, 3.0f, 0.0f));
-		pointLightCom->SetColor(1.0f);
-		pointLightCom->SetIntensity(60.0f);
+		auto pointLight = LightActor::Create<PointLightComponent>(scene);
+		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
+		pointLight->GetLight<PointLightComponent>()->SetIntensity(60.0f);
 
-		auto pointLightObj = std::make_shared<SceneObject>();
-		pointLightObj->AddComponent(pointLightCom);
-		pointLightObj->ActiveAllComponents();
-		scene->AddSceneObject(pointLightObj);
-
-		auto texAsset = Asset::Find<TextureAsset>("Textures/uffizi_cross.dds");
-		if (!texAsset->IsInit())
-			texAsset->Init();
+		auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 		auto reflectionMap = std::make_shared<ReflectionMap>();
 		reflectionMap->SetEnvironmentMap(texAsset->GetTexture());
 		reflectionMap->InitPreComputedData();
@@ -64,9 +57,7 @@ public:
 		reflecMap->SetEnvMap(bkTex);
 		reflecMap->InitPreComputedData();*/
 
-		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-		if (!model->IsInit())
-			model->Init();
+		auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 
 		float3 color[] = 
 		{
@@ -102,14 +93,14 @@ public:
 		{
 			float x = posX[i];
 
-			auto objs = model->GetMesh()->AddInstanceToScene(scene, float3(x, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+			auto actor = model->GetMesh()->AddInstanceToScene(scene, float3(x, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(color[i]);
 			mat->SetRoughness(0.0f);
 			mat->SetMetallic(1.0f);
 
-			for (auto & obj : objs->GetSubRenderComponents())
+			for (auto & obj : actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 			{
 				obj->SetReflectionMap(reflectionMap);
 				obj->SetMaterial(mat);

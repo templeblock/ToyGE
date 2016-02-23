@@ -9,7 +9,7 @@ namespace ToyGE
 {
 	class Material;
 	class Scene;
-	class RenderMeshComponent;
+	class Actor;
 
 	class TOYGE_CORE_API Mesh : public std::enable_shared_from_this<Mesh>
 	{
@@ -46,11 +46,11 @@ namespace ToyGE
 			return _asset.lock();
 		}
 
-		Ptr<RenderMeshComponent> AddInstanceToScene(
+		Ptr<Actor> AddInstanceToScene(
 			const Ptr<Scene> & scene,
 			const float3 & pos = float3(0.0f, 0.0f, 0.0f),
 			const float3 & scale = float3(1.0f, 1.0f, 1.0f),
-			const Quaternion & orientation = float3(0.0f, 0.0f, 0.0f, 1.0f));
+			const Quaternion & orientation = Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 		void SetDirty(bool bDirty)
 		{
@@ -69,6 +69,13 @@ namespace ToyGE
 
 		void InitDepthRenderData();
 	};
+
+	TOYGE_CORE_API Ptr<Actor> AddMeshInstanceToScene(
+		const String & meshPath,
+		const Ptr<Scene> & scene,
+		const float3 & pos = float3(0.0f, 0.0f, 0.0f),
+		const float3 & scale = float3(1.0f, 1.0f, 1.0f),
+		const Quaternion & orientation = Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 	class TOYGE_CORE_API MeshElementRenderData
 	{

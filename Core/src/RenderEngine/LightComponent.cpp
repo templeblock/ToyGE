@@ -13,6 +13,7 @@ namespace ToyGE
 	LightComponent::LightComponent(LightType type)
 		: _type(type)
 	{
+		OnTransformChanged().connect(std::bind(&LightComponent::OnTranformUpdated, this));
 	}
 
 	void LightComponent::SetIntensity(float intensity)
@@ -21,26 +22,11 @@ namespace ToyGE
 		UpdateLightCuller();
 	}
 
-	void LightComponent::UpdateLightCuller()
-	{
-		if (IsActive())
-			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(shared_from_this()->Cast<LightComponent>());
-	}
-
 	float2 LightComponent::GetClipSpacePos(const Ptr<Camera> & camera) const
 	{
 		auto posW = this->GetPos();
 
-		/*auto posWXM = XMLoadFloat3(reinterpret_cast<XMFLOAT3*>( &posW));
-		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
-		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
-		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);*/
 		auto posH = transform_coord(posW, camera->GetViewProjMatrix());
-		/*XMFLOAT4 posH;
-		XMStoreFloat4(&posH, posHXM);*/
-		/*posH.x() /= posH.w;
-		posH.y() /= posH.w;*/
 
 		return float2(posH.x(), posH.y());
 	}
@@ -63,18 +49,25 @@ namespace ToyGE
 		}
 	}
 
-	void LightComponent::DoActive()
+	void LightComponent::Activate()
 	{
+		TransformComponent::Activate();
+
 		auto renderLightCuller = Global::GetRenderEngine()->GetSceneRenderLightsCuller();
-		renderLightCuller->AddElement(shared_from_this()->Cast<LightComponent>());
+		renderLightCuller->AddElement(Cast<LightComponent>());
+	}
+
+	void LightComponent::UpdateLightCuller()
+	{
+		if (IsActive())
+			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(Cast<LightComponent>());
 	}
 
 	void LightComponent::OnTranformUpdated()
 	{
-		UpdateLightCuller();
+		if (IsActive())
+			Global::GetRenderEngine()->GetSceneRenderLightsCuller()->UpdateElement(Cast<LightComponent>());
 	}
-
-	
 
 
 	//PointLight
@@ -88,8 +81,6 @@ namespace ToyGE
 	float PointLightComponent::MaxDistance() const
 	{
 		float epison = 1e-3f;
-		//auto & radiance = Radiance();
-		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
 		float maxDist = sqrtf(_intensity / epison);
 
 		return maxDist;
@@ -97,9 +88,6 @@ namespace ToyGE
 
 	AABBox PointLightComponent::GetBoundsAABB() const
 	{
-		/*XNA::AxisAlignedBox aabb;
-		aabb.Center = GetPos();
-		aabb.Extents.x = aabb.Extents.y = aabb.Extents.z = MaxDistance();*/
 		AABBox aabb;
 		aabb.min = GetPos() - MaxDistance();
 		aabb.max = GetPos() + MaxDistance();
@@ -109,9 +97,6 @@ namespace ToyGE
 	Sphere PointLightComponent::GetBoundsSphere() const
 	{
 		Sphere sp(GetPos(), MaxDistance());
-
-		/*sp.Center = GetPos();
-		sp.Radius = MaxDistance();*/
 		return sp;
 	}
 
@@ -140,8 +125,6 @@ namespace ToyGE
 
 	float SpotLightComponent::MaxAngle() const
 	{
-		//auto & radiance = Radiance();
-		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
 		float epison = 0.01f;
 		return acosf(powf(epison / _intensity, 1.0f / DecreaseSpeed()));
 	}
@@ -149,8 +132,6 @@ namespace ToyGE
 	float SpotLightComponent::MaxDistance() const
 	{
 		float epison = 0.01f;
-		//auto & radiance = Radiance();
-		//float ilum = 0.21f * radiance.x + 0.72f * radiance.y + 0.07f * radiance.z;
 		float maxDist = sqrtf(_intensity / epison);
 
 		return maxDist;
@@ -158,8 +139,8 @@ namespace ToyGE
 
 	AABBox SpotLightComponent::GetBoundsAABB() const
 	{
-		float3 pos = *(reinterpret_cast<const float3*>(&GetPos()));
-		float3 dir = *(reinterpret_cast<const float3*>(&Direction()));
+		float3 pos = GetPos();
+		float3 dir = Direction();
 		float3 u = abs(dir.y()) > 0.99f ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
 		float3 r = normalize(cross(u, dir));
 		u = cross(dir, r);
@@ -259,19 +240,8 @@ namespace ToyGE
 	{
 		auto & cameraPos = camera->GetPos();
 		float dist = GetDistance();
-		auto posW = cameraPos - Direction() * dist;/*float3(
-			cameraPos.x - Direction().x * dist,
-			cameraPos.y - Direction().y * dist,
-			cameraPos.z - Direction().z * dist);*/
-		/*auto posWXM = XMLoadFloat3(&posW);
-		auto viewXM = XMLoadFloat4x4(&camera->GetViewMatrix());
-		auto projXM = XMLoadFloat4x4(&camera->GetProjMatrix());
-		auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-		auto posHXM = XMVector3TransformCoord(posWXM, viewProjXM);*/
+		auto posW = cameraPos - Direction() * dist;
 		auto posH = transform_coord(posW, camera->GetViewProjMatrix());
-		/*XMStoreFloat4(&posH, posHXM);
-		posH.x /= posH.w;
-		posH.y /= posH.w;*/
 
 		return float2(posH.x(), posH.y());
 	}

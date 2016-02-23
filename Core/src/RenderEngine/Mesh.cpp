@@ -5,7 +5,7 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\Scene.h"
-#include "ToyGE\RenderEngine\SceneObject.h"
+#include "ToyGE\RenderEngine\StaticMeshActor.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\RenderUtil.h"
 #include "ToyGE\RenderEngine\Shader.h"
@@ -156,14 +156,14 @@ namespace ToyGE
 		}
 	}
 
-	Ptr<RenderMeshComponent> Mesh::AddInstanceToScene(
+	Ptr<Actor> Mesh::AddInstanceToScene(
 		const Ptr<Scene> & scene,
 		const float3 & pos,
 		const float3 & scale,
 		const Quaternion & orientation)
 	{
-		auto sceneObj = std::make_shared<SceneObject>();
-		scene->AddSceneObject(sceneObj);
+		auto actor = std::make_shared<Actor>();
+		scene->AddActor(actor);
 
 		auto renderCom = std::make_shared<RenderMeshComponent>();
 		renderCom->SetMesh(shared_from_this());
@@ -171,11 +171,11 @@ namespace ToyGE
 		renderCom->SetScale(scale);
 		renderCom->SetOrientation(orientation);
 		renderCom->UpdateTransform();
-		sceneObj->AddComponent(renderCom);
+		actor->AddComponent(renderCom);
 
-		sceneObj->ActiveAllComponents();
+		actor->ActivateAllComponents();
 
-		return renderCom;
+		return actor;
 	}
 
 	bool Mesh::IsDirty() const
@@ -225,6 +225,18 @@ namespace ToyGE
 			}
 		}
 	}
+
+	Ptr<Actor> AddMeshInstanceToScene(
+		const String & meshPath,
+		const Ptr<Scene> & scene,
+		const float3 & pos,
+		const float3 & scale,
+		const Quaternion & orientation)
+	{
+		auto mesh = MeshAsset::FindAndInit<MeshAsset>(meshPath)->GetMesh();
+		return mesh->AddInstanceToScene(scene, pos, scale, orientation);
+	}
+
 
 	bool MeshElementRenderData::IsDirty() const
 	{
@@ -512,13 +524,13 @@ namespace ToyGE
 
 		for (int32_t thetaIndex = 0; thetaIndex <= numSplits; ++thetaIndex)
 		{
-			float theta = static_cast<float>(thetaIndex) / static_cast<float>(numSplits) * PI2;
+			float theta = static_cast<float>(thetaIndex) / static_cast<float>(numSplits) * PI;
 			for (int32_t phiIndex = 0; phiIndex <= numSplits; ++phiIndex)
 			{
 				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits)* PI2;
-				float x = radius * sin(theta) * sin(phi);
+				float x = radius * sin(theta) * cos(phi);
 				float y = radius * cos(theta);
-				float z = radius * sin(theta) * cos(phi);
+				float z = radius * sin(theta) * -sin(phi);
 				builder.Add(normalize(float3(x, y, z)));
 				builder.Add(normalize(float3(x, y, z)));
 			}

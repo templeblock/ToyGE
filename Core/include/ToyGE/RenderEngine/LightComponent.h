@@ -27,7 +27,7 @@ namespace ToyGE
 	class Camera;
 	class ShadowTechnique;
 
-	class TOYGE_CORE_API LightComponent : public TransformComponent, public Cullable, public StaticCastable
+	class TOYGE_CORE_API LightComponent : public TransformComponent, public Cullable
 	{
 	public:
 		LightComponent(LightType type);
@@ -90,6 +90,8 @@ namespace ToyGE
 
 		virtual void BindShaderParams(const Ptr<Shader> & shader, bool enableShadow, const Ptr<RenderView> & view);
 
+		virtual void Activate() override;
+
 	protected:
 		LightType _type;
 
@@ -101,11 +103,9 @@ namespace ToyGE
 		bool _bCastLightVolume = false;
 		bool _bCastLPV = false;
 
-		virtual void UpdateLightCuller();
+		void UpdateLightCuller();
 
-		virtual void DoActive() override;
-
-		virtual void OnTranformUpdated() override;
+		virtual void OnTranformUpdated();
 	};
 
 
@@ -135,10 +135,7 @@ namespace ToyGE
 
 		void SetDirection(const float3 & direction)
 		{
-			/*auto xmDir = XMLoadFloat3(&direction);
-			xmDir = XMVector3Normalize(xmDir);
-			XMStoreFloat3(&_direction, xmDir);*/
-			_direction = direction;
+			_direction = normalize(direction);
 		}
 
 		const float3 & Direction() const
@@ -180,10 +177,7 @@ namespace ToyGE
 
 		void SetDirection(const float3 & direction)
 		{
-			/*auto xmDir = XMLoadFloat3(&direction);
-			xmDir = XMVector3Normalize(xmDir);
-			XMStoreFloat3(&_direction, xmDir);*/
-			_direction = direction;
+			_direction = normalize(direction);
 		}
 
 		const float3 & Direction() const

@@ -136,13 +136,15 @@ namespace ToyGE
 				targetTex->GetRenderTargetView(0, 0, 1));
 
 			// Render sun
-			if (sunPosH.z() < 0.0f)
-				sunPosH.x() = sunPosH.y() = -100.0f;
-			RenderSun(
-				float2(sunPosH.x(), sunPosH.y()),
-				view,
-				targetTex->GetRenderTargetView(0, 0, 1),
-				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			if (sunPosV.z() > 0.0f)
+			{
+				//sunPosH.x() = sunPosH.y() = -100.0f;
+				RenderSun(
+					float2(sunPosH.x(), sunPosH.y()),
+					view,
+					targetTex->GetRenderTargetView(0, 0, 1),
+					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			}
 
 			view->GetViewRenderContext()->SetSharedResource("RenderResult", targetTexRef);
 		}
@@ -164,13 +166,14 @@ namespace ToyGE
 			AccumRayMarching(lightAccumTex, attenuationTex, sceneTex->GetRenderTargetView(0, 0, 1));
 
 			// Render sun
-			if (sunPosH.z() < 0.0f)
-				sunPosH.x() = sunPosH.y() = -100.0f;
-			RenderSun(
-				float2(sunPosH.x(), sunPosH.y()),
-				view,
-				sceneTex->GetRenderTargetView(0, 0, 1),
-				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			if (sunPosV.z() > 0.0f)
+			{
+				RenderSun(
+					float2(sunPosH.x(), sunPosH.y()),
+					view,
+					sceneTex->GetRenderTargetView(0, 0, 1),
+					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			}
 		}
 		
 	}

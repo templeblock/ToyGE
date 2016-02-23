@@ -11,7 +11,7 @@ public:
 	int32_t _numPropagationItrs;
 	bool _enableGeometryOcclusion;
 	float3 _color;
-	Ptr<RenderMeshComponent> _meshObj;
+	Ptr<Actor> _bunnyActor;
 	float3 _lightDir = float3(1.0f, -8.0f, 1.0f);
 	Ptr<DirectionalLightComponent> _dirLight;
 
@@ -45,38 +45,30 @@ public:
 		_renderView->GetCamera()->Yaw(-PI_DIV2);
 
 		//Add Light
-		auto dirLightCom = std::make_shared<DirectionalLightComponent>();
-		dirLightCom->SetDirection(_lightDir);
-		dirLightCom->SetColor(1.0f);
-		dirLightCom->SetIntensity(8.0f);
-		dirLightCom->SetCastShadow(true);
-		dirLightCom->SetCastLPV(true);
-		auto dirLightObj = std::make_shared<SceneObject>();
-		dirLightObj->AddComponent(dirLightCom);
-		dirLightObj->ActiveAllComponents();
-		scene->AddSceneObject(dirLightObj);
+		auto dirLight = LightActor::Create<DirectionalLightComponent>(scene);
+		dirLight->GetLight<DirectionalLightComponent>()->SetDirection(_lightDir);
+		dirLight->GetLight<DirectionalLightComponent>()->SetColor(1.0f);
+		dirLight->GetLight<DirectionalLightComponent>()->SetIntensity(8.0f);
+		dirLight->GetLight<DirectionalLightComponent>()->SetCastShadow(true);
+		dirLight->GetLight<DirectionalLightComponent>()->SetCastLPV(true);
 
-		_dirLight = dirLightCom;
+		_dirLight = dirLight->GetLight<DirectionalLightComponent>();
 
 		{
-			auto model = Asset::Find<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
-			if (!model->IsInit())
-				model->Init();
+			auto model = Asset::FindAndInit<MeshAsset>("Models/dabrovic-sponza/sponza.tmesh");
 			model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 		}
 
 		{
-			auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-			if (!model->IsInit())
-				model->Init();
-			_meshObj = model->GetMesh()->AddInstanceToScene(scene, float3(-5.0f, 0.0f, 0.0f), float3(0.2f, 0.2f, 0.2f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+			auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+			_bunnyActor = model->GetMesh()->AddInstanceToScene(scene, float3(-5.0f, 0.0f, 0.0f), float3(0.2f, 0.2f, 0.2f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(_color);
 			mat->SetRoughness(0.0f);
 			mat->SetMetallic(0.0f);
 
-			for (auto obj : _meshObj->GetSubRenderComponents())
+			for (auto obj : _bunnyActor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 				obj->SetMaterial(mat);
 		}
 
@@ -124,7 +116,7 @@ public:
 
 		_dirLight->SetDirection(_lightDir);
 
-		for (auto obj : _meshObj->GetSubRenderComponents())
+		for (auto obj : _bunnyActor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 			obj->GetMaterial()->SetBaseColor(_color);
 	}
 };

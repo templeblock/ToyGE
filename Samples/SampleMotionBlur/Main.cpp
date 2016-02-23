@@ -5,7 +5,7 @@ using namespace ToyGE;
 class SampleMotionBlur : public SampleCommon
 {
 public:
-	Ptr<RenderMeshComponent> _objs;
+	Ptr<Actor> _actor;
 	float _rotateSpeed;
 	float _rotateAngle;
 	bool _enableMB;
@@ -47,14 +47,10 @@ public:
 		pointLightObj->ActiveAllComponents();
 		scene->AddSceneObject(pointLightObj);*/
 
-		auto model = Asset::Find<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-		if (!model->IsInit())
-			model->Init();
-		_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+		auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+		_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
-		auto texAsset = Asset::Find<TextureAsset>("Textures/uffizi_cross.dds");
-		if (!texAsset->IsInit())
-			texAsset->Init();
+		auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 		auto reflectionMap = std::make_shared<ReflectionMap>();
 		reflectionMap->SetEnvironmentMap(texAsset->GetTexture());
 		reflectionMap->InitPreComputedData();
@@ -64,7 +60,7 @@ public:
 		mat->SetRoughness(0.0f);
 		mat->SetMetallic(1.0f);
 
-		for (auto & obj : _objs->GetSubRenderComponents())
+		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(mat);
 			obj->SetReflectionMap(reflectionMap);
@@ -86,8 +82,7 @@ public:
 		//XMFLOAT4 rotateOrien;
 		//XMStoreFloat4(&rotateOrien, rotateOrienXM);
 
-		_objs->SetOrientation(rotation_axis(float3(0.0f, 1.0f, 0.0f), _rotateAngle));
-		_objs->UpdateTransform();
+		_actor->GetRootTransformComponent()->SetOrientation(rotation_axis(float3(0.0f, 1.0f, 0.0f), _rotateAngle));
 
 		_rotateAngle += _rotateSpeed * elapsedTime;
 

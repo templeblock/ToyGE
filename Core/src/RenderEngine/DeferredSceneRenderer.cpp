@@ -97,7 +97,7 @@ namespace ToyGE
 
 			meshElement->Draw();
 
-			renderComponent->SetTransformMatrixCache(renderComponent->GetWorldTransformMatrix());
+			renderComponent->StoreWorldTransformCache();
 		}
 	};
 

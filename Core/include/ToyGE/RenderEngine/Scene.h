@@ -5,12 +5,11 @@
 #include "ToyGE\Kernel\PreInclude.h"
 #include "ToyGE\Kernel\CorePreInclude.h"
 #include "ToyGE\Math\Math.h"
-#include "ToyGE\RenderEngine\SceneObject.h"
+#include "ToyGE\RenderEngine\Actor.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
 
 namespace ToyGE
 {
-	class SceneObject;
 	class RenderView;
 	class RenderEffect;
 
@@ -19,13 +18,13 @@ namespace ToyGE
 	public:
 		Scene();
 
-		int32_t AddSceneObject(const Ptr<SceneObject> & obj);
+		int32_t AddActor(const Ptr<Actor> & actor);
 
-		Ptr<SceneObject> GetSceneObject(int32_t objID) const;
+		Ptr<Actor> GetActor(int32_t actorID) const;
 
-		void RemoveSceneObject(const Ptr<SceneObject> & obj);
+		void RemoveActor(const Ptr<Actor> & actor);
 
-		void RemoveSceneObject(int32_t objID);
+		void RemoveActor(int32_t objID);
 
 		void AddView(const Ptr<RenderView> & view);
 
@@ -46,8 +45,8 @@ namespace ToyGE
 		CLASS_GET(AmbientTexture, Ptr<class Texture>, _ambientTex);
 
 	private:
-		static int32_t objID;
-		std::map<int32_t, Ptr<SceneObject>> _sceneObjsMap;
+		static int32_t actorID;
+		std::map<int32_t, Ptr<Actor>> _actorsMap;
 		std::vector<Ptr<RenderView>> _views;
 		float3 _ambientColor;
 		Ptr<class Texture> _ambientTex;

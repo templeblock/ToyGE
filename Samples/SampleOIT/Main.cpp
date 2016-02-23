@@ -6,7 +6,7 @@ class SampleOIT : public SampleCommon
 {
 public:
 	bool _enableOIT;
-	Ptr<RenderMeshComponent> _objs;
+	Ptr<Actor> _actor;
 	float _opacity;
 
 	SampleOIT()
@@ -36,12 +36,10 @@ public:
 
 		//Add Objs
 		{
-			auto model = Asset::Find<MeshAsset>("Models/robot_clean_max/robot_clean.tmesh");
-			if (!model->IsInit())
-				model->Init();
-			_objs = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+			auto model = Asset::FindAndInit<MeshAsset>("Models/robot_clean_max/robot_clean.tmesh");
+			_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 1.0f, 0.0f), float3(1.0f, 1.0f, 1.0f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
-			for (auto obj : _objs->GetSubRenderComponents())
+			for (auto obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 			{
 				obj->GetMeshElement()->GetMaterial()->SetTranslucent(true);
 			}
@@ -75,7 +73,7 @@ public:
 		else
 			Global::GetRenderEngine()->GetSceneRenderer()->bOIT = false;
 
-		for (auto obj : _objs->GetSubRenderComponents())
+		for (auto obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->GetMeshElement()->GetMaterial()->SetOpcacity(_opacity);
 

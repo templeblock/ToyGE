@@ -13,5 +13,11 @@
 #include "ToyGE\RenderEngine\Material.h"
 #include "ToyGE\RenderEngine\SceneRenderer.h"
 #include "ToyGE\RenderEngine\Camera.h"
-#include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\ReflectionMap.h"
+#include "ToyGE\RenderEngine\Actor.h"
+#include "ToyGE\RenderEngine\StaticMeshActor.h"
+#include "ToyGE\RenderEngine\LightActor.h"
+#include "ToyGE\RenderEngine\ActorComponent.h"
+#include "ToyGE\RenderEngine\RenderComponent.h"
+#include "ToyGE\RenderEngine\LightComponent.h"
+

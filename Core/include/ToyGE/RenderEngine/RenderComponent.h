@@ -13,14 +13,12 @@ namespace ToyGE
 	class Mesh;
 	class Material;
 
-	class TOYGE_CORE_API RenderComponent : public TransformComponent, public Cullable, public std::enable_shared_from_this<RenderComponent>
+	class TOYGE_CORE_API RenderComponent : public TransformComponent, public Cullable
 	{
 	public:
-		static String Name();
-
 		RenderComponent();
 
-		String GetComponentName() const override;
+		virtual ~RenderComponent() = default;
 
 		void SetRenderMeshComponent(const Ptr<class RenderMeshComponent> & com)
 		{
@@ -30,7 +28,6 @@ namespace ToyGE
 		{
 			return _renderMeshComponent.lock();
 		}
-
 
 		void SetMeshElement(const Ptr<MeshElementRenderData> & meshElement)
 		{
@@ -104,6 +101,8 @@ namespace ToyGE
 			return _bCastCaustics;
 		}
 
+		virtual void Activate() override;
+
 	protected:
 		std::weak_ptr<class RenderMeshComponent> _renderMeshComponent;
 		Ptr<MeshElementRenderData> _meshElement;
@@ -115,27 +114,19 @@ namespace ToyGE
 		bool _bCastShadows;
 		bool _bCastCaustics;
 
-		void DoActive() override;
-
-		void OnTranformUpdated() override;
+		void OnTranformUpdated();
 
 	private:
 		void UpdateLocalAABB();
 		void UpdateBoundsAABB();
 	};
 
-	class TOYGE_CORE_API RenderMeshComponent : public TransformComponent, public std::enable_shared_from_this<RenderMeshComponent>
+	class TOYGE_CORE_API RenderMeshComponent : public TransformComponent
 	{
 	public:
-		static String Name()
-		{
-			return "";
-		}
+		RenderMeshComponent();
 
-		String GetComponentName() const override
-		{
-			return "";
-		}
+		virtual ~RenderMeshComponent() = default;
 
 		void SetMesh(const Ptr<Mesh> & mesh);
 
@@ -146,13 +137,13 @@ namespace ToyGE
 
 		CLASS_GET(SubRenderComponents, std::vector<Ptr<RenderComponent>>, _renderComponents);
 
+		virtual void Activate() override;
+
 	protected:
 		Ptr<Mesh> _mesh;
 		std::vector<Ptr<RenderComponent>> _renderComponents;
 
-		void DoActive() override;
-
-		void OnTranformUpdated() override;
+		void OnTranformUpdated();
 	};
 }
 

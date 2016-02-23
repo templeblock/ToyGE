@@ -12,16 +12,8 @@ namespace ToyGE
 	{
 		memset(&_localAABB, 0, sizeof(_localAABB));
 		memset(&_boundsAABB, 0, sizeof(_boundsAABB));
-	}
 
-	String RenderComponent::Name()
-	{
-		return "RENDERCOMPONENT";
-	}
-
-	String RenderComponent::GetComponentName() const
-	{
-		return RenderComponent::Name();
+		OnTransformChanged().connect(std::bind(&RenderComponent::OnTranformUpdated, this));
 	}
 
 	AABBox RenderComponent::GetBoundsAABB() const
@@ -29,10 +21,12 @@ namespace ToyGE
 		return _boundsAABB;
 	}
 
-	void RenderComponent::DoActive()
+	void RenderComponent::Activate()
 	{
+		TransformComponent::Activate();
+
 		auto renderObjCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
-		renderObjCuller->AddElement(shared_from_this());
+		renderObjCuller->AddElement(Cast<RenderComponent>());
 	}
 
 	void RenderComponent::OnTranformUpdated()
@@ -40,7 +34,7 @@ namespace ToyGE
 		UpdateBoundsAABB();
 		if (IsActive())
 		{
-			Global::GetRenderEngine()->GetSceneRenderObjsCuller()->UpdateElement(shared_from_this());
+			Global::GetRenderEngine()->GetSceneRenderObjsCuller()->UpdateElement(Cast<RenderComponent>());
 		}
 	}
 
@@ -62,12 +56,6 @@ namespace ToyGE
 				positionVertexSlot->GetElement<float3>(positionVertexSlot->GetNumVertices(), MeshVertexElementSignature::MVET_POSITION, 0),
 				positionVertexSlot->vertexDesc.bytesSize);
 			outAABB = compute_aabbox(begin, end);
-
-			/*XNA::ComputeBoundingAxisAlignedBoxFromPoints(
-				&outAABB,
-				static_cast<UINT>(positionVertexSlot->GetNumVertices()),
-				positionVertexSlot->GetElement<XMFLOAT3>(0, MeshVertexElementSignature::MVET_POSITION, 0),
-				static_cast<UINT>(positionVertexSlot->vertexDesc.bytesSize));*/
 		}
 		else
 			outAABB = AABBox(1.0f, 1.0f);
@@ -88,30 +76,14 @@ namespace ToyGE
 
 	void RenderComponent::UpdateBoundsAABB()
 	{
-		float3 min = FLT_MAX;
-		float3 max = -FLT_MAX;
-
-		//auto transXM = XMLoadFloat4x4(reinterpret_cast<const XMFLOAT4X4*>( &GetWorldTransformMatrix()));
-
-		for (int i = 0; i < 8; ++i)
-		{
-			float3 posLocal;
-			posLocal.x() = (i & 1) ? (_localAABB.Center().x() + _localAABB.Extents().x()) : (_localAABB.Center().x() - _localAABB.Extents().x());
-			posLocal.y() = (i & 2) ? (_localAABB.Center().y() + _localAABB.Extents().y()) : (_localAABB.Center().y() - _localAABB.Extents().y());
-			posLocal.z() = (i & 4) ? (_localAABB.Center().z() + _localAABB.Extents().z()) : (_localAABB.Center().z() - _localAABB.Extents().z());
-
-			auto posTrans = transform_coord(posLocal, GetWorldTransformMatrix());
-			/*float3 pos;
-			XMStoreFloat3(reinterpret_cast<XMFLOAT3*>(&pos), posTransXM);*/
-			min = min_vec(min, posTrans);
-			max = max_vec(max, posTrans);
-		}
-
-		//Math::MinMaxToAxisAlignedBox(min, max, _boundsAABB);
-		_boundsAABB.min = min;
-		_boundsAABB.max = max;
+		_boundsAABB = transform_aabb(_localAABB, GetWorldTransformMatrix());
 	}
 
+
+	RenderMeshComponent::RenderMeshComponent()
+	{
+		OnTransformChanged().connect(std::bind(&RenderMeshComponent::OnTranformUpdated, this));
+	}
 
 	void RenderMeshComponent::SetMesh(const Ptr<Mesh> & mesh)
 	{
@@ -123,18 +95,20 @@ namespace ToyGE
 			for (auto & meshElement : mesh->GetRenderData()->GetMeshElements())
 			{
 				auto renderCom = std::make_shared<RenderComponent>();
-				renderCom->SetRenderMeshComponent(shared_from_this());
+				renderCom->SetRenderMeshComponent(Cast<RenderMeshComponent>());
 				renderCom->SetMeshElement(meshElement);
-				renderCom->AttachTo(shared_from_this());
+				renderCom->AttachTo(Cast<RenderMeshComponent>());
 				_renderComponents.push_back(renderCom);
 			}
 		}
 	}
 
-	void RenderMeshComponent::DoActive()
+	void RenderMeshComponent::Activate()
 	{
+		TransformComponent::Activate();
+
 		for (auto & com : _renderComponents)
-			com->Active();
+			com->Activate();
 	}
 
 	void RenderMeshComponent::OnTranformUpdated()
