@@ -1,9 +1,9 @@
 #include "Common.tshader"
 #include "Lighting.tshader"
+#include "View.tshader"
 
-#if LIGHT_TYPE != LIGHT_TYPE_DIRECTIONAL
+#define AA_JITTER 0
 #include "MeshVertexInput.tshader"
-#endif
 
 #define POISSON_NUM_SAMPLES 1
 #include "Shadow.tshader"
@@ -178,7 +178,7 @@ void RenderSpotLightVolumePS(
     
     float linearClipDepth = sceneLinearClipDepth.Load(int3(screenPos, 0)).x;
     float2 clipPosXY = GetClipPosXYFromScreen(screenPos, targetSize.xy);
-    float3 viewPosFromDepth = GetViewPosFromLinear(float3(clipPosXY, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+    float3 viewPosFromDepth = GetViewPosFromLinear(float3(clipPosXY, linearClipDepth), viewToClipMatrixNoJitter, viewNear, viewFar);
     float3 worldPosFromDepth = mul(float4(viewPosFromDepth, 1.0), viewToWorldMatrix).xyz;
     
     //Compute Start Pos

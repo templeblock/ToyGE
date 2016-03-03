@@ -25,8 +25,8 @@ public:
 		auto pp = std::make_shared<PostProcessing>();
 		_ssr = std::make_shared<SSR>();
 		pp->AddRender(_ssr);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 

@@ -26,8 +26,8 @@ public:
 		auto pp = std::make_shared<PostProcessing>();
 		_mb = std::make_shared<MotionBlur>();
 		pp->AddRender(_mb);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 

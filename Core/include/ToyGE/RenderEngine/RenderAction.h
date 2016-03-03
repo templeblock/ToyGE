@@ -28,6 +28,8 @@ namespace ToyGE
 
 		virtual ~RenderAction() = default;
 
+		virtual void PreTAASetup(const Ptr<RenderView> & view){}
+
 		virtual void Render(const Ptr<RenderView> & view) = 0;
 
 		CLASS_SET(Enable, bool, _bEnable);

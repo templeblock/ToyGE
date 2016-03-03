@@ -30,13 +30,13 @@ public:
 		auto pp = std::make_shared<PostProcessing>();
 		_ssao = std::make_shared<SSAO>();
 		pp->AddRender(_ssao);
-		pp->AddRender(std::make_shared<HDR>());
+		pp->AddRender(std::make_shared<ToneMapping>());
 		_paramRender = std::make_shared<SharedParamRender>();
 		_paramRender->SetRenderParam("AmbientOcclusion");
 		_paramRender->SetRenderParamColorWrite(COLOR_WRITE_R);
 		pp->AddRender(_paramRender);
 
-		pp->AddRender(std::make_shared<FXAA>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 

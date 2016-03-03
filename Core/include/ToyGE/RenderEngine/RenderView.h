@@ -22,9 +22,16 @@ namespace ToyGE
 	{
 		float4x4	worldToViewMatrix;
 		float4x4	viewToClipMatrix;
+		float4x4	viewToClipMatrixNotJitter;
 		float4x4	worldToClipMatrix;
+		float4x4	worldToClipMatrixNoJitter;
 		float4x4	viewToWorldMatrix;
+		float4x4	clipToViewMatrix;
+		float4x4	clipToWorldMatrix;
 		float4x4	preWorldToViewMatrix;
+		float4x4	preViewToClipMatrix;
+		float4x4	preWorldToClipMatrix;
+		float4x4	clipToPreClipMatrix;
 		float3		viewPos;
 		float		_pad_0;
 		float		viewNear;
@@ -125,13 +132,15 @@ namespace ToyGE
 	class TOYGE_CORE_API RenderView : public std::enable_shared_from_this<RenderView>
 	{
 	public:
+		float2 temporalAAJitter;
+
 		RenderView();
 
-		void PreRender();
+		void PreRender(bool bTAA);
 
 		void PostRender();
 
-		void UpdateParamsBuffer();
+		void UpdateParamsBuffer(bool bTAA);
 
 		void BindShaderParams(const Ptr<Shader> & shader) const;
 

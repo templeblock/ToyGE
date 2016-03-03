@@ -1,0 +1,50 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "HistogramCommon.tshader"
+
+Texture2D histogram;
+Texture2D prevAdaptedExposureScale;
+
+float lowPercent;
+float highPercent;
+float frameTime;
+float exposureScale;
+float eyeAdaptionMin;
+float eyeAdaptionMax;
+
+float ComputeAvgIllum()
+{
+    float lowRemain = lowPercent;
+    float highRemain = highPercent;
+    
+    float2 sum = 0.0;
+    [unroll] for(uint i = 0; i < HISTOGRAM_SIZE; ++i)
+    {
+        float amount = histogram.Load(int3(i, 0, 0)).x;
+        
+        float lowSub = min(amount, lowRemain);
+        amount     -= lowSub;
+        lowRemain  -= lowSub;
+        highRemain -= lowSub;
+        
+        amount = min(amount, highRemain);
+        highRemain -= amount;
+        
+        float illum = ComputeIllumFromHistogramPos((float)i);
+        sum += amount * float2(illum, 1);
+    }
+    sum.x /= max(1e-5, sum.y);
+    return sum.x;
+}
+
+float EyeAdaptionPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float targetAvgIllum = ComputeAvgIllum();
+    float prevExposureScale = prevAdaptedExposureScale.Load(int3(0, 0, 0)).x; 
+    float prevAvgIllum = 1.0 / ( ((prevExposureScale == 0)?1.0:prevExposureScale) / exposureScale );
+    
+    float adaptedAvgIllum = lerp(targetAvgIllum, prevAvgIllum, pow(0.98, frameTime * 100));
+    adaptedAvgIllum = clamp(adaptedAvgIllum, eyeAdaptionMin, eyeAdaptionMax);
+    
+    return ( 1.0 / max(1e-5, adaptedAvgIllum) ) * exposureScale;
+}

@@ -30,8 +30,8 @@ public:
 		auto pp = std::make_shared<PostProcessing>();
 		_dof = std::make_shared<BokehDepthOfField>();
 		pp->AddRender(_dof);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
@@ -41,9 +41,9 @@ public:
 		auto scene = Global::GetScene();
 
 		auto pointLight = LightActor::Create<PointLightComponent>(scene);
-		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 6.0f, 0.0f));
 		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
-		pointLight->GetLight<PointLightComponent>()->SetIntensity(60.0f);
+		pointLight->GetLight<PointLightComponent>()->SetIntensity(100.0f);
 
 		auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 		auto reflectionMap = std::make_shared<ReflectionMap>();

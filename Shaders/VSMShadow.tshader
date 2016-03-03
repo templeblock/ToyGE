@@ -14,7 +14,7 @@ float ComputeEVSM2Shadow(float2 moments, float reciever)
 {
     float recieverWarp = WarpDepth2(reciever);
   
-    float depthScale = vsmBias * 0.01f * EVSM_POS_EXPONENT * recieverWarp;
+    float depthScale = vsmBias * 0.05f * EVSM_POS_EXPONENT * recieverWarp;
     float minVariance = depthScale * depthScale;
   
     float shadow = ChebyshevUpperBound(moments.xy, recieverWarp.x, minVariance, vsmReduceBlending);
@@ -26,7 +26,7 @@ float ComputeEVSM4Shadow(float4 moments, float reciever)
 {
     float2 recieverWarp = WarpDepth4(reciever);
     
-    float2 depthScale = vsmBias * 0.01f * float2(EVSM_POS_EXPONENT, EVSM_NEG_EXPONENT) * recieverWarp;
+    float2 depthScale = vsmBias * 0.05f * float2(EVSM_POS_EXPONENT, EVSM_NEG_EXPONENT) * recieverWarp;
     float2 minVariance = depthScale * depthScale;
     
     float shadowPos = ChebyshevUpperBound(moments.xy, recieverWarp.x, minVariance.x, vsmReduceBlending);

@@ -3,6 +3,7 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderFactory.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
+#include "ToyGE\RenderEngine\SceneRenderer.h"
 #include "ToyGE\RenderEngine\Camera.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\LightComponent.h"
@@ -98,7 +99,7 @@ namespace ToyGE
 	//	_renderResult = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 	//}
 
-	void RenderView::PreRender()
+	void RenderView::PreRender(bool bTAA)
 	{
 		auto objsCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
 		std::vector<Ptr<Cullable>> objsCulled;
@@ -118,7 +119,7 @@ namespace ToyGE
 			_viewRenderContext->lights.push_back(renderLight);
 		}
 
-		UpdateParamsBuffer();
+		UpdateParamsBuffer(bTAA);
 	}
 
 	void RenderView::PostRender()
@@ -141,8 +142,8 @@ namespace ToyGE
 		_viewRenderContext->lights.clear();
 		_viewRenderContext->sharedResources.clear();
 
-		if (GetCamera())
-			GetCamera()->SetViewMatrixCache(GetCamera()->GetViewMatrix());
+		/*if (GetCamera())
+			GetCamera()->SetViewMatrixCache(GetCamera()->GetViewMatrix());*/
 	}
 
 	void RenderView::BindShaderParams(const Ptr<Shader> & shader) const
@@ -150,24 +151,55 @@ namespace ToyGE
 		shader->SetCB("cb_view_shared", _paramsBuffer);
 	}
 
-	void RenderView::UpdateParamsBuffer()
+	float Halton(int32_t Index, int32_t Base)
+	{
+		float Result = 0.0f;
+		float InvBase = 1.0f / Base;
+		float Fraction = InvBase;
+		while (Index > 0)
+		{
+			Result += (Index % Base) * Fraction;
+			Index /= Base;
+			Fraction *= InvBase;
+		}
+		return Result;
+	}
+
+	void RenderView::UpdateParamsBuffer(bool bTAA)
 	{
 		if (GetCamera())
 		{
 			_viewParams.worldToViewMatrix = GetCamera()->GetViewMatrix();
 			_viewParams.viewToClipMatrix = GetCamera()->GetProjMatrix();
+			_viewParams.viewToClipMatrixNotJitter = _viewParams.viewToClipMatrix;
+			if (bTAA)
+			{
+				int32_t sampleIndex = Global::GetInfo()->frameCount % SceneRenderer::temporalAANumSamples;
+				temporalAAJitter = float2(Halton(sampleIndex, 2), Halton(sampleIndex, 3)) - 0.5f;
 
-			/*auto viewXM = XMLoadFloat4x4(&GetCamera()->GetViewMatrix());
-			auto projXM = XMLoadFloat4x4(&GetCamera()->GetProjMatrix());
-			auto viewProjXM = XMMatrixMultiply(viewXM, projXM);
-			XMStoreFloat4x4(&_viewParams.worldToClipMatrix, viewProjXM);*/
-			_viewParams.worldToClipMatrix = GetCamera()->GetViewProjMatrix();
-
-			/*auto invViewXM = XMMatrixInverse(&XMMatrixDeterminant(viewXM), viewXM);
-			XMStoreFloat4x4(&_viewParams.viewToWorldMatrix, invViewXM);*/
-			_viewParams.viewToWorldMatrix = inverse(GetCamera()->GetViewMatrix());
+				//temporalAAJitter = hammersley2d(Global::GetInfo()->frameCount % SceneRenderer::temporalAANumSamples, SceneRenderer::temporalAANumSamples - 1);
+				float2 offset = temporalAAJitter * 2.0f;
+				offset /= float2(GetViewport().width, GetViewport().height);
+				_viewParams.viewToClipMatrix[2][0] += offset.x();
+				_viewParams.viewToClipMatrix[2][1] += offset.y();
+			}
+			_viewParams.worldToClipMatrix = mul(_viewParams.worldToViewMatrix, _viewParams.viewToClipMatrix);
+			_viewParams.worldToClipMatrixNoJitter = mul(_viewParams.worldToViewMatrix, _viewParams.viewToClipMatrixNotJitter);
+			_viewParams.viewToWorldMatrix = inverse(_viewParams.worldToViewMatrix);
+			_viewParams.clipToViewMatrix = inverse(_viewParams.viewToClipMatrix);
+			_viewParams.clipToWorldMatrix = inverse(_viewParams.worldToClipMatrix);
 
 			_viewParams.preWorldToViewMatrix = GetCamera()->GetViewMatrixCache();
+			_viewParams.preViewToClipMatrix = GetCamera()->GetProjMatrixCache();
+			_viewParams.preWorldToClipMatrix = mul(_viewParams.preWorldToViewMatrix, _viewParams.preViewToClipMatrix);
+
+			float4x4 clipToWorldMatrixNoJitter = inverse(_viewParams.worldToClipMatrixNoJitter);
+			float4x4 preViewToClipNoJitter = _viewParams.preViewToClipMatrix;
+			preViewToClipNoJitter[2][0] = 0.0f;
+			preViewToClipNoJitter[2][1] = 0.0f;
+			float4x4 preWorldToClipNoJitter = mul(GetCamera()->GetViewMatrixCache(), preViewToClipNoJitter);
+			_viewParams.clipToPreClipMatrix = mul(clipToWorldMatrixNoJitter, preWorldToClipNoJitter);
+
 			_viewParams.viewPos = *(reinterpret_cast<const float3*>(&GetCamera()->GetPos()));
 			_viewParams.viewNear = GetCamera()->GetNear();
 			_viewParams.viewFar = GetCamera()->GetFar();
@@ -187,5 +219,8 @@ namespace ToyGE
 		auto mappedData = _paramsBuffer->Map(MAP_WRITE_DISCARD);
 		memcpy(mappedData.pData, &_viewParams, sizeof(ViewParams));
 		_paramsBuffer->UnMap();
+
+		GetCamera()->SetViewMatrixCache(_viewParams.worldToViewMatrix);
+		GetCamera()->SetProjMatrixCache(_viewParams.viewToClipMatrix);
 	}
 }

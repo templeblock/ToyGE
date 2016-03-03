@@ -83,6 +83,9 @@ namespace ToyGE
 		CLASS_GET(ViewMatrixCache, float4x4, _viewMatrixCache);
 		CLASS_SET(ViewMatrixCache, float4x4, _viewMatrixCache);
 
+		CLASS_GET(ProjMatrixCache, float4x4, _projMatrixCache);
+		CLASS_SET(ProjMatrixCache, float4x4, _projMatrixCache);
+
 		virtual void Cull(const Ptr<class SceneCuller> & culler, std::vector<Ptr<class Cullable>> & outElements);
 
 	protected:
@@ -94,6 +97,7 @@ namespace ToyGE
 		float4x4 _projMatrix;
 		float4x4 _viewProjMatrix;
 		float4x4 _viewMatrixCache;
+		float4x4 _projMatrixCache;
 		float _nearDepth;
 		float _farDepth;
 

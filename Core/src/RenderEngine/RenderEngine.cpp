@@ -49,7 +49,7 @@ namespace ToyGE
 		for (int32_t i = 0; i < Global::GetScene()->NumViews(); ++i)
 		{
 			auto view = Global::GetScene()->GetView(i);
-			view->PreRender();
+			view->PreRender(GetSceneRenderer()->bTAA);
 			for (auto & light : view->GetViewRenderContext()->lights)
 			{
 				if (light->IsCastShadow() && light->GetShadowTechnique())
@@ -111,12 +111,19 @@ namespace ToyGE
 		FrameInfoRender::Render(_frameBuffer->GetRenderTargetView(0, 0, 1));
 
 		// GammaCorrection
-		auto gammaCorrectionPS = Shader::FindOrCreate<GammaCorrectionPS>();
+		/*auto gammaCorrectionPS = Shader::FindOrCreate<GammaCorrectionPS>();
 		gammaCorrectionPS->SetScalar("gamma", _gamma);
 		gammaCorrectionPS->SetSRV("inTex", _frameBuffer->GetShaderResourceView());
 		gammaCorrectionPS->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 		gammaCorrectionPS->Flush();
-		DrawQuad({ _backBuffer->GetRenderTargetView(0, 0, 1) });
+		DrawQuad({ _backBuffer->GetRenderTargetView(0, 0, 1) });*/
+
+		Transform(
+			_frameBuffer->GetShaderResourceView(), 
+			_backBuffer->GetRenderTargetView(0, 0, 1), 
+			{ COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A }, 
+			0.0f, 0.0f, 
+			SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 
 		SwapChain();
 

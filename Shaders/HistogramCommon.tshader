@@ -1,0 +1,24 @@
+#ifndef HISTOGRAMCOMMON_TSHADER
+#define HISTOGRAMCOMMON_TSHADER
+
+#include "Common.tshader"
+
+#define HISTOGRAM_SIZE 64
+
+float histogramIllumScale;
+float histogramIllumOffset;
+
+float ComputeHistogramPos(float illum)
+{
+    float pos = log2(illum) * histogramIllumScale + histogramIllumOffset;
+    return saturate(pos) * (HISTOGRAM_SIZE - 1);
+}
+
+float ComputeIllumFromHistogramPos(float pos)
+{
+    pos /= (HISTOGRAM_SIZE - 1);
+    float illum = (pos - histogramIllumOffset) / histogramIllumScale;
+    return exp2(illum);
+}
+
+#endif

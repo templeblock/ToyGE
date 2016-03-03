@@ -63,7 +63,7 @@ float3 ComputePointIrradiance(float3 radiance, float3 lightPos, float3 pos, floa
 {   
     float3 l = lightPos - pos;
     float dist = length(l);
-    l /= max(1e-4, dist);
+    l /= max(1e-5, dist);
     
     return ComputePointIrradiance(radiance, dist, n, l);
 }

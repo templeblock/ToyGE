@@ -6,7 +6,6 @@ class SampleLPV : public SampleCommon
 {
 public:
 	bool _enableLPV;
-	Ptr<LPV> _lpvRender;
 	float _lpvStrength;
 	int32_t _numPropagationItrs;
 	bool _enableGeometryOcclusion;
@@ -29,11 +28,13 @@ public:
 	{
 		SampleCommon::Init();
 
+		Global::GetRenderEngine()->GetSceneRenderer()->bLPV = true;
+
 		auto pp = std::make_shared<PostProcessing>();
-		_lpvRender = std::make_shared<LPV>();
-		pp->AddRender(_lpvRender);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		/*_lpvRender = std::make_shared<LPV>();
+		pp->AddRender(_lpvRender);*/
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
@@ -48,7 +49,7 @@ public:
 		auto dirLight = LightActor::Create<DirectionalLightComponent>(scene);
 		dirLight->GetLight<DirectionalLightComponent>()->SetDirection(_lightDir);
 		dirLight->GetLight<DirectionalLightComponent>()->SetColor(1.0f);
-		dirLight->GetLight<DirectionalLightComponent>()->SetIntensity(8.0f);
+		dirLight->GetLight<DirectionalLightComponent>()->SetIntensity(5.0f);
 		dirLight->GetLight<DirectionalLightComponent>()->SetCastShadow(true);
 		dirLight->GetLight<DirectionalLightComponent>()->SetCastLPV(true);
 
@@ -108,11 +109,14 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		_lpvRender->SetEnable(_enableLPV);
+		Global::GetRenderEngine()->GetSceneRenderer()->bLPV = _enableLPV;
 
-		_lpvRender->SetLPVStrength(_lpvStrength);
-		_lpvRender->SetNumPropagationItrs(_numPropagationItrs);
-		_lpvRender->SetGeometryOcclusion(_enableGeometryOcclusion);
+		if (!Global::GetRenderEngine()->GetSceneRenderer()->GetLPVRenderer())
+			return;
+
+		Global::GetRenderEngine()->GetSceneRenderer()->GetLPVRenderer()->SetLPVStrength(_lpvStrength);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetLPVRenderer()->SetNumPropagationItrs(_numPropagationItrs);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetLPVRenderer()->SetGeometryOcclusion(_enableGeometryOcclusion);
 
 		_dirLight->SetDirection(_lightDir);
 

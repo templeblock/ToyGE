@@ -6,7 +6,7 @@ class SampleVolumetricLight : public SampleCommon
 {
 public:
 	Ptr<SpotLightComponent> _light;
-	Ptr<VolumetricLight> _vl;
+	//Ptr<VolumetricLight> _vl;
 	bool _enableLightVolume;
 	float _attenuation;
 	float _scattering;
@@ -27,16 +27,18 @@ public:
 	{
 		SampleCommon::Init();
 
+		Global::GetRenderEngine()->GetSceneRenderer()->bTAA = true;
+
 		auto pp = std::make_shared<PostProcessing>();
-		_vl = std::make_shared<VolumetricLight>();
-		pp->AddRender(_vl);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		/*_vl = std::make_shared<VolumetricLight>();
+		pp->AddRender(_vl);*/
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
 		auto camera = _renderView->GetCamera();
-		camera->SetPos(float3(-6.0f, 1.0f, 0.0f));
+		camera->SetPos(float3(-4.0f, 1.5f, 0.0f));
 		camera->Yaw(PI_DIV2);
 
 		//Init Scene
@@ -47,7 +49,7 @@ public:
 		spotLight->GetLight<SpotLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
 		spotLight->GetLight<SpotLightComponent>()->SetDirection(float3(0.0f, -1.0f, 0.0f));
 		spotLight->GetLight<SpotLightComponent>()->SetColor(1.0f);
-		spotLight->GetLight<SpotLightComponent>()->SetIntensity(10.0f);
+		spotLight->GetLight<SpotLightComponent>()->SetIntensity(30.0f);
 		spotLight->GetLight<SpotLightComponent>()->SetDecreaseSpeed(10.0f);
 		spotLight->GetLight<SpotLightComponent>()->SetCastShadow(true);
 		spotLight->GetLight<SpotLightComponent>()->SetCastLightVolume(true);
@@ -120,9 +122,12 @@ public:
 		_light->SetCastLightVolume(_enableLightVolume);
 		_light->SetDirection(_dir);
 
-		_vl->SetAttenuation(_attenuation);
-		_vl->SetScattering(_scattering);
-		_vl->SetPhaseFunctionParam(_phaseFunctionParam);
+		if (Global::GetRenderEngine()->GetSceneRenderer()->GetVolumetricLightingRenderer())
+		{
+			Global::GetRenderEngine()->GetSceneRenderer()->GetVolumetricLightingRenderer()->SetAttenuation(_attenuation);
+			Global::GetRenderEngine()->GetSceneRenderer()->GetVolumetricLightingRenderer()->SetScattering(_scattering);
+			Global::GetRenderEngine()->GetSceneRenderer()->GetVolumetricLightingRenderer()->SetPhaseFunctionParam(_phaseFunctionParam);
+		}
 	}
 };
 

@@ -32,22 +32,29 @@ public:
 	{
 		SampleCommon::Init();
 
+		Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap = true;
+
 		auto pp = std::make_shared<PostProcessing>();
-		pp->AddRender(std::make_shared<HDR>());
+		pp->AddRender(std::make_shared<MotionBlur>());
+		pp->AddRender(std::make_shared<ToneMapping>());
 		_paramRender = std::make_shared<SharedParamRender>();
 		pp->AddRender(_paramRender);
-		pp->AddRender(std::make_shared<FXAA>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
+
+		_renderView->GetCamera()->Yaw(-PI_DIV2);
 
 		//Init Scene
 		auto scene = Global::GetScene();
 
+		scene->SetAmbientColor(0.02f);
+
 		//Add Light
 		auto pointLight = LightActor::Create<PointLightComponent>(scene);
-		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 3.0f, 0.0f));
+		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 6.0f, 0.0f));
 		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
-		pointLight->GetLight<PointLightComponent>()->SetIntensity(30.0f);
+		pointLight->GetLight<PointLightComponent>()->SetIntensity(20.0f);
 		pointLight->GetLight<PointLightComponent>()->SetCastShadow(true);
 
 		std::vector<Ptr<RenderComponent>> objs;
@@ -121,6 +128,9 @@ public:
 			_paramRender->SetRenderParamAsNormal(false);
 
 		_paramRender->SetRenderParamColorWrite(_colorWriteMask);
+
+
+		//_renderView->GetCamera()->Walk(-0.2f * elapsedTime);
 	}
 };
 

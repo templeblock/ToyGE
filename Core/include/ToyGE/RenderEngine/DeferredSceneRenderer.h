@@ -4,6 +4,7 @@
 
 #include "ToyGE\RenderEngine\SceneRenderer.h"
 #include "ToyGE\RenderEngine\Shader.h"
+#include "ToyGE\RenderEngine\RenderResourcePool.h"
 
 namespace ToyGE
 {
@@ -30,6 +31,7 @@ namespace ToyGE
 	private:
 		Ptr<class SkyBox> _skyBox;
 		Ptr<class TranslucentRendering> _translucentRendering;
+		PooledTextureRef _preFrameResult;
 	};
 }
 

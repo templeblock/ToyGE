@@ -470,6 +470,16 @@ namespace ToyGE
 		D3D11RenderEngine::d3d11DeviceContext->DrawIndexed(numIndices, indexStart, indexBase);
 	}
 
+	void D3D11RenderContext::DoDrawInstanced(int32_t numVerticesPerInstance, int32_t numInstances, int32_t vertexStart, int32_t instanceBase)
+	{
+		D3D11RenderEngine::d3d11DeviceContext->DrawInstanced((UINT)numVerticesPerInstance, (UINT)numInstances, (UINT)vertexStart, (UINT)instanceBase);
+	}
+
+	void D3D11RenderContext::DoDrawIndexedInstanced(int32_t numIndicesPerInstance, int32_t numInstances, int32_t indexStart, int32_t indexBase, int32_t instanceBase)
+	{
+		D3D11RenderEngine::d3d11DeviceContext->DrawIndexedInstanced((UINT)numIndicesPerInstance, (UINT)numInstances, (UINT)indexStart, (INT)indexBase, (UINT)instanceBase);
+	}
+
 	void D3D11RenderContext::DoDrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset)
 	{
 		auto d3d11Buffer = std::dynamic_pointer_cast<D3D11RenderBuffer>(indirectArgsBuffer);

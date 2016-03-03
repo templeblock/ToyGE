@@ -13,9 +13,13 @@ namespace ToyGE
 	class TOYGE_CORE_API SceneRenderer
 	{
 	public:
+		static const int32_t temporalAANumSamples = 8;
+
 		bool bGenVelocityMap = false;
 		bool bRenderingAtmosphere = false;
 		bool bOIT = true;
+		bool bTAA = true;
+		bool bLPV = false;
 
 		SceneRenderer();
 
@@ -37,6 +41,16 @@ namespace ToyGE
 
 		virtual void Render(const Ptr<RenderView> & view) = 0;
 
+		Ptr<class LPV> GetLPVRenderer() const
+		{
+			return _lpv;
+		}
+
+		Ptr<class VolumetricLight> GetVolumetricLightingRenderer() const
+		{
+			return _volumetricLight;
+		}
+
 	protected:
 		float3 _sunDirection;
 		float3 _sunRadiance;
@@ -44,7 +58,8 @@ namespace ToyGE
 		Ptr<class DirectionalLightComponent> _sunLight;
 
 		Ptr<class AtmosphereRendering> _atmosphereRendering;
-
+		Ptr<class LPV> _lpv;
+		Ptr<class VolumetricLight> _volumetricLight;
 	};
 }
 

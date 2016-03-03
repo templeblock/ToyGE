@@ -50,7 +50,7 @@ void SampleCommon::Start(const ToyGE::Ptr<App> & app)
 }
 
 SampleCommon::SampleCommon()
-	: _cameraMoveSpeed(5.0f),
+	: _cameraMoveSpeed(2.0f),
 	_cameraRotateSpeed(0.25f),
 	_bMouseDown(false)
 {

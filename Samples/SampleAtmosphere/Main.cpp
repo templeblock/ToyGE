@@ -34,8 +34,8 @@ public:
 
 		_ppvl = std::make_shared<PostProcessVolumetricLight>();
 		pp->AddRender(_ppvl);
-		pp->AddRender(std::make_shared<HDR>());
-		pp->AddRender(std::make_shared<FXAA>());
+		pp->AddRender(std::make_shared<ToneMapping>());
+		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
@@ -45,6 +45,7 @@ public:
 
 		//Init Scene
 		auto scene = Global::GetScene();
+		scene->SetAmbientColor(0.02f);
 
 		//Add Light
 		auto dirLight = LightActor::Create<DirectionalLightComponent>(scene);

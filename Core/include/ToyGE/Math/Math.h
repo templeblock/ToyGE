@@ -148,6 +148,11 @@ namespace ToyGE
 		return static_cast<T>(x * RAD2DEG);
 	}
 
+	
+	TOYGE_CORE_API uint32_t reverse_bits(uint32_t bits);
+
+	TOYGE_CORE_API float2 hammersley2d(uint32_t i, uint32_t N);
+
 	// Vector
 	template <typename T, int N>
 	Vector<T, N> operate2_vec(const Vector<T, N> & v0, const Vector<T, N> & v1, const std::function<T(const T&, const T&)> & func)

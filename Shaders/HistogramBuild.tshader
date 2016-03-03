@@ -1,0 +1,82 @@
+#include "Common.tshader"
+#include "HistogramCommon.tshader"
+
+#define GROUPSIZE_X 8
+#define GROUPSIZE_Y 8
+#define THREADLOOPSIZE_X 8
+#define THREADLOOPSIZE_Y 8
+
+Texture2D sceneTex;
+RWTexture2D<float> histogramRW;
+
+// a histogram for each thread
+groupshared float sharedHistogram[GROUPSIZE_X][GROUPSIZE_Y][HISTOGRAM_SIZE];
+
+uint2 numGroups;
+uint2 sceneTexSize;
+
+[numthreads(GROUPSIZE_X, GROUPSIZE_Y, 1)]
+void BuildHistogramCS(
+    uint3 dtID : SV_DispatchThreadID,
+    uint3 groupID : SV_GroupID,
+    uint3 groupThreadID : SV_GroupThreadID,
+    uint  groupThreadIndex : SV_GroupIndex
+)
+{
+    {
+        [unroll] for(int i = 0; i < HISTOGRAM_SIZE; ++i)
+        {
+            sharedHistogram[groupThreadID.x][groupThreadID.y][i] = 0.0;
+        }
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    uint2 sampleStart = dtID.xy * uint2(THREADLOOPSIZE_X, THREADLOOPSIZE_Y); 
+    
+    {
+        for(uint y = 0; y < THREADLOOPSIZE_Y; ++y)
+        {
+            for(uint x = 0; x < THREADLOOPSIZE_X; ++x)
+            {
+                uint2 texelPos = sampleStart + uint2(x, y);
+                if(texelPos.x < sceneTexSize.x && texelPos.y < sceneTexSize.y)
+                {
+                    float3 sceneColor = sceneTex.Load(int3(texelPos, 0)).xyz;
+                    float illum = max(max(sceneColor.x, sceneColor.y), sceneColor.z);
+                    float histogramPos = ComputeHistogramPos(illum);
+                    
+                    float weight1 = frac(histogramPos);
+                    float weight0 = 1.0 - weight1;
+                    
+                    uint histogramIndex0 = (uint)histogramPos;
+                    uint histogramIndex1 = min(HISTOGRAM_SIZE - 1, histogramIndex0 + 1);
+                    
+                    sharedHistogram[groupThreadID.x][groupThreadID.y][histogramIndex0] += weight0;
+                    sharedHistogram[groupThreadID.x][groupThreadID.y][histogramIndex1] += weight1;
+                    //sharedHistogram[groupThreadID.x][groupThreadID.y][groupThreadIndex] += 1.0;
+                }
+            }
+        }
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    // merge into one histogram
+    if(groupThreadIndex < HISTOGRAM_SIZE)
+    {
+        float sum = 0.0;
+        {
+            for(uint y = 0; y < GROUPSIZE_Y; ++y)
+            {
+                for(uint x = 0; x < GROUPSIZE_X; ++x)
+                {
+                    sum += sharedHistogram[x][y][groupThreadIndex];
+                }
+            }
+        }
+        
+        // store
+        histogramRW[uint2(groupThreadIndex, groupID.y * numGroups.x + groupID.x)] = sum;
+    }
+}

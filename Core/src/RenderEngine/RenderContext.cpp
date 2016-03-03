@@ -129,6 +129,18 @@ namespace ToyGE
 			DrawIndexed(_state.indexBuffer->GetDesc().numElements, indexStart, indexBase);
 	}
 
+	void RenderContext::DrawIndexedInstanced(int32_t numIndicesPerInstance, int32_t numInstances, int32_t indexStart, int32_t indexBase, int32_t instanceBase)
+	{
+		UpdateContext();
+		DoDrawIndexedInstanced(numIndicesPerInstance, numInstances, indexStart, indexBase, instanceBase);
+	}
+
+	void RenderContext::DrawInstanced(int32_t numVerticesPerInstance, int32_t numInstances, int32_t vertexStart, int32_t instanceBase)
+	{
+		UpdateContext();
+		DoDrawInstanced(numVerticesPerInstance, numInstances, vertexStart, instanceBase);
+	}
+
 	void RenderContext::DrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset)
 	{
 		UpdateContext();

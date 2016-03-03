@@ -289,7 +289,7 @@ namespace ToyGE
 
 		virtual void BindShaderParams(const Ptr<class Shader> & shader, const Ptr<RenderView> & view);
 	protected:
-		float2 _filterSize = 2.0f;
+		float2 _filterSize = 3.0f;
 		int32_t _filterNumSamples = 7;
 		float _vsmBias = 0.1f;
 		float _vsmReduceBlending = 0.5f;

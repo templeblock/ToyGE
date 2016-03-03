@@ -1,9 +1,13 @@
 #ifndef COMMON_TSHADER
 #define COMMON_TSHADER
 
+#pragma warning(disable: 3557)
+
 #define PI 3.1415927
 #define FLT_MAX 3.402823466e+38F
 #define FLT_MIN 1.175494351e-38F
+
+#define square(x) ((x)*(x))
 
 float4 DistributePrecision(float2 value, float factor)
 {
@@ -70,6 +74,7 @@ float InterleavedGradientNoise(float2 v, float scale)
   static const float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
   return -scale + 2.0 * scale * frac( magic.z * frac(dot(v, magic.xy)) );
 }
+
  
 // float3 LinearDepthToViewPos(float linearZ, float2 cameraNearFar, float2 posH, float4x4 proj)
 // {
@@ -149,7 +154,7 @@ float2 GetClipPosXYFromScreen(float2 screenPos, float2 screenSize)
     return GetUVFromScreen(screenPos, screenSize) * float2(2.0, -2.0) + float2(-1.0, 1.0);
 }
 
-//** Encode and Decode nommal */
+//** Encode and Decode normal */
 float2 EncodeNormalSphereMap(float3 normal)
 {
 

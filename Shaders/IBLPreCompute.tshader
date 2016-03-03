@@ -14,7 +14,7 @@ float  mipCoord;
     
 float3 ImportanceSampling(float2 sample2d, float roughness, float3 N)
 {
-    float a = lerp(MIN_ROUGHNESS, MAX_ROUGHNESS, roughness);
+    float a = lerp(0.2, MAX_ROUGHNESS, roughness);
     a = a * a;
     
     float phi = 2 * PI * sample2d.x;

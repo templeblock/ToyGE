@@ -1,0 +1,23 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D adaptedExposureScale;
+Texture2D sceneTex;
+
+SamplerState pointSampler;
+
+float brightPassThreshold;
+
+float3 BrightPassPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float exposureScale = adaptedExposureScale.Load(int3(0, 0, 0)).x;
+    float3 sceneColor = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+    float illum = max(max(sceneColor.x, sceneColor.y), sceneColor.z);
+    
+    float scale = (illum * exposureScale - brightPassThreshold);
+    scale = max(0.0, scale);
+    
+    float3 bright = sceneColor * scale;
+    bright /= 1.0 + illum;
+    return bright;
+}

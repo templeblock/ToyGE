@@ -24,18 +24,32 @@ namespace ToyGE
 	{
 	}
 
+	void BokehDepthOfField::PreTAASetup(const Ptr<RenderView> & view)
+	{
+		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+
+		auto cocTexRef = ComputeCoC(view, sceneLinearClipDepth, sceneClipDepth);
+		view->GetViewRenderContext()->SetSharedResource("CoC", cocTexRef);
+	}
+
 	void BokehDepthOfField::Render(const Ptr<RenderView> & view)
 	{
 		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
 		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
 		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		auto cocTexRef = ComputeCoC(view, sceneLinearClipDepth, sceneClipDepth);
-		auto cocTex = cocTexRef->Get()->Cast<Texture>();
+		//auto cocTexRef = ComputeCoC(view, sceneLinearClipDepth, sceneClipDepth);
+		//auto cocTex = cocTexRef->Get()->Cast<Texture>();
+		auto cocTex = view->GetViewRenderContext()->GetSharedTexture("CoC");
+
+		auto blurSceneRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
+		auto blurScene = blurSceneRef->Get()->Cast<Texture>();
+		Blur::BoxBlur(sceneTex->GetShaderResourceView(), blurScene->GetRenderTargetView(0, 0, 1), 3, 1.0f);
 
 		PooledBufferRef bokehPointsBufferRef;
 		PooledTextureRef bokehSceneTexRef;
-		ComputeBokehPoints(sceneTex, cocTex, bokehPointsBufferRef, bokehSceneTexRef);
+		ComputeBokehPoints(blurScene, cocTex, bokehPointsBufferRef, bokehSceneTexRef);
 		auto bokehPointsBuffer = bokehPointsBufferRef->Get()->Cast<RenderBuffer>();
 		auto bokehSceneTex = bokehSceneTexRef->Get()->Cast<Texture>();
 
@@ -51,16 +65,20 @@ namespace ToyGE
 		auto halfNearLayerTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, halfTexDesc });
 		auto halfNearLayerTex = halfNearLayerTexRef->Get()->Cast<Texture>();
 		Transform(nearLayerTex->GetShaderResourceView(), halfNearLayerTex->GetRenderTargetView(0, 0, 1));
-		Blur::GaussBlur(halfNearLayerTex->GetShaderResourceView(), halfNearLayerTex->GetRenderTargetView(0, 0, 1), 5, 4.0f);
+		Blur::GaussBlur(halfNearLayerTex->GetShaderResourceView(), halfNearLayerTex->GetRenderTargetView(0, 0, 1), 10, 8.0f);
 
 		auto halfFarLayerTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, halfTexDesc });
 		auto halfFarLayerTex = halfFarLayerTexRef->Get()->Cast<Texture>();
 		Transform(farLayerTex->GetShaderResourceView(), halfFarLayerTex->GetRenderTargetView(0, 0, 1));
-		Blur::GaussBlur(halfFarLayerTex->GetShaderResourceView(), halfFarLayerTex->GetRenderTargetView(0, 0, 1), 5, 4.0f);
+		Blur::GaussBlur(halfFarLayerTex->GetShaderResourceView(), halfFarLayerTex->GetRenderTargetView(0, 0, 1), 10, 8.0f);
 
-		Combine(bokehSceneTex, cocTex, halfNearLayerTex, halfFarLayerTex, sceneTex->GetRenderTargetView(0, 0, 1));
+		auto newSceneRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
+		auto newScene = newSceneRef->Get()->Cast<Texture>();
+		Combine(bokehSceneTex, cocTex, halfNearLayerTex, halfFarLayerTex, newScene->GetRenderTargetView(0, 0, 1));
 
-		RenderBokeh(bokehPointsBuffer, sceneTex->GetRenderTargetView(0, 0, 1));
+		RenderBokeh(bokehPointsBuffer, newScene->GetRenderTargetView(0, 0, 1));
+
+		view->GetViewRenderContext()->SetSharedResource("RenderResult", newSceneRef);
 	}
 
 	PooledTextureRef BokehDepthOfField::ComputeCoC(

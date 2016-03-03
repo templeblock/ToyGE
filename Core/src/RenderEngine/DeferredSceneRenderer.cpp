@@ -14,8 +14,8 @@
 #include "ToyGE\RenderEngine\Scene.h"
 #include "ToyGE\RenderEngine\ReflectionMap.h"
 #include "ToyGE\RenderEngine\RenderComponent.h"
-#include "ToyGE\RenderEngine\Effects\SkyBox.h"
-#include "ToyGE\RenderEngine\Effects\AtmosphereRendering.h"
+#include "ToyGE\RenderEngine\PostProcessing.h"
+#include "ToyGE\RenderEngine\Effects\Effects.h"
 
 namespace ToyGE
 {
@@ -25,6 +25,7 @@ namespace ToyGE
 		Ptr<RenderView> _view;
 		Ptr<Material> _mat;
 		Ptr<DepthStencilState> _dss;
+		bool bTAA;
 
 		virtual void BindView(const Ptr<class RenderView> & view) override
 		{
@@ -43,7 +44,7 @@ namespace ToyGE
 
 			std::map<String, String> macros;
 
-			if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+			if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap || bTAA)
 				macros["GEN_VELOCITY"] = "";
 
 			if (_mat)
@@ -101,13 +102,21 @@ namespace ToyGE
 		}
 	};
 
+	static float CatmullRom(float x)
+	{
+		float ax = abs(x);
+		if (ax > 1.0f)
+			return ((-0.5f * ax + 2.5f) * ax - 4.0f) *ax + 2.0f;
+		else
+			return (1.5f * ax - 2.5f) * ax*ax + 1.0f;
+	}
+
+	
+
 
 	void DeferredSceneRenderer::Render(const Ptr<RenderView> & view)
 	{
 		InitBuffers(view);
-
-		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
-		auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
 
 		Global::GetRenderEngine()->GetRenderContext()->SetViewport(view->GetViewport());
 
@@ -123,51 +132,186 @@ namespace ToyGE
 			}
 		}
 
+		// Base
 		RenderBase(view);
 
 		// Linearize depth
-		LinearizeDepth(
-			sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
-			view,
-			sceneLinearClipDepth->GetRenderTargetView(0, 0, 1));
+		{
+			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+			auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+			LinearizeDepth(
+				sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
+				view,
+				sceneLinearClipDepth->GetRenderTargetView(0, 0, 1));
+		}
 
+		// Lighting
 		RenderLighting(view);
 
+		// Shading
 		RenderShading(view);
 
-		auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
-
 		// Background
-		if (!bRenderingAtmosphere)
 		{
-			// Render sky box
-			if (!_skyBox)
-				_skyBox = std::make_shared<SkyBox>();
-			_skyBox->SetTexture(Global::GetScene()->GetAmbientTexture());
-			_skyBox->Render(
-				renderResult->GetRenderTargetView(0, 0, 1),
-				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT),
-				view);
-		}
-		else
-		{
-			if (!_atmosphereRendering)
-				_atmosphereRendering = std::make_shared<AtmosphereRendering>();
-			_atmosphereRendering->Render(view);
+			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+
+			if (!bRenderingAtmosphere)
+			{
+				if (!_skyBox)
+					_skyBox = std::make_shared<SkyBox>();
+				_skyBox->SetTexture(Global::GetScene()->GetAmbientTexture());
+				_skyBox->Render(
+					renderResult->GetRenderTargetView(0, 0, 1),
+					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT),
+					view);
+			}
+			else
+			{
+				if (!_atmosphereRendering)
+					_atmosphereRendering = std::make_shared<AtmosphereRendering>();
+				_atmosphereRendering->Render(view);
+			}
 		}
 
 		// Translucent
-		if (!_translucentRendering)
-			_translucentRendering = std::make_shared<TranslucentRendering>();
-		_translucentRendering->bOIT = bOIT;
-		_translucentRendering->Render(view, renderResult->GetRenderTargetView(0, 0, 1));
+		{
+			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+
+			if (!_translucentRendering)
+				_translucentRendering = std::make_shared<TranslucentRendering>();
+			_translucentRendering->bOIT = bOIT;
+			_translucentRendering->Render(view, renderResult->GetRenderTargetView(0, 0, 1));
+		}
 
 		// Linearize depth
-		LinearizeDepth(
-			sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
-			view,
-			sceneLinearClipDepth->GetRenderTargetView(0, 0, 1));
+		{
+			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+			auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+			LinearizeDepth(
+				sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS),
+				view,
+				sceneLinearClipDepth->GetRenderTargetView(0, 0, 1));
+		}
 
+		// Volumetric Light
+		{
+			if (!_volumetricLight)
+				_volumetricLight = std::make_shared<VolumetricLight>();
+			_volumetricLight->Render(view);
+		}
+
+		// Half scene
+		{
+			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+
+			auto texDesc = renderResult->GetDesc();
+			texDesc.width = texDesc.width / 2;
+			texDesc.height = texDesc.height / 2;
+			auto halfSceneRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+
+			Transform(renderResult->GetShaderResourceView(), halfSceneRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1));
+			view->GetViewRenderContext()->SetSharedResource("HalfScene", halfSceneRef);
+		}
+
+		// LPV
+		{
+			if (bLPV)
+			{
+				if (!_lpv && bLPV)
+					_lpv = std::make_shared<LPV>();
+				_lpv->Render(view);
+			}
+		}
+
+		// Eye adaption
+		{
+			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+
+			static Ptr<EyeAdaption> eyeAdaption;
+			if (!eyeAdaption)
+				eyeAdaption = std::make_shared<EyeAdaption>();
+			eyeAdaption->Render(view);
+		}
+
+		// PostProcessing PreTAASetup
+		{
+			if (view->GetPostProcessing())
+				view->GetPostProcessing()->PreTAASetup(view);
+		}
+
+		// TAA
+		{
+			auto adaptedExposureScale = view->GetViewRenderContext()->GetSharedTexture("AdaptedExposureScale");
+			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+			auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+
+			if (bTAA)
+			{
+				auto newResultRef = TexturePool::Instance().FindFree({ TEXTURE_2D, renderResult->GetDesc() });
+				auto newResult = newResultRef->Get()->Cast<Texture>();
+
+				auto velocityTex = view->GetViewRenderContext()->GetSharedTexture("Velocity");
+
+				float2 offsets[5] =
+				{
+					float2(0.0f, 0.0f),
+					float2(-1.0f, 0.0f),
+					float2(1.0f, 0.0f),
+					float2(0.0f, -1.0f),
+					float2(0.0f, 1.0f),
+				};
+				float filterWeights[5];
+				float weightsSum = 0.0f;
+				for (int i = 0; i < 5; ++i)
+				{
+					float2 offset = offsets[i] - float2(0.5f, -0.5f) * view->temporalAAJitter;
+
+					//filterWeights[i] = CatmullRom(offset.x()) * CatmullRom(offset.y());
+					offset.x() *= 1.0f + 0.0f * 0.5f;
+					offset.y() *= 1.0f + 0.0f * 0.5f;
+					filterWeights[i] = exp(-2.29f * (offset.x() * offset.x() + offset.y() * offset.y()));
+
+					weightsSum += filterWeights[i];
+				}
+				for (auto & i : filterWeights)
+					i /= weightsSum;
+
+				auto ps = Shader::FindOrCreate<TemporalAAPS>();
+
+				view->BindShaderParams(ps);
+
+				ps->SetScalar("texSize", renderResult->GetTexSize());
+				ps->SetScalar("neighborFilterWeights", filterWeights, (int)sizeof(float) * 5);
+				ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
+				//ps->SetSRV("linearDepth", sceneLinearClipDepth->GetShaderResourceView());
+				ps->SetSRV("sceneDepth", sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS));
+				ps->SetSRV("sceneTex", renderResult->GetShaderResourceView());
+				ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
+				ps->SetSRV("adaptedExposureScale", adaptedExposureScale->GetShaderResourceView());
+				if (_preFrameResult)
+					ps->SetSRV("historyTex", _preFrameResult->Get()->Cast<Texture>()->GetShaderResourceView());
+				else
+					ps->SetSRV("historyTex", nullptr);
+				ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+				ps->Flush();
+
+				DrawQuad({ newResult->GetRenderTargetView(0, 0, 1) });
+
+				_preFrameResult = newResultRef;
+				view->GetViewRenderContext()->SetSharedResource("RenderResult", newResultRef);
+
+			}
+			else
+			{
+				_preFrameResult = nullptr;
+			}
+		}
+
+		
 	}
 
 	void DeferredSceneRenderer::InitBuffers(const Ptr<RenderView> & view)
@@ -203,7 +347,7 @@ namespace ToyGE
 		desc.format = RENDER_FORMAT_R11G11B10_FLOAT;
 		auto lighting0 = TexturePool::Instance().FindFree({ TEXTURE_2D, desc });
 		auto lighting1 = TexturePool::Instance().FindFree({ TEXTURE_2D, desc });
-		desc.format = RENDER_FORMAT_R11G11B10_FLOAT;
+		desc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
 		auto shading = TexturePool::Instance().FindFree({ TEXTURE_2D, desc });
 
 		view->GetViewRenderContext()->SetSharedResource("GBuffer0", gbuffer0);
@@ -215,7 +359,7 @@ namespace ToyGE
 		view->GetViewRenderContext()->SetSharedResource("Lighting1", lighting1);
 		view->GetViewRenderContext()->SetSharedResource("Shading", shading);
 
-		if (bGenVelocityMap)
+		if (bGenVelocityMap || bTAA)
 		{
 			desc.format = RENDER_FORMAT_R16G16_FLOAT;
 			auto velocity = TexturePool::Instance().FindFree({ TEXTURE_2D, desc });
@@ -237,7 +381,7 @@ namespace ToyGE
 
 		rc->SetViewport(view->GetViewport());
 
-		if (bGenVelocityMap)
+		if (bGenVelocityMap || bTAA)
 		{
 			rc->SetRenderTargets(
 			{
@@ -277,7 +421,9 @@ namespace ToyGE
 		rc->SetRasterizerState(nullptr);
 		rc->SetBlendState(nullptr);
 
-		view->GetViewRenderContext()->primitiveDrawList->Draw(std::make_shared<DeferredMeshDrawingPolicy>(), view);
+		auto drawingPolicy = std::make_shared<DeferredMeshDrawingPolicy>();
+		drawingPolicy->bTAA = bTAA;
+		view->GetViewRenderContext()->primitiveDrawList->Draw(drawingPolicy, view);
 
 		rc->SetDepthStencilState(nullptr);
 	}

@@ -53,6 +53,12 @@ namespace ToyGE
 		float uvHeight = 1.0f,
 		const Ptr<DepthStencilView> & dsv = nullptr);
 
+
+	DECLARE_SHADER(, RenderToVolumeTextureVS, SHADER_VS, "RenderToVolumeTexture", "RenderToVolumeTextureVS", SM_4);
+	DECLARE_SHADER(, RenderToVolumeTextureGS, SHADER_GS, "RenderToVolumeTexture", "RenderToVolumeTextureGS", SM_4);
+
+	TOYGE_CORE_API void RenderToVolumeTexture(const Ptr<Texture> & volumeTexture);
+
 	DECLARE_SHADER(, FillPS, SHADER_PS, "FillPS", "FillPS", SM_4);
 
 	TOYGE_CORE_API void Fill(
@@ -116,5 +122,7 @@ namespace ToyGE
 
 	TOYGE_CORE_API void LinearizeDepth(const Ptr<ShaderResourceView> & depth, const Ptr<RenderView> & view, const Ptr<RenderTargetView> & target);
 
+
+	DECLARE_SHADER(, TemporalAAPS, SHADER_PS, "TemporalAA", "TemporalAAPS", SM_4);
 }
 #endif

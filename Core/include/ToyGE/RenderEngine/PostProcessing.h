@@ -26,6 +26,8 @@ namespace ToyGE
 				_postRenders.erase(renderFind);
 		}
 
+		virtual void PreTAASetup(const Ptr<class RenderView> & view);
+
 		virtual void Render(const Ptr<class RenderView> & view);
 
 	protected:

@@ -1,3 +1,6 @@
+#ifndef MESHVERTEXINPUT_TSHADER
+#define MESHVERTEXINPUT_TSHADER
+
 #include "Material.tshader"
 #include "View.tshader"
 
@@ -71,8 +74,18 @@
 #ifndef MVO_PRE_VIEW_POSITION
 #define MVO_PRE_VIEW_POSITION 0
 #endif
+#ifndef MVO_PRE_CLIP_POSITION
+#define MVO_PRE_CLIP_POSITION 0
+#endif
+#ifndef MVO_CLIP_POSITION
+#define MVO_CLIP_POSITION 0
+#endif
 #ifndef MVO_WEIGHT
 #define MVO_WEIGHT MVI_WEIGHT
+#endif
+
+#ifndef AA_JITTER
+#define AA_JITTER 1
 #endif
 
 cbuffer cb_mesh
@@ -123,6 +136,12 @@ struct MeshVertexVSOutputs
     #endif
     #if MVO_PRE_VIEW_POSITION == 1
     float3 preViewPosition : PRE_VIEW_POSITION;
+    #endif
+    #if MVO_PRE_CLIP_POSITION == 1
+    float4 preClipPosition : PRE_CLIP_POSITION;
+    #endif
+    #if MVO_CLIP_POSITION == 1
+    float4 clipPosition : CLIP_POSITION;
     #endif
     
     // Texcoord
@@ -179,30 +198,33 @@ MeshVertexVSOutputs GetMeshVSOutputs(MeshVertexVSInputs inputs)
     MeshVertexVSOutputs outputs;
     
     // Position
+    
+    float3 worldPos = mul(float4(inputs.position, 1.0f), localToWorldMatrix).xyz;
+    
     #if MVO_LOCAL_POSITION == 1
     outputs.localPosition = inputs.position;
     #endif
     #if MVO_WORLD_POSITION == 1
-    outputs.worldPosition = mul(float4(inputs.position, 1.0f), localToWorldMatrix).xyz;
+    outputs.worldPosition = worldPos;
     #endif
     #if MVO_VIEW_POSITION == 1
-    #if MVO_WORLD_POSITION == 1
-    outputs.viewPosition = mul(float4(outputs.worldPosition, 1.0f), worldToViewMatrix).xyz;
-    #else
-    outputs.viewPosition = mul(mul(float4(inputs.position, 1.0f), localToWorldMatrix), worldToViewMatrix).xyz;
-    #endif
+    outputs.viewPosition = mul(float4(worldPos, 1.0f), worldToViewMatrix).xyz;
     #endif
     #if MVO_SV_POSITION == 1
-    #if MVO_WORLD_POSITION == 1
-    outputs.svPosition = mul(float4(outputs.worldPosition, 1.0f), worldToClipMatrix);
-    #elif MVO_VIEW_POSITION == 1
-    outputs.svPosition = mul(float4(outputs.viewPosition, 1.0f), viewToClipMatrix);
-    #else
-    outputs.svPosition = mul(mul(float4(inputs.position, 1.0f), localToWorldMatrix), worldToClipMatrix);
-    #endif
+        #if AA_JITTER == 1
+        outputs.svPosition = mul(float4(worldPos, 1.0f), worldToClipMatrix);
+        #else
+        outputs.svPosition = mul(float4(worldPos, 1.0f), worldToClipMatrixNoJitter);
+        #endif
     #endif
     #if MVO_PRE_VIEW_POSITION == 1
     outputs.preViewPosition = mul(mul(float4(inputs.position, 1.0f), preLocalToWorldMatrix), preWorldToViewMatrix).xyz;
+    #endif
+    #if MVO_PRE_CLIP_POSITION == 1
+    outputs.preClipPosition = mul(mul(float4(inputs.position, 1.0f), preLocalToWorldMatrix), preWorldToClipMatrix);
+    #endif
+    #if MVO_CLIP_POSITION == 1
+    outputs.clipPosition = outputs.svPosition;
     #endif
     
     // Texcoord
@@ -320,3 +342,5 @@ MaterialInputs GetMaterialInputs(MeshVertexVSOutputs mvOutputs)
     
     return matInputs;
 }
+
+#endif

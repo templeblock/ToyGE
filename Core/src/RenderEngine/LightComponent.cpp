@@ -74,8 +74,9 @@ namespace ToyGE
 	PointLightComponent::PointLightComponent()
 		: LightComponent(LIGHT_POINT)
 	{
-		_shadowTechnique = std::make_shared<PointLightPCFShadow>();
-		_shadowTechnique->SetShadowMapSize(128);
+		_shadowTechnique = std::make_shared<PointLightEVSM2Shadow>();
+		_shadowTechnique->SetShadowMapSize(256);
+		//_shadowTechnique->Cast<PointLightPCFShadow>()->SetFilterSize(1.5f);
 	}
 
 	float PointLightComponent::MaxDistance() const

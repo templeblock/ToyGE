@@ -32,7 +32,7 @@ Material GBufferToMaterial(GBuffer gbuf)
     mat.baseColor = gbuf.gbuf0.xyz;
     mat.metallic = gbuf.gbuf0.w;
     
-    mat.normal = DecodeNormal(gbuf.gbuf1.xyz);
+    mat.normal = normalize(DecodeNormal(gbuf.gbuf1.xyz));
     mat.roughness = gbuf.gbuf1.w;
     
     mat.emissive = gbuf.gbuf2.xyz;

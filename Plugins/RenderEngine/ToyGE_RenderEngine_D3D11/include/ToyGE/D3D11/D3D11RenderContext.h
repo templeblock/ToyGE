@@ -46,6 +46,10 @@ namespace ToyGE
 
 		virtual void DoDrawIndexed(int32_t numIndices, int32_t indexStart, int32_t indexBase) override;
 
+		virtual void DoDrawInstanced(int32_t numVerticesPerInstance, int32_t numInstances, int32_t vertexStart, int32_t instanceBase) override;
+
+		virtual void DoDrawIndexedInstanced(int32_t numIndicesPerInstance, int32_t numInstances, int32_t indexStart, int32_t indexBase, int32_t instanceBase) override;
+
 		virtual void DoDrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset) override;
 
 		virtual void DoCompute(int32_t groupX, int32_t groupY, int32_t groupZ) override;

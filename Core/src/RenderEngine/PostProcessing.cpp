@@ -3,6 +3,15 @@
 
 namespace ToyGE
 {
+	void PostProcessing::PreTAASetup(const Ptr<class RenderView> & view)
+	{
+		for (auto & render : _postRenders)
+		{
+			if (render->GetEnable())
+				render->PreTAASetup(view);
+		}
+	}
+
 	void PostProcessing::Render(const Ptr<class RenderView> & view)
 	{
 		for (auto & render : _postRenders)
@@ -11,4 +20,5 @@ namespace ToyGE
 				render->Render(view);
 		}
 	}
+
 }

@@ -12,7 +12,7 @@ namespace ToyGE
 	public:
 		float	fps = 0.0f;
 		float	elapsedTime = 0.0f;
-		int32_t frameCount = 0;
+		int32_t frameCount = -1;
 	};
 }
 

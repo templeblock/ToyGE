@@ -484,6 +484,56 @@ namespace ToyGE
 			rc->SetDepthStencilState(nullptr);
 	}
 
+	void RenderToVolumeTexture(const Ptr<Texture> & volumeTexture)
+	{
+		auto rc = Global::GetRenderEngine()->GetRenderContext();
+
+		auto & quadVBs = GetQuadVBs();
+		auto & quadIB = GetQuadIB();
+
+		RenderViewport vp;
+		vp.topLeftX = 0.0f;
+		vp.topLeftY = 0.0f;
+		vp.width = static_cast<float>(volumeTexture->GetDesc().width);
+		vp.height = static_cast<float>(volumeTexture->GetDesc().height);
+		vp.minDepth = 0.0f;
+		vp.maxDepth = 1.0f;
+		rc->SetViewport(vp);
+
+		float2 uvMap[4];
+		uvMap[0] = float2(0.0f, 0.0f);
+		uvMap[1] = float2(1.0f, 0.0f);
+		uvMap[2] = float2(0.0f, 1.0f);
+		uvMap[3] = float2(1.0f, 1.0f);
+
+		auto uvBufMappedData = quadVBs[1]->Map(MAP_WRITE_DISCARD);
+		memcpy(uvBufMappedData.pData, uvMap, sizeof(float2) * 4);
+		quadVBs[1]->UnMap();
+
+		// Set vbs, ib
+		rc->SetVertexBuffer(quadVBs);
+		rc->SetIndexBuffer(quadIB);
+		rc->SetPrimitiveTopology(PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+		// Set rtv
+		rc->SetRenderTargets({ volumeTexture->GetRenderTargetView(0, 0, volumeTexture->GetDesc().depth) });
+
+		// Set dsv
+		rc->SetDepthStencilState(DepthStencilStateTemplate<false>::Get());
+
+		// Bind shader
+		auto vs = Shader::FindOrCreate<RenderToVolumeTextureVS>();
+		auto gs = Shader::FindOrCreate<RenderToVolumeTextureGS>();
+		vs->Flush();
+		gs->Flush();
+
+		// Draw
+		rc->DrawIndexedInstanced(quadIB->GetDesc().numElements, volumeTexture->GetDesc().depth, 0, 0, 0);
+
+		rc->SetDepthStencilState(nullptr);
+		rc->ResetShader(SHADER_GS);
+	}
+
 	void Fill(
 		const float4 & color,
 		const std::vector< Ptr<class RenderTargetView> > & rtvs,

@@ -1,0 +1,191 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+
+Texture2D sceneDepth;
+Texture2D sceneTex;
+Texture2D velocityTex;
+Texture2D historyTex;
+Texture2D adaptedExposureScale;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float4 texSize;
+float4 neighborFilterWeights[2];
+uint frameCount;
+
+#define VELOCITY_DIALETE_SIZE 2
+
+float3 RGBToYCoCg( float3 RGB )
+{
+	float Y  = dot( RGB, float3(  1, 2,  1 ) );
+	float Co = dot( RGB, float3(  2, 0, -2 ) );
+	float Cg = dot( RGB, float3( -1, 2, -1 ) );
+	
+	float3 YCoCg = float3( Y, Co, Cg );
+	return YCoCg;
+}
+
+float3 YCoCgToRGB( float3 YCoCg )
+{
+	float Y  = YCoCg.x * 0.25;
+	float Co = YCoCg.y * 0.25;
+	float Cg = YCoCg.z * 0.25;
+
+	float R = Y + Co - Cg;
+	float G = Y + Cg;
+	float B = Y - Co - Cg;
+
+	float3 RGB = float3( R, G, B );
+	return RGB;
+}
+
+float LumaWeight(float luma, float exposureScale)
+{
+    return rcp(1 + luma * exposureScale);
+}
+
+float LumaInvWeight(float luma, float exposureScale)
+{
+    return rcp(1 - luma * exposureScale);
+}
+
+void Bicubic2DCatmullRom( in float2 uv, in float4 texSize, out float2 outSamples[3], out float2 outWeights[3] )
+{ 
+	float2 texelPos = uv * texSize.xy;
+
+	float2 tc = floor( texelPos - 0.5 ) + 0.5;
+	float2 f = texelPos - tc;
+	float2 f2 = f * f;
+	float2 f3 = f2 * f;
+
+	float2 w0 = f2 - 0.5 * (f3 + f);
+	float2 w1 = 1.5 * f3 - 2.5 * f2 + 1;
+	float2 w3 = 0.5 * (f3 - f2);
+	float2 w2 = 1 - w0 - w1 - w3;
+
+	outWeights[0] = w0;
+	outWeights[1] = w1 + w2;
+	outWeights[2] = w3;
+
+	outSamples[0] = tc - 1;
+	outSamples[1] = tc + w2 / outWeights[1];
+	outSamples[2] = tc + 2;
+ 
+	outSamples[0] *= texSize.zw;
+	outSamples[1] *= texSize.zw;
+	outSamples[2] *= texSize.zw;
+}
+
+float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float exposureScale = adaptedExposureScale.Load(int3(0, 0, 0)).x;
+    
+    // Find history pixel with velocity
+    float centerDepth = sceneDepth.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    
+    float4 depths;
+    
+    float2 dilateOffsets[4] = 
+    {
+          float2(-VELOCITY_DIALETE_SIZE, -VELOCITY_DIALETE_SIZE),
+          float2( VELOCITY_DIALETE_SIZE, -VELOCITY_DIALETE_SIZE),
+          float2(-VELOCITY_DIALETE_SIZE,  VELOCITY_DIALETE_SIZE),
+          float2( VELOCITY_DIALETE_SIZE,  VELOCITY_DIALETE_SIZE)
+    };
+    
+    depths.x = sceneDepth.SampleLevel(pointSampler, vsOut.uv + dilateOffsets[0] * texSize.zw, 0).x;
+    depths.y = sceneDepth.SampleLevel(pointSampler, vsOut.uv + dilateOffsets[1] * texSize.zw, 0).x;
+    depths.z = sceneDepth.SampleLevel(pointSampler, vsOut.uv + dilateOffsets[2] * texSize.zw, 0).x;
+    depths.w = sceneDepth.SampleLevel(pointSampler, vsOut.uv + dilateOffsets[3] * texSize.zw, 0).x;
+    
+    float minDepth = min(min(depths.x, depths.y), min(depths.z, depths.w));
+    int minDepthOffsetIndex = (int)log2(dot(minDepth == depths, int4(1, 2, 4, 8)));
+    
+    float2 velocitySampleOffset = 0.0f;
+    float4 minClipPos = float4(vsOut.uv * float2(2.0, -2.0) + float2(-1.0, 1.0), centerDepth, 1);
+    if(depths[minDepthOffsetIndex] < centerDepth)
+    {
+        velocitySampleOffset = dilateOffsets[minDepthOffsetIndex];
+        minClipPos.z = minDepth;
+    }
+    
+    float4 preClipPos = mul(minClipPos, clipToPreClipMatrix);
+    preClipPos /= preClipPos.w;
+    
+        
+    float2 velocity = velocityTex.SampleLevel(pointSampler, vsOut.uv + velocitySampleOffset * texSize.zw, 0).xy;
+    //float2 velocity = (minClipPos.xy - preClipPos.xy) * float2(0.5, -0.5);
+    
+    float2 historySampleUV = vsOut.uv - velocity;
+    
+    float2 historySamples[3];
+    float2 historyWeights[3];
+    Bicubic2DCatmullRom(historySampleUV, texSize, historySamples, historyWeights);
+    
+    float4 historyColor;
+    
+    historyColor  = historyTex.SampleLevel(linearSampler, float2(historySamples[0].x, historySamples[0].y), 0) * historyWeights[0].x * historyWeights[0].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[1].x, historySamples[0].y), 0) * historyWeights[1].x * historyWeights[0].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[2].x, historySamples[0].y), 0) * historyWeights[2].x * historyWeights[0].y;
+    
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[0].x, historySamples[1].y), 0) * historyWeights[0].x * historyWeights[1].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[1].x, historySamples[1].y), 0) * historyWeights[1].x * historyWeights[1].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[2].x, historySamples[1].y), 0) * historyWeights[2].x * historyWeights[1].y;
+    
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[0].x, historySamples[2].y), 0) * historyWeights[0].x * historyWeights[2].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[1].x, historySamples[2].y), 0) * historyWeights[1].x * historyWeights[2].y;
+    historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[2].x, historySamples[2].y), 0) * historyWeights[2].x * historyWeights[2].y;
+    
+    historyColor.xyz = RGBToYCoCg(historyColor.xyz);
+    historyColor = historyColor * LumaWeight(historyColor.x, exposureScale);
+    
+    // Sample neighbors
+    float4 centerColor = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float4 neighbor0 = sceneTex.SampleLevel(pointSampler, vsOut.uv + float2(-1,  0) * texSize.zw, 0); //left
+    float4 neighbor1 = sceneTex.SampleLevel(pointSampler, vsOut.uv + float2( 1,  0) * texSize.zw, 0); //right
+    float4 neighbor2 = sceneTex.SampleLevel(pointSampler, vsOut.uv + float2( 0, -1) * texSize.zw, 0); //up
+    float4 neighbor3 = sceneTex.SampleLevel(pointSampler, vsOut.uv + float2( 0,  1) * texSize.zw, 0); //down
+    
+    centerColor.xyz = RGBToYCoCg(centerColor.xyz);
+    neighbor0.xyz = RGBToYCoCg(neighbor0.xyz);
+    neighbor1.xyz = RGBToYCoCg(neighbor1.xyz);
+    neighbor2.xyz = RGBToYCoCg(neighbor2.xyz);
+    neighbor3.xyz = RGBToYCoCg(neighbor3.xyz);
+    
+    centerColor = centerColor * LumaWeight(centerColor.x, exposureScale);
+    neighbor0 = neighbor0 * LumaWeight(neighbor0.x, exposureScale);
+    neighbor1 = neighbor1 * LumaWeight(neighbor1.x, exposureScale);
+    neighbor2 = neighbor2 * LumaWeight(neighbor2.x, exposureScale);
+    neighbor3 = neighbor3 * LumaWeight(neighbor3.x, exposureScale);
+    
+    float neighborWeights[5] = (float[5])neighborFilterWeights;
+    
+    float4 centerFilteredColor = 
+        centerColor * neighborWeights[0] +
+        neighbor0 * neighborWeights[1] +
+        neighbor1 * neighborWeights[2] +
+        neighbor2 * neighborWeights[3] +
+        neighbor3 * neighborWeights[4];
+
+    float4 neighborMin = min(min(min(neighbor0, neighbor1), min(neighbor2, neighbor3)), centerColor);
+    float4 neighborMax = max(max(max(neighbor0, neighbor1), max(neighbor2, neighbor3)), centerColor);
+    
+    // Clamp history to neighbor
+    float historyLuma = historyColor.x;
+    historyColor = clamp(historyColor, neighborMin, neighborMax);
+    
+    // Blend
+    float distToClamp = min(abs(historyLuma.x - neighborMin.x), abs(historyLuma.x - neighborMax.x));
+    
+    float blendAmount = saturate( 0.125 * distToClamp/(distToClamp + (neighborMax.x - neighborMin.x)) );
+    // blendAmount = max(blendAmount, 0.01);
+    
+    float4 finalColor = lerp(historyColor, centerFilteredColor, 0.04);
+    
+    finalColor.xyz *= LumaInvWeight(finalColor.x, exposureScale);
+    finalColor.xyz = YCoCgToRGB(finalColor.xyz);
+    
+    return finalColor;
+}

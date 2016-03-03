@@ -177,6 +177,10 @@ namespace ToyGE
 
 		void DrawIndexed(int32_t indexStart, int32_t indexBase);
 
+		void DrawInstanced(int32_t numVerticesPerInstance, int32_t numInstances, int32_t vertexStart, int32_t instanceBase);
+
+		void DrawIndexedInstanced(int32_t numIndicesPerInstance, int32_t numInstances, int32_t indexStart, int32_t indexBase, int32_t instanceBase);
+
 		void DrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset);
 
 		void Compute(int32_t groupX, int32_t groupY, int32_t groupZ);
@@ -244,6 +248,10 @@ namespace ToyGE
 		virtual void DoDrawVertices(int32_t numVertices, int32_t vertexStart) = 0;
 
 		virtual void DoDrawIndexed(int32_t numIndices, int32_t indexStart, int32_t indexBase) = 0;
+
+		virtual void DoDrawInstanced(int32_t numVerticesPerInstance, int32_t numInstances, int32_t vertexStart, int32_t instanceBase) = 0;
+
+		virtual void DoDrawIndexedInstanced(int32_t numIndicesPerInstance, int32_t numInstances, int32_t indexStart, int32_t indexBase, int32_t instanceBase) = 0;
 
 		virtual void DoDrawInstancedIndirect(const Ptr<RenderBuffer> & indirectArgsBuffer, uint32_t bytesOffset) = 0;
 

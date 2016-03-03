@@ -277,13 +277,13 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
         [branch] if(traceResult.w != 0.0)
         {
             float3 traceColorRay = SampleSceneColor(traceResult);
-            traceColorRay /= 1 + GetIlluminance(traceColorRay);
+            traceColorRay /= 1 + max(max(traceColorRay.x, traceColorRay.y), traceColorRay.z);
         
             traceColor += traceColorRay;
         }       
     }
     traceColor /= float(NUM_RAYS);
-    traceColor /= 1 + GetIlluminance(traceColor) * 2.0;
+    //traceColor /= 1 + GetIlluminance(traceColor) * 2.0;
     // traceColor /= max(1e-5, 1 - GetIlluminance(traceColor));
     
 #else
@@ -337,10 +337,15 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     float3 n = originViewNormal;
     float3 l = traceMainViewDir;
     float3 v = viewDir;
+    float3 h = normalize(v + l);
     
     //float3 reflectColor = traceColor * (F + diffColor / PI) * max(0.0f, ssrIntensity);
     traceColor /= PI;
-    float3 reflectColor = traceColor * ( mat.diffuseColor / PI + BRDF(n, l, v, mat.specularColor, mat.roughness) );
+    
+    float3 spec = Fresnel(max(1e-3, dot(v, h)), mat.specularColor);
+    
+    float3 reflectColor = traceColor * ( mat.diffuseColor / PI + spec );
+    //float3 reflectColor = traceColor * ( mat.diffuseColor / PI );
     reflectColor *= ssrIntensity;
     
     return reflectColor;

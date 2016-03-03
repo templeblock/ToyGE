@@ -1,0 +1,87 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "GammaCorrectionCommon.tshader"
+
+float4 texSize;
+SamplerState pointBorderSampler;
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+Texture2D sceneDownSampleTex;
+Texture2D illumReduceTex;
+Texture2D adaptedExposureScale;
+
+float3 Uncharted2Tonemap(float3 x)
+{
+    static float A = 0.15;
+    static float B = 0.50;
+    static float C = 0.10;
+    static float D = 0.20;
+    static float E = 0.02;
+    static float F = 0.30;
+    static float W = 11.2;
+  
+    return ((x*(A*x+C*B)+D*E)/(x*(A*x+B)+D*F))-E/F; 
+}
+
+float3 BlueShift(float3 color)
+{
+    const float3 BLUE_SHIFT = float3(0.4f, 0.4f, 0.7f);
+    float ilum = GetIlluminance(color);
+  
+    //martin's modified blue shift
+    return lerp(ilum * BLUE_SHIFT, color, saturate(16.0f * ilum));
+}
+
+#if 0
+float3 ToneMapping(float3 color)
+{  
+	color = BlueShift(color);
+
+    static float W = 11.2;
+    float3 outColor = Uncharted2Tonemap(color) / Uncharted2Tonemap(W);
+    return GammaCorrectOut(outColor);
+}
+#else
+
+Texture3D toneMappingLUT;
+
+#define TONEMAPPINGLUT_SIZE 32
+
+float3 ToneMapping(float3 color)
+{
+    float LinearRange = 14;
+	float LinearGrey = 0.18;
+	float ExposureGrey = 444;
+
+	float3 LogColor = log2(color) / LinearRange - log2(LinearGrey) / LinearRange + ExposureGrey / 1023.0;
+	LogColor = saturate( LogColor );
+	
+	float3 UVW = LogColor * ((float)(TONEMAPPINGLUT_SIZE - 1) / (float)TONEMAPPINGLUT_SIZE) + (0.5f / TONEMAPPINGLUT_SIZE);
+
+	half3 OutDeviceColor = toneMappingLUT.Sample( linearSampler, UVW ).rgb;
+	
+	return OutDeviceColor * 1.05;
+}
+
+#endif
+
+
+Texture2D sceneTex;
+Texture2D bloomTex;
+
+float3 ToneMappingPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float3 sceneColor = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0).xyz;
+    float3 bloomColor = bloomTex.SampleLevel(linearSampler, vsOut.uv, 0).xyz; 
+    
+    float adaptedExposure = adaptedExposureScale.Load(int3(0, 0, 0)).x;
+  
+    float3 mergeColor = sceneColor + 0.05 * bloomColor;
+    
+    mergeColor *= adaptedExposure;
+  
+    float3 ldrColor = ToneMapping(mergeColor);
+  
+    return ldrColor;
+}

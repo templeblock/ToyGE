@@ -50,10 +50,10 @@ float ComputePCFShadow(
     float2 bias = (ComputePCFBias(shadowPosDx, shadowPosDy));
     float biasClamp = 1.0 / shadowViewLength;
     
-    reciever -= 0.2 / shadowViewLength; 
+    reciever -= 0.05 / shadowViewLength; 
     
-    float fractionalSamplingError = min(biasClamp, dot(1 * shadowInvViewSize, abs(bias)));
-    reciever -= max(fractionalSamplingError, 0.1 / shadowViewLength);
+    float fractionalSamplingError = min(biasClamp, dot(0.5 * shadowInvViewSize, abs(bias)));
+    reciever -= max(fractionalSamplingError, 0.05 / shadowViewLength);
     
     //float2 filterSize = pcfFilterSize;
     

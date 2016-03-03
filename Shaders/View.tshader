@@ -5,19 +5,26 @@ cbuffer cb_view_shared
 {
     float4x4 worldToViewMatrix;
     float4x4 viewToClipMatrix;
+    float4x4 viewToClipMatrixNoJitter;
     float4x4 worldToClipMatrix;
+    float4x4 worldToClipMatrixNoJitter;
     float4x4 viewToWorldMatrix;
+    float4x4 clipToViewMatrix;
+    float4x4 clipToWorldMatrix;
     float4x4 preWorldToViewMatrix;
+    float4x4 preViewToClipMatrix;
+    float4x4 preWorldToClipMatrix;
+    float4x4 clipToPreClipMatrix;
     float3   viewWorldPosition;
-    float    _pad_0;
+    float    _view_pad_0;
     float    viewNear;
     float    viewFar;
     float    viewLength; // far - near
-    float    _pad_1;
+    float    _view_pad_1;
     float2   viewSize;
     float2   invViewSize;
     float3   viewWorldDir;
-    float    _pad_2;
+    float    _view_pad_2;
 };
 
 #endif

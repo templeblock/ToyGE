@@ -26,9 +26,21 @@ float NDF_GGX(float n_dot_h, float roughness)
   return a2 / (PI * t * t);
 }
 
+// float3 Fresnel_Schlick(float v_dot_h, float3 f0)
+// {
+//   return f0 + (1.0f - f0) * pow(1 - v_dot_h, 5);
+// }
+
 float3 Fresnel_Schlick(float v_dot_h, float3 f0)
 {
-  return f0 + (1.0f - f0) * pow(1 - v_dot_h, 5);
+    float3 fc = pow(1 - v_dot_h, 5);
+    
+    return saturate( 50.0 * f0.g ) * fc + (1 - fc) * f0;
+}
+
+float3 Fresnel(float v_dot_h, float3 f0)
+{
+    return Fresnel_Schlick(v_dot_h, f0);
 }
 
 float G_Implicit(float n_dot_l, float n_dot_v)
@@ -47,20 +59,28 @@ float G_Smith(float n_dot_l, float n_dot_v, float roughness)
   return rcp( G_L * G_V ) * 4 * n_dot_l * n_dot_v;
 }
 
+float G_SmithJointApprox( float n_dot_l, float n_dot_v, float roughness )
+{
+	float a = roughness * roughness;
+	float G_V = n_dot_l * ( n_dot_v * ( 1 - a ) + a );
+	float G_L = n_dot_v * ( n_dot_l * ( 1 - a ) + a );
+	return 0.5 * rcp( G_V + G_L ) * 4 * n_dot_l * n_dot_v;
+}
+
 float3 BRDF(float3 n, float3 l, float3 v, float3 specColor, float roughness)
 {
     float3 h = normalize(l + v);
     
     float n_dot_l = max(1e-5, dot(n, l));
     float n_dot_v = max(1e-5, dot(n, v));
-    float n_dot_h = max(1e-5, dot(n, h));
-    float v_dot_h = max(1e-5, dot(v, h));
+    float n_dot_h = saturate(dot(n, h));
+    float v_dot_h = saturate(dot(v, h));
     
     roughness = lerp(MIN_ROUGHNESS, MAX_ROUGHNESS, roughness);
     
     float  D = NDF_GGX(n_dot_h, roughness);
     float3 F = Fresnel_Schlick(v_dot_h, specColor);
-    float  G = G_Smith(n_dot_l, n_dot_v, roughness);
+    float  G = G_SmithJointApprox(n_dot_l, n_dot_v, roughness);
     
     return D * F * G / (4 * n_dot_l * n_dot_v);
 }

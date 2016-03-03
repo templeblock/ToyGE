@@ -1,0 +1,46 @@
+#include "Common.tshader"
+
+struct RenderToVolumeTextureVSOut
+{
+    float2 pos : POSITION;
+    float2 uv : TEXCOORD;
+    uint sliceIndex : SLICEINDEX;
+};
+
+void RenderToVolumeTextureVS(
+    float2 pos : POSITION,
+    float2 uv : TEXCOORD,
+    uint instanceID : SV_InstanceID,
+    out RenderToVolumeTextureVSOut vsOut
+)
+{
+    vsOut.pos = pos;
+    vsOut.uv = uv;
+    vsOut.sliceIndex = instanceID;
+}
+
+
+struct RenderToVolumeTextureGSOut
+{
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD;
+    uint sliceIndex : SV_RenderTargetArrayIndex;
+};
+
+[maxvertexcount(3)]
+void RenderToVolumeTextureGS(
+    triangle RenderToVolumeTextureVSOut inPoints[3],
+    inout TriangleStream<RenderToVolumeTextureGSOut> outStream
+)
+{
+    [unroll] for(int i = 0; i < 3; ++i)
+    {
+        RenderToVolumeTextureGSOut gsOut;
+        gsOut.pos = float4(inPoints[i].pos, 0.0f, 1.0f);
+        gsOut.uv = inPoints[i].uv;
+        gsOut.sliceIndex = inPoints[i].sliceIndex;
+        
+        outStream.Append(gsOut);
+    }
+    //outStream.RestartStrip();
+}

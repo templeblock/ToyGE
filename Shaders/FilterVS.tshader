@@ -22,8 +22,8 @@ void FilterVS(
         //float2 offset = (i & 1) ? samplesOffsets[i/2].zw : samplesOffsets[i/2].xy;
         float2 offset = offsets[i];
         if( i & 1)
-        uvs[i / 2].zw = uv + offset;
+            uvs[i / 2].zw = uv + offset;
         else
-        uvs[i / 2].xy = uv + offset;
+            uvs[i / 2].xy = uv + offset;
     }
 }

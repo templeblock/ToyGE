@@ -105,6 +105,8 @@ namespace ToyGE
 
 		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
+		//Transform(lowResLightVolume->GetShaderResourceView(), sceneTex->GetRenderTargetView(0, 0, 1));
+
 		BilateralUpSampling(
 			lowResLightVolume->GetShaderResourceView(), 
 			sceneTex->GetRenderTargetView(0, 0, 1), 

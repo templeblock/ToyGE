@@ -1,4 +1,6 @@
 #include "Common.tshader"
+
+#define AA_JITTER 0
 #include "MeshVertexInput.tshader"
 
 MeshVertexVSOutputs RenderLightVolumeVS(MeshVertexVSInputs inputs)

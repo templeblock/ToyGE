@@ -24,7 +24,9 @@ namespace ToyGE
 	public:
 		BokehDepthOfField();
 
-		void Render(const Ptr<RenderView> & view) override;
+		virtual void PreTAASetup(const Ptr<RenderView> & view) override;
+
+		virtual void Render(const Ptr<RenderView> & view) override;
 
 		CLASS_GET(BokehIlluminanceThrehold, float, _bokehIlluminanceThreshold);
 		CLASS_SET(BokehIlluminanceThrehold, float, _bokehIlluminanceThreshold);

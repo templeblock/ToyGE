@@ -82,6 +82,11 @@ void SplitLayersPS(
 
 #define BOKEH_COMPUTE_NUM_SAMPLES 9
 
+float LumaWeight(float3 color)
+{
+    return rcp(1 + max(max(color.x, color.y), color.z));
+}
+
 float3 ComputeBokehPointsPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
     float2 t_o = vsOut.uv;
@@ -119,7 +124,7 @@ float3 ComputeBokehPointsPS(DrawQuadVSOut vsOut) : SV_TARGET
         BokehPoint bokehPoint;
         bokehPoint.pos = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
         bokehPoint.size = min(bokehSize, maxBokehSize);
-        bokehPoint.color = color_o;
+        bokehPoint.color = color_o;// * LumaWeight(color_o);
         bokehPointsBufferAppend.Append(bokehPoint);
         
         outColor = 0.0f;

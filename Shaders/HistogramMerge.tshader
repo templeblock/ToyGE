@@ -1,0 +1,20 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D histogram;
+
+SamplerState pointSampler;
+
+uint   numGroups;
+float  histogramNormalize;
+float4 histogramTexSize;
+
+float MergeHistogramPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float sum = 0.0;
+    for(uint i = 0; i < numGroups; ++i)
+    {
+        sum += histogram.Load(int3(vsOut.pos.x, i, 0)).x;
+    }
+    return sum * histogramNormalize;
+}
