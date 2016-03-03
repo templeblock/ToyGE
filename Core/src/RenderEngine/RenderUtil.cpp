@@ -562,7 +562,8 @@ namespace ToyGE
 		const Vector<ColorWriteMask, 4> & colorWriteMask,
 		const float4 & srcRect,
 		const float4 & dstRect,
-		const Ptr<class Sampler> & sampler)
+		const Ptr<class Sampler> & sampler,
+		const Ptr<DepthStencilView> & dsv )
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
@@ -598,7 +599,8 @@ namespace ToyGE
 			topLeftU,
 			topLeftV,
 			uvWidth,
-			uvHeight);
+			uvHeight, 
+			dsv);
 	}
 
 	void TextureFilter(

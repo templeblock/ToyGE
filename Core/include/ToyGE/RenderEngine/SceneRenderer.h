@@ -21,6 +21,10 @@ namespace ToyGE
 		bool bTAA = true;
 		bool bLPV = false;
 
+		bool bSSR = true;
+		float ssrMaxRoughness = 0.8f;
+		float ssrIntensity = 1.0f;
+
 		SceneRenderer();
 
 		virtual ~SceneRenderer() = default;
@@ -60,6 +64,7 @@ namespace ToyGE
 		Ptr<class AtmosphereRendering> _atmosphereRendering;
 		Ptr<class LPV> _lpv;
 		Ptr<class VolumetricLight> _volumetricLight;
+		Ptr<class SSR> _ssrRenderer;
 	};
 }
 

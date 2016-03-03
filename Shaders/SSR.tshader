@@ -10,12 +10,13 @@ Texture2D sceneTex;
 Texture2D depthTex;
 Texture2D gbuffer0;
 Texture2D gbuffer1;
+Texture2D ssrTex;
 
 SamplerState pointSampler;
 SamplerState pointClampSampler;
 SamplerState linearSampler;
 
-float4 screenSize;
+float4 texSize;
 int frameCount;
 float ssrMaxRoughness;
 float ssrIntensity;
@@ -23,10 +24,10 @@ float mipLevel;
 
 float HZBBuildPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
-    float2 uv0 = vsOut.uv + float2(-0.5f, -0.5f) * screenSize.zw;
-    float2 uv1 = vsOut.uv + float2( 0.5f, -0.5f) * screenSize.zw;
-    float2 uv2 = vsOut.uv + float2(-0.5f,  0.5f) * screenSize.zw;
-    float2 uv3 = vsOut.uv + float2( 0.5f,  0.5f) * screenSize.zw;
+    float2 uv0 = vsOut.uv + float2(-0.5f, -0.5f) * texSize.zw;
+    float2 uv1 = vsOut.uv + float2( 0.5f, -0.5f) * texSize.zw;
+    float2 uv2 = vsOut.uv + float2(-0.5f,  0.5f) * texSize.zw;
+    float2 uv3 = vsOut.uv + float2( 0.5f,  0.5f) * texSize.zw;
   
     float z0 = depthTex.SampleLevel(pointSampler, uv0, mipLevel).x;
     float z1 = depthTex.SampleLevel(pointSampler, uv1, mipLevel).x;
@@ -38,7 +39,7 @@ float HZBBuildPS(DrawQuadVSOut vsOut) : SV_TARGET
 
 
 #define NUM_RAYS 4
-#define NUM_SAMPLES_PER_RAY 4
+#define NUM_SAMPLES_PER_RAY 4 
     
 uint MortonCode( uint x )
 {
@@ -81,8 +82,12 @@ float3 RandomTraceDir(float3 view, float3 normal, float roughness, float2 screen
         float e0 = sample2D.x;
         float e1 = sample2D.y;
         
-        e0 += 0.001f;
-        e1 += 0.001f;
+        //e0 += 0.001f;
+        //e1 += 0.001f;
+        
+        float bias = 0.7f;
+        e0 = lerp(e0, 1.0, bias);
+        e1 = lerp(e1, 1.0, bias);
         
         float3 zAxis = abs(normal.z) < 0.99 ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
         float3 yAxis = normal;
@@ -222,7 +227,6 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     
     float3 viewDir = normalize(-originViewPos);
     
-    uint frameRandom = ((uint)frameCount % 4) * 1551;
     
     float3 traceColor = 0.0f;
     
@@ -232,18 +236,19 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     float3 traceMainViewDir = reflect(-viewDir, originViewNormal);
     
 #if NUM_RAYS > 1
+    uint frameRandom = ((uint)frameCount % 8) * 1551;
     
-    uint morton = MortonCode( uint(vsOut.pos.x) & 3 ) | ( MortonCode( uint(vsOut.pos.y) & 3 ) * 2 );
-    uint pixelIndex = ReverseUIntBits( morton );    
-    uint2 random = ScrambleTEA( uint2( vsOut.pos.xy ), 3 );
+    uint morton = MortonCode( uint(vsOut.pos.x) & 8 ) | ( MortonCode( uint(vsOut.pos.y) & 8 ) * 2 );
+    uint screenPosRandom = ReverseUIntBits( morton );
+    uint2 screenPosRandom2 = ScrambleTEA( uint2( vsOut.pos.xy ) ^ frameRandom, 3 ); 
     
     [unroll] for(int i = 0; i < NUM_RAYS; ++i)
     {
-        uint offset = ( pixelIndex + ReverseUIntBits( uint(i) * 117 ) ) & 15;
+        uint offset = ( (screenPosRandom2.x + screenPosRandom2.y + ReverseUIntBits( uint(i) * 117 )) ^ frameRandom ) & 15;
         float stepOffset = offset / 15.0;
-        stepOffset -= 0.9;
+        stepOffset -= 0.5;
     
-        float3 traceViewDir = RandomTraceDir(viewDir, originViewNormal, roughness, vsOut.pos.xy, uint(i), random);
+        float3 traceViewDir = RandomTraceDir(viewDir, originViewNormal, roughness, vsOut.pos.xy, uint(i), screenPosRandom2);
         
         if(traceViewDir.z < -0.99)
             continue;
@@ -254,15 +259,6 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
         float3 traceUVZEnd = float3(traceClipEnd.xy * float2(0.5, -0.5) + float2(0.5, 0.5), traceClipEnd.z);
         
         float3 traceUVZDir = traceUVZEnd - rayUVZStart;
-        
-        // float4 traceResult = RayTracing(
-        //     originViewPos, 
-        //     traceViewDir, 
-        //     roughnessFade, 
-        //     NUM_SAMPLES_PER_RAY, 
-        //     rayClipStart, 
-        //     rayUVZStart, 
-        //     stepOffset);
         
         float4 traceResult = RayTracing(
             depthTex,
@@ -283,29 +279,17 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
         }       
     }
     traceColor /= float(NUM_RAYS);
-    //traceColor /= 1 + GetIlluminance(traceColor) * 2.0;
-    // traceColor /= max(1e-5, 1 - GetIlluminance(traceColor));
     
 #else
     
     {
         float3 traceViewDir = traceMainViewDir;
-        if(tranceDirV.z < -0.99)
+        if(traceDirV.z < -0.99)
         {
             traceColor = 0.0f
         }
         else
         {
-            // float4 traceResult = RayTracing(
-            //     originViewPos, 
-            //     traceViewDir, 
-            //     roughness, 
-            //     roughnessFade, 
-            //     NUM_SAMPLES_PER_RAY, 
-            //     rayClipStart, 
-            //     rayUVZStart, 
-            //     uint(i) * 117);
-            
             float3 traceViewEnd = originViewPos + traceViewDir;
             float4 traceClipEnd = mul(float4(traceViewEnd, 1.0), viewToClipMatrix);
             traceClipEnd /= traceClipEnd.w;
@@ -339,14 +323,66 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     float3 v = viewDir;
     float3 h = normalize(v + l);
     
-    //float3 reflectColor = traceColor * (F + diffColor / PI) * max(0.0f, ssrIntensity);
     traceColor /= PI;
     
     float3 spec = Fresnel(max(1e-3, dot(v, h)), mat.specularColor);
     
     float3 reflectColor = traceColor * ( mat.diffuseColor / PI + spec );
-    //float3 reflectColor = traceColor * ( mat.diffuseColor / PI );
     reflectColor *= ssrIntensity;
     
     return reflectColor;
+}
+
+float3 SSRNeighborSharePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    GBuffer gbuf;
+    
+    gbuf.gbuf1 = gbuffer1.SampleLevel(pointClampSampler, vsOut.uv, 0.0f);
+    
+    Material mat = GBufferToMaterial(gbuf);
+  
+    // float  originClipDepth = depthTex.SampleLevel(pointClampSampler, vsOut.uv, 0).x;
+    // float2 originClipPosXY = GetClipPosXYFromScreen(vsOut.pos.xy, viewSize.xy);
+    // float3 originViewPos = GetViewPosFromPespective(float3(originClipPosXY, originClipDepth), viewToClipMatrix);
+    
+    //float roughness = lerp(0.1, 0.9, mat.roughness);
+    
+    float3 originWorldNormal = mat.normal;
+    // float3 originViewNormal  = mul(originWorldNormal, (float3x3)worldToViewMatrix);
+    
+    // float3 viewDir = normalize(-originViewPos);
+    // float3 traceViewDir = reflect(-viewDir, originViewNormal);
+    
+    float2 sampleUVs[4] = 
+    {
+          vsOut.uv + float2(-1.0,  0.0) * texSize.zw,
+          vsOut.uv + float2( 1.0,  0.0) * texSize.zw,
+          vsOut.uv + float2( 0.0, -1.0) * texSize.zw,
+          vsOut.uv + float2( 0.0,  1.0) * texSize.zw
+    };
+    
+    float3 ssrColor = ssrTex.SampleLevel(pointClampSampler, vsOut.uv, 0).xyz;
+    
+    float weightSum = 1.0;
+    [unroll] for(int i = 0; i < 4; ++i)
+    {
+        // float  sampleClipDepth = depthTex.SampleLevel(pointClampSampler, sampleUVs[i], 0).x;
+        // float2 sampleClipPosXY = sampleUVs[i] * float2(2.0, -2.0) + float2(-1.0, 1.0);
+        // float3 sampleViewPos = GetViewPosFromPespective(float3(sampleClipPosXY, sampleClipDepth), viewToClipMatrix);
+        float3 sampleNormal = DecodeNormal(gbuffer1.SampleLevel(pointClampSampler, sampleUVs[i], 0).xyz);
+        // float3 sampleViewNormal  = mul(sampleNormal, (float3x3)worldToViewMatrix);
+        
+        float3 sampleSSR = ssrTex.SampleLevel(pointClampSampler, sampleUVs[i], 0).xyz;
+        
+        // float3 sampleTraceViewDir = reflect(sampleViewPos, sampleViewNormal);
+        
+        //float weight = saturate(dot(sampleTraceViewDir, traceViewDir));
+        float weight = saturate(dot(sampleNormal, originWorldNormal));
+        weight = weight * weight;
+        ssrColor += weight * sampleSSR;
+        weightSum += weight;
+    }
+    ssrColor /= weightSum;
+    
+    return ssrColor;
 }

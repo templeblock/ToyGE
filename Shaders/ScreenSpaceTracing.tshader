@@ -58,25 +58,30 @@ float4 RayTracing(
         
         float4 sampleTexDepth = SampleTexDepth(depthTex, depthSampler, sampleUV0, sampleUV1, level);
         
-        float4 depthDiffCur = sampleRayDepth - sampleTexDepth;
-        //bool4 hit = abs(-depthDiffCur - depthTolerance) < depthTolerance;
-        bool4 hit = abs(depthDiffCur - depthTolerance) < depthTolerance;
+        float4 depthDiffCur = sampleTexDepth - sampleRayDepth;
+
+        //bool4 hit = abs(depthDiffCur - depthTolerance) < (depthTolerance);
+        bool4 hit = (depthDiffCur) < (depthTolerance);
         //bool4 hit = depthDiffCur > 0.0f;
         
         [branch] if( any(hit) )
         {
+            float4 absDiff = abs(depthDiffCur);
+            
+            //float minAbsDiff = min(min(absDiff.x, absDiff.y), min(absDiff.z, absDiff.w)); 
+            //hit = hit && (minAbsDiff == absDiff);
+            int hitIndex = 3 - (int)log2(dot(hit, float4(8, 4, 2, 1)));
+            
+            //float4 depthDiffPre = float4(lastDepthDiff, depthDiffCur.xyz);
             float4 depthDiffPre = float4(lastDepthDiff, depthDiffCur.xyz);
-            //float4 hitPos4 = samplePos + saturate( -depthDiffCur / (depthDiffCur - depthDiffPre) );
-            //hitPos4 = hit ? hitPos4 : -FLT_MAX;
             
-            //hitPos = max( max(hitPos4.x, hitPos4.y), max(hitPos4.z, hitPos4.w) );
+            //float4 hitPos4 = samplePos + ( depthDiffCur / (depthDiffPre - depthDiffCur) );
+            //float4 hitPos4 = samplePos + ( depthDiffCur / (rayStepUVZ.z) );
+            //hitPos4 = hit ? hitPos4 : FLT_MAX;
             
-            float4 hitPos4 = samplePos - saturate( depthDiffCur / max(1e-5, depthDiffCur - depthDiffPre) );
-            hitPos4 = hit ? hitPos4 : FLT_MAX;
+            hitPos = samplePos[hitIndex] + depthDiffCur[hitIndex] / (depthDiffPre[hitIndex] - depthDiffCur[hitIndex]);
+            //hitPos = dot(hitPos4, hit);// min( min(hitPos4.x, hitPos4.y), min(hitPos4.z, hitPos4.w) );
             
-            hitPos = min( min(hitPos4.x, hitPos4.y), min(hitPos4.z, hitPos4.w) );
-            
-            //bHit = true;
             hitUVz = rayStartUVZ + hitPos * rayStepUVZ;
             
             break;

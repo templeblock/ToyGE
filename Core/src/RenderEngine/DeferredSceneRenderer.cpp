@@ -218,7 +218,7 @@ namespace ToyGE
 		{
 			if (bLPV)
 			{
-				if (!_lpv && bLPV)
+				if (!_lpv)
 					_lpv = std::make_shared<LPV>();
 				_lpv->Render(view);
 			}
@@ -232,6 +232,18 @@ namespace ToyGE
 			if (!eyeAdaption)
 				eyeAdaption = std::make_shared<EyeAdaption>();
 			eyeAdaption->Render(view);
+		}
+
+		// SSR
+		{
+			if (bSSR)
+			{
+				if (!_ssrRenderer)
+					_ssrRenderer = std::make_shared<SSR>();
+				_ssrRenderer->SetSSRMaxRoughness(ssrMaxRoughness);
+				_ssrRenderer->SetSSRIntensity(ssrIntensity);
+				_ssrRenderer->Render(view);
+			}
 		}
 
 		// PostProcessing PreTAASetup
@@ -285,6 +297,7 @@ namespace ToyGE
 				ps->SetScalar("texSize", renderResult->GetTexSize());
 				ps->SetScalar("neighborFilterWeights", filterWeights, (int)sizeof(float) * 5);
 				ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
+				ps->SetScalar("lerpFactor", 0.04f);
 				//ps->SetSRV("linearDepth", sceneLinearClipDepth->GetShaderResourceView());
 				ps->SetSRV("sceneDepth", sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS));
 				ps->SetSRV("sceneTex", renderResult->GetShaderResourceView());

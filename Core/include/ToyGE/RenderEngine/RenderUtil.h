@@ -83,7 +83,8 @@ namespace ToyGE
 		const Vector<ColorWriteMask, 4> & colorWriteMask = Vector<ColorWriteMask, 4>(COLOR_WRITE_R, COLOR_WRITE_G, COLOR_WRITE_B, COLOR_WRITE_A),
 		const float4 & srcRect = 0.0f,
 		const float4 & dstRect = 0.0f,
-		const Ptr<class Sampler> & sampler = nullptr);
+		const Ptr<class Sampler> & sampler = nullptr,
+		const Ptr<DepthStencilView> & dsv = nullptr);
 
 
 	DECLARE_SHADER(, FilterVS, SHADER_VS, "FilterVS", "FilterVS", SM_4);

@@ -5,7 +5,7 @@ using namespace ToyGE;
 class SampleSSR : public SampleCommon
 {
 public:
-	Ptr<SSR> _ssr;
+	//Ptr<SSR> _ssr;
 	bool _enableSSR;
 	float _ssrMaxRoughness;
 	float _ssrIntensity;
@@ -13,7 +13,7 @@ public:
 	SampleSSR()
 		: _enableSSR(true),
 		_ssrMaxRoughness(0.9f),
-		_ssrIntensity(0.8f)
+		_ssrIntensity(15.0f)
 	{
 		_sampleName = "SSR";
 	}
@@ -23,29 +23,29 @@ public:
 		SampleCommon::Init();
 
 		auto pp = std::make_shared<PostProcessing>();
-		_ssr = std::make_shared<SSR>();
-		pp->AddRender(_ssr);
+		/*_ssr = std::make_shared<SSR>();
+		pp->AddRender(_ssr);*/
 		pp->AddRender(std::make_shared<ToneMapping>());
 		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
 		auto camera = _renderView->GetCamera();
-		camera->SetPos(float3(-14.0f, 1.0f, -1.0f));
-		camera->LookAt(float3(0.0f, 0.0f, 0.0f));
+		camera->SetPos(float3(-0.0f, 1.0f, -3.0f));
+		//camera->LookAt(float3(0.0f, 0.0f, 0.0f));
 
 		//Init Scene
 		auto scene = Global::GetScene();
 
 		//Add Light
 		{
-			auto spotLight = LightActor::Create<SpotLightComponent>(scene);
-			spotLight->GetLight<SpotLightComponent>()->SetPos(float3(2.0f, 0.2f, 0.0f));
+			/*auto spotLight = LightActor::Create<SpotLightComponent>(scene);
+			spotLight->GetLight<SpotLightComponent>()->SetPos(float3(2.0f, 1.0f, 0.0f));
 			spotLight->GetLight<SpotLightComponent>()->SetDirection(float3(-1.0f, -0.0f, 0.0f));
 			spotLight->GetLight<SpotLightComponent>()->SetColor(float3(1.0f, 0.0f, 0.0f));
 			spotLight->GetLight<SpotLightComponent>()->SetIntensity(5.0f);
 			spotLight->GetLight<SpotLightComponent>()->SetDecreaseSpeed(50.0f);
-			spotLight->GetLight<SpotLightComponent>()->SetCastShadow(true);
+			spotLight->GetLight<SpotLightComponent>()->SetCastShadow(true);*/
 		}
 		{
 			auto pointLight = LightActor::Create<PointLightComponent>(scene);
@@ -61,16 +61,16 @@ public:
 		}
 
 		{
-			auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-			auto actor = model->GetMesh()->AddInstanceToScene(scene, float3(-5.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+			/*auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+			auto actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 			auto mat = std::make_shared<Material>();
-			mat->SetBaseColor(1.0f);
+			mat->SetBaseColor(float3(1.0f, 1.0f, 0.0f));
 			mat->SetRoughness(0.0f);
 			mat->SetMetallic(0.0f);
 
 			for (auto obj : actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
-				obj->SetMaterial(mat);
+				obj->SetMaterial(mat);*/
 		}
 
 		/*std::vector<Ptr<RenderComponent>> objs;
@@ -112,10 +112,10 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		_ssr->SetEnable(_enableSSR);
+		Global::GetRenderEngine()->GetSceneRenderer()->bSSR = _enableSSR;
 
-		_ssr->SetSSRMaxRoughness(_ssrMaxRoughness);
-		_ssr->SetSSRIntensity(_ssrIntensity);
+		Global::GetRenderEngine()->GetSceneRenderer()->ssrMaxRoughness = _ssrMaxRoughness;
+		Global::GetRenderEngine()->GetSceneRenderer()->ssrIntensity = _ssrIntensity;
 	}
 };
 

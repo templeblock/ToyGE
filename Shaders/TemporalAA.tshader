@@ -2,6 +2,16 @@
 #include "DrawQuad.tshader"
 #include "View.tshader"
 
+#define VELOCITY_DIALETE_SIZE 2
+
+#ifndef TAA_DYNAMIC
+#define TAA_DYNAMIC 1
+#endif
+
+#ifndef TAA_HISTORY_BICUBIC
+#define TAA_HISTORY_BICUBIC 1
+#endif
+
 Texture2D sceneDepth;
 Texture2D sceneTex;
 Texture2D velocityTex;
@@ -14,8 +24,7 @@ SamplerState linearSampler;
 float4 texSize;
 float4 neighborFilterWeights[2];
 uint frameCount;
-
-#define VELOCITY_DIALETE_SIZE 2
+float lerpFactor;
 
 float3 RGBToYCoCg( float3 RGB )
 {
@@ -85,6 +94,8 @@ float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
     // Find history pixel with velocity
     float centerDepth = sceneDepth.SampleLevel(pointSampler, vsOut.uv, 0).x;
     
+    #if TAA_DYNAMIC
+    
     float4 depths;
     
     float2 dilateOffsets[4] = 
@@ -119,7 +130,11 @@ float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
     //float2 velocity = (minClipPos.xy - preClipPos.xy) * float2(0.5, -0.5);
     
     float2 historySampleUV = vsOut.uv - velocity;
+    #else
+    float2 historySampleUV = vsOut.uv;
+    #endif
     
+    #if TAA_HISTORY_BICUBIC
     float2 historySamples[3];
     float2 historyWeights[3];
     Bicubic2DCatmullRom(historySampleUV, texSize, historySamples, historyWeights);
@@ -137,6 +152,9 @@ float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
     historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[0].x, historySamples[2].y), 0) * historyWeights[0].x * historyWeights[2].y;
     historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[1].x, historySamples[2].y), 0) * historyWeights[1].x * historyWeights[2].y;
     historyColor += historyTex.SampleLevel(linearSampler, float2(historySamples[2].x, historySamples[2].y), 0) * historyWeights[2].x * historyWeights[2].y;
+    #else
+    float4 historyColor = historyTex.SampleLevel(linearSampler, historySampleUV, 0);
+    #endif
     
     historyColor.xyz = RGBToYCoCg(historyColor.xyz);
     historyColor = historyColor * LumaWeight(historyColor.x, exposureScale);
@@ -182,7 +200,7 @@ float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
     float blendAmount = saturate( 0.125 * distToClamp/(distToClamp + (neighborMax.x - neighborMin.x)) );
     // blendAmount = max(blendAmount, 0.01);
     
-    float4 finalColor = lerp(historyColor, centerFilteredColor, 0.04);
+    float4 finalColor = lerp(historyColor, centerFilteredColor, lerpFactor);
     
     finalColor.xyz *= LumaInvWeight(finalColor.x, exposureScale);
     finalColor.xyz = YCoCgToRGB(finalColor.xyz);
