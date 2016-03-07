@@ -176,6 +176,9 @@ namespace ToyGE
 		// RTVs
 		for (auto & rtv : _state.renderTargets)
 		{
+			if (!rtv)
+				continue;
+
 			auto rtvRes = rtv->GetResource();
 
 			if (rtvRes && rtvRes->IsBound() && rtvRes->IsBoundAsInput())

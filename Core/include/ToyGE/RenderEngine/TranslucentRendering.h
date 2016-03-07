@@ -13,6 +13,7 @@ namespace ToyGE
 	DECLARE_SHADER(, ForwardTranslucentRenderingPS, SHADER_PS, "ForwardTranslucentRendering", "ForwardTranslucentRenderingPS", SM_4);
 	DECLARE_SHADER(, ForwardTranslucentLightingPS, SHADER_PS, "ForwardTranslucentRendering", "ForwardTranslucentLightingPS", SM_4);
 	DECLARE_SHADER(, ForwardTranslucentAmbientPS, SHADER_PS, "ForwardTranslucentRendering", "ForwardTranslucentAmbientPS", SM_4);
+	DECLARE_SHADER(, ForwardTranslucentRenderingVelocityPS, SHADER_PS, "ForwardTranslucentRendering", "ForwardTranslucentRenderingVelocityPS", SM_4);
 	DECLARE_SHADER(, OITRenderingVS, SHADER_VS, "OITRendering", "OITRenderingVS", SM_4);
 	DECLARE_SHADER(, OITLightingPS, SHADER_PS, "OITRendering", "OITLightingPS", SM_4);
 	DECLARE_SHADER(, OITAmbientPS, SHADER_PS, "OITRendering", "OITAmbientPS", SM_4);

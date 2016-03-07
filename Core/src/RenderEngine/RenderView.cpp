@@ -99,7 +99,7 @@ namespace ToyGE
 	//	_renderResult = Global::GetRenderEngine()->GetRenderFactory()->GetTexturePooled(texDesc);
 	//}
 
-	void RenderView::PreRender(bool bTAA)
+	void RenderView::PreRender()
 	{
 		auto objsCuller = Global::GetRenderEngine()->GetSceneRenderObjsCuller();
 		std::vector<Ptr<Cullable>> objsCulled;
@@ -119,7 +119,7 @@ namespace ToyGE
 			_viewRenderContext->lights.push_back(renderLight);
 		}
 
-		UpdateParamsBuffer(bTAA);
+		UpdateParamsBuffer();
 	}
 
 	void RenderView::PostRender()
@@ -165,16 +165,16 @@ namespace ToyGE
 		return Result;
 	}
 
-	void RenderView::UpdateParamsBuffer(bool bTAA)
+	void RenderView::UpdateParamsBuffer()
 	{
 		if (GetCamera())
 		{
 			_viewParams.worldToViewMatrix = GetCamera()->GetViewMatrix();
 			_viewParams.viewToClipMatrix = GetCamera()->GetProjMatrix();
 			_viewParams.viewToClipMatrixNotJitter = _viewParams.viewToClipMatrix;
-			if (bTAA)
+			if (sceneRenderingConfig.bTAA)
 			{
-				int32_t sampleIndex = Global::GetInfo()->frameCount % SceneRenderer::temporalAANumSamples;
+				int32_t sampleIndex = Global::GetInfo()->frameCount % temporalAANumSamples;
 				temporalAAJitter = float2(Halton(sampleIndex, 2), Halton(sampleIndex, 3)) - 0.5f;
 
 				//temporalAAJitter = hammersley2d(Global::GetInfo()->frameCount % SceneRenderer::temporalAANumSamples, SceneRenderer::temporalAANumSamples - 1);
@@ -187,7 +187,9 @@ namespace ToyGE
 			_viewParams.worldToClipMatrixNoJitter = mul(_viewParams.worldToViewMatrix, _viewParams.viewToClipMatrixNotJitter);
 			_viewParams.viewToWorldMatrix = inverse(_viewParams.worldToViewMatrix);
 			_viewParams.clipToViewMatrix = inverse(_viewParams.viewToClipMatrix);
+			_viewParams.clipToViewMatrixNoJitter = inverse(_viewParams.viewToClipMatrixNotJitter);
 			_viewParams.clipToWorldMatrix = inverse(_viewParams.worldToClipMatrix);
+			_viewParams.clipToWorldMatrixNoJitter = inverse(_viewParams.worldToClipMatrixNoJitter);
 
 			_viewParams.preWorldToViewMatrix = GetCamera()->GetViewMatrixCache();
 			_viewParams.preViewToClipMatrix = GetCamera()->GetProjMatrixCache();

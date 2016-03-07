@@ -10,7 +10,9 @@ cbuffer cb_view_shared
     float4x4 worldToClipMatrixNoJitter;
     float4x4 viewToWorldMatrix;
     float4x4 clipToViewMatrix;
+    float4x4 clipToViewMatrixNoJitter;
     float4x4 clipToWorldMatrix;
+    float4x4 clipToWorldMatrixNoJitter;
     float4x4 preWorldToViewMatrix;
     float4x4 preViewToClipMatrix;
     float4x4 preWorldToClipMatrix;

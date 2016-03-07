@@ -1,9 +1,12 @@
 #include "ToyGE\RenderEngine\Scene.h"
 #include "ToyGE\RenderEngine\RenderView.h"
 #include "ToyGE\Kernel\Global.h"
-#include "ToyGE\RenderEngine\RenderEngine.h"
+#include "ToyGE\RenderEngine\RenderEngineInclude.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
 #include "ToyGE\RenderEngine\Camera.h"
+#include "ToyGE\RenderEngine\ReflectionMapCapture.h"
+#include "ToyGE\RenderEngine\RenderBuffer.h"
+#include "ToyGE\Kernel\Assertion.h"
 
 namespace ToyGE
 {
@@ -50,4 +53,82 @@ namespace ToyGE
 		view->SetScene(shared_from_this());
 	}
 
+	void Scene::SetAmbientTexture(const Ptr<class Texture> & ambientTex)
+	{
+		_ambientTex = ambientTex;
+		if (_ambientTex)
+		{
+			if (!_ambientReflectionMap)
+				_ambientReflectionMap = std::make_shared<ReflectionMap>();
+			_ambientReflectionMap->SetEnvironmentMap(_ambientTex);
+			_ambientReflectionMap->InitPreComputedData();
+		}
+		else
+		{
+			_ambientReflectionMap = nullptr;
+		}
+	}
+
+	void Scene::InitReflectionMaps()
+	{
+		if (_reflectionMapCaptures.size() == 0)
+		{
+			_reflectionMaps = nullptr;
+			_capturesPosRadiusBuffer = nullptr;
+			return;
+		}
+
+		std::sort(_reflectionMapCaptures.begin(), _reflectionMapCaptures.end(),
+			[](const Ptr<ReflectionMapCapture> & capture0, const Ptr<ReflectionMapCapture> & capture1)
+		{
+			return capture0->GetRadius() < capture1->GetRadius();
+		});
+
+		TextureDesc texDesc;
+		texDesc.width = texDesc.height = 128;
+		texDesc.depth = 1;
+		texDesc.arraySize = (int32_t)_reflectionMapCaptures.size();
+		texDesc.bCube = true;
+		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
+		texDesc.cpuAccess = 0;
+		texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
+		texDesc.mipLevels = 0;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
+		_reflectionMaps = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+		_reflectionMaps->SetDesc(texDesc);
+		_reflectionMaps->Init();
+
+		std::vector<float4> bufData;
+
+		int captureIndex = 0;
+		for (auto & capture : _reflectionMapCaptures)
+		{
+			auto reflectionMap = capture->CaptureScene(shared_from_this());
+			auto filteredEnvMapRef = reflectionMap->GetPrefiltedEnviromentMap();
+			auto filteredEnvMap = filteredEnvMapRef->Get()->Cast<Texture>();
+
+			for (int i = 0; i < 6; ++i)
+			{
+				for (int mipLevel = 0; mipLevel < filteredEnvMap->GetDesc().mipLevels; ++mipLevel)
+				{
+					ToyGE_ASSERT(filteredEnvMap->CopyTo(_reflectionMaps, mipLevel, captureIndex * 6 + i, 0, 0, 0, mipLevel, i));
+				}
+			}
+
+			bufData.push_back(float4(capture->GetPos().x(), capture->GetPos().y(), capture->GetPos().z(), capture->GetRadius()));
+
+			++captureIndex;
+		}
+
+		RenderBufferDesc bufDesc;
+		bufDesc.bindFlag = BUFFER_BIND_SHADER_RESOURCE;
+		bufDesc.bStructured = false;
+		bufDesc.cpuAccess = 0;
+		bufDesc.elementSize = (int32_t)sizeof(float4);
+		bufDesc.numElements = (int32_t)_reflectionMapCaptures.size();
+		_capturesPosRadiusBuffer = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
+		_capturesPosRadiusBuffer->SetDesc(bufDesc);
+		_capturesPosRadiusBuffer->Init(&bufData[0]);
+	}
 }

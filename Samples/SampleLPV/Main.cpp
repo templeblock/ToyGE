@@ -28,7 +28,7 @@ public:
 	{
 		SampleCommon::Init();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bLPV = true;
+		_renderView->sceneRenderingConfig.bLPV = true;
 
 		auto pp = std::make_shared<PostProcessing>();
 		/*_lpvRender = std::make_shared<LPV>();
@@ -109,7 +109,7 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bLPV = _enableLPV;
+		_renderView->sceneRenderingConfig.bLPV = _enableLPV;
 
 		if (!Global::GetRenderEngine()->GetSceneRenderer()->GetLPVRenderer())
 			return;

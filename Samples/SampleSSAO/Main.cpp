@@ -27,6 +27,9 @@ public:
 	{
 		SampleCommon::Init();
 
+		_renderView->sceneRenderingConfig.bReflectAmbientMap = false;
+		_renderView->sceneRenderingConfig.bSSR = false;
+
 		auto pp = std::make_shared<PostProcessing>();
 		_ssao = std::make_shared<SSAO>();
 		pp->AddRender(_ssao);

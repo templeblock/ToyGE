@@ -33,6 +33,11 @@ namespace ToyGE
 
 		static void InitLUT();
 
+		static Ptr<Texture> GetLUT()
+		{
+			return _lut;
+		}
+
 		ReflectionMap();
 
 		~ReflectionMap() = default;
@@ -42,6 +47,8 @@ namespace ToyGE
 
 		CLASS_SET(PreComputedMapSize, int32_t, _preComputedMapSize);
 		CLASS_GET(PreComputedMapSize, int32_t, _preComputedMapSize);
+
+		CLASS_GET(PrefiltedEnviromentMap, PooledTextureRef, _prefiltedEnviromentMapRef);
 
 		void InitPreComputedData();
 

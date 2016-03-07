@@ -1,0 +1,224 @@
+#include "Common.tshader"
+#include "View.tshader"
+#include "IBL.tshader"
+#include "GBuffer.tshader"
+
+#define TILE_SIZE 16
+#define TILE_NUM_THREADS (TILE_SIZE * TILE_SIZE)
+#define MAX_NUM_CAPTURES 128 
+
+#ifndef ADD_SSR
+#define ADD_SSR 1
+#endif
+
+Texture2D sceneDepth;
+TextureCubeArray environmentMaps;
+TextureCube sceneAmbientMap;
+Buffer<float4> capturesPosRadiusList;
+Texture2D ssrResult;
+Texture2D gbuffer0;
+Texture2D gbuffer1;
+Texture2D sceneColor;
+RWTexture2D<float4> sceneColorRW;
+
+SamplerState linearSampler;
+
+uint numCaptures;
+uint numEnvMapMipLevels;
+float4 texSize;
+
+groupshared uint tileMinDepth_ui;
+groupshared uint tileMaxDepth_ui;
+groupshared uint  tileNumCaptures;
+groupshared uint tileCapturesIndexList[MAX_NUM_CAPTURES];
+groupshared uint tileSortedCapturesIndexList[MAX_NUM_CAPTURES];
+
+bool IntersectpehreAABB(float3 sphereCenter, float sphereRadius, float3 aabbCenter, float3 aabbExtent)
+{
+    float3 distToBound = max(0, abs(sphereCenter - aabbCenter) - aabbExtent);
+    return dot(distToBound, distToBound) < sphereRadius * sphereRadius;
+}
+
+float3 ComputeReflectionMapSampleDir(float4 capturePosRadius, float3 worldPos, float3 reflectDir)
+{
+    float3 localPos = worldPos - capturePosRadius.xyz;
+    float p_dot_p = dot(capturePosRadius.xyz, capturePosRadius.xyz);
+    float p_dot_n = dot(capturePosRadius.xyz, reflectDir);
+    
+    float d = -p_dot_n + sqrt(p_dot_n - (p_dot_p - capturePosRadius.w * capturePosRadius.w));
+    
+    float3 sampleDir = localPos + d * reflectDir;
+    
+    return sampleDir / capturePosRadius.w;
+}
+
+
+[numthreads(TILE_SIZE, TILE_SIZE, 1)]
+void EnvironmentReflectionRenderingCS(
+    uint3 dtID : SV_DispatchThreadID,
+    uint3 groupThreadID : SV_GroupThreadID,
+    uint  groupThreadIndex : SV_GroupThreadID,
+    uint3 groupID : SV_GroupID
+)
+{
+    float depth = sceneDepth.Load(dtID).x;
+    
+    // Compute tile min, max depth
+    if(groupThreadIndex == 0)
+    {
+        tileMinDepth_ui = 0x7F7FFFFF;
+        tileMaxDepth_ui = 0;
+    }
+    if(depth < 0.9999)
+    {
+        uint depth_ui = asuint(depth);
+        InterlockedMin(tileMinDepth_ui, depth_ui);
+        InterlockedMax(tileMaxDepth_ui, depth_ui);
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    float tileMinDepth = asfloat(tileMinDepth_ui);
+    float tileMaxDepth = asfloat(tileMaxDepth_ui);
+    
+    // Compute tile aabb in view space
+    float3 tileAABBMin;
+    float3 tileAABBMax;
+    float2 uv0 = (float2)groupID.xy * float2(TILE_SIZE, TILE_SIZE) * texSize.zw;
+    float2 uv1 = ((float2)groupID.xy + 1.0) * float2(TILE_SIZE, TILE_SIZE) * texSize.zw;
+    float2 clipPosXY0 = uv0 * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    float2 clipPosXY1 = uv1 * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    
+    float4 clipPos0 = float4(clipPosXY0.x, clipPosXY1.y, tileMinDepth, 1.0);
+    float4 clipPos1 = float4(clipPosXY1.x, clipPosXY0.y, tileMinDepth, 1.0);
+    float4 clipPos2 = float4(clipPosXY0.x, clipPosXY1.y, tileMaxDepth, 1.0);
+    float4 clipPos3 = float4(clipPosXY1.x, clipPosXY0.y, tileMaxDepth, 1.0);
+    
+    float4 viewPos0 = mul(clipPos0, clipToViewMatrix);
+    viewPos0.xyz /= viewPos0.w;
+    float4 viewPos1 = mul(clipPos1, clipToViewMatrix);
+    viewPos1.xyz /= viewPos1.w;
+    float4 viewPos2 = mul(clipPos2, clipToViewMatrix);
+    viewPos2.xyz /= viewPos2.w;
+    float4 viewPos3 = mul(clipPos3, clipToViewMatrix);
+    viewPos3.xyz /= viewPos3.w;
+    
+    tileAABBMin = min(viewPos0.xyz, viewPos2.xyz);
+    tileAABBMax = max(viewPos1.xyz, viewPos3.xyz);
+    
+    float3 tileAABBCenter = (tileAABBMin.xyz + tileAABBMax.xyz) * 0.5;
+    float3 tileAABBExtent = (tileAABBMax.xyz - tileAABBMin.xyz) * 0.5;
+    
+    // Culling Captures
+    if(groupThreadIndex == 0)
+        tileNumCaptures = 0;
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    {
+        for(uint captureIndex = groupThreadIndex; captureIndex < numCaptures; captureIndex +=TILE_NUM_THREADS)
+        {
+            float4 capturePosRadius = capturesPosRadiusList[captureIndex];
+            // Test intersection
+            if(IntersectpehreAABB(capturePosRadius.xyz, capturePosRadius.w, tileAABBCenter, tileAABBExtent))
+            {
+                uint captureAddIndex;
+                InterlockedAdd(tileNumCaptures, 1U, captureAddIndex);
+                tileCapturesIndexList[captureAddIndex] = captureIndex; 
+            }
+        }
+    }
+    
+    GroupMemoryBarrierWithGroupSync();
+    
+    // Sort tile captures
+    {
+        for(uint captureIndex = groupThreadIndex; captureIndex < tileNumCaptures; captureIndex +=TILE_NUM_THREADS)
+        {
+            uint key = tileCapturesIndexList[captureIndex];
+            uint numSmallers = 0; 
+            for(uint i = 0; i < tileNumCaptures; ++i)
+            {
+                if(tileCapturesIndexList[i] < key)
+                    ++numSmallers;
+            }
+            tileSortedCapturesIndexList[numSmallers] = key;
+        }
+    }
+    GroupMemoryBarrierWithGroupSync();
+    
+    [branch] if( all((float2)dtID.xy < texSize.xy)  )
+    {
+        float4 outColor = 0.0;
+        if(depth < 0.9999)
+        {
+            GBuffer gbuf;
+            gbuf.gbuf0 = gbuffer0.Load(dtID);
+            gbuf.gbuf1 = gbuffer1.Load(dtID);
+            
+            Material mat = GBufferToMaterial(gbuf);
+            
+            float2 uv = (float2(dtID.xy) + 0.5) * texSize.zw;
+            float4 clipPos = float4(uv * float2(2.0, -2.0) + float2(-1.0, 1.0), depth, 1.0);
+            float4 worldPos = mul(clipPos, clipToWorldMatrix);
+            worldPos.xyz /= worldPos.w;
+            
+            float3 viewToPos = normalize(worldPos.xyz - viewWorldPosition);
+            float3 reflectDir = reflect(viewToPos, mat.normal);
+            
+            float a = square( mat.roughness );
+		    reflectDir = lerp( mat.normal, reflectDir, (1 - a) * ( sqrt(1 - a) + a ) );
+            
+            float mipLevel = lerp(0.0f, numEnvMapMipLevels - 1.0f, mat.roughness);
+        
+            // Render reflections
+            #if ADD_SSR
+            float4 ssr = ssrResult.Load(dtID);
+            outColor.w = ssr.w;
+            #endif
+            {
+                for(uint i = 0; i < tileNumCaptures; ++i)
+                {
+                    [branch] 
+                    if(outColor.w >= 1.0)
+                        break;
+
+                    uint captureIndex = tileCapturesIndexList[i];
+                    float4 capturePosRadius = capturesPosRadiusList[captureIndex];
+                    
+                    float3 sampleDir = ComputeReflectionMapSampleDir(capturePosRadius, worldPos.xyz, reflectDir);
+                    
+                    float4 envSample = environmentMaps.SampleLevel(linearSampler, float4(sampleDir, captureIndex), mipLevel);
+                    
+                    float dist = length(worldPos.xyz - capturePosRadius.xyz) / capturePosRadius.w;
+                    
+                    static const float fadeStart = 0.2;
+                    float d = max(0, dist - fadeStart) / (1.0 - fadeStart);
+                    float distFade = 1.0 - d*d;
+                    
+                    float blend = min(1.0 - outColor.w, distFade) * envSample.w;
+                    outColor.xyz += envSample.xyz * blend;
+                    outColor.w += blend;
+                }
+                
+                #if ADD_AMBIENTMAP
+                float4 ambientSample = sceneAmbientMap.SampleLevel(linearSampler, reflectDir, mipLevel);
+                float blend = (1.0 - outColor.w);
+                outColor.xyz += ambientSample.xyz * blend;
+                outColor.w += blend;
+                #endif
+            }
+            
+            float n_dot_v = max(0, dot(mat.normal, -viewToPos));
+            float2 lutSample = GetLUTSample(n_dot_v, mat.roughness);
+            outColor.xyz = ComputeIBL(outColor.xyz, lutSample, mat.specularColor);
+            #if ADD_SSR
+            outColor.xyz += ssr.xyz;
+            #endif
+        }
+        outColor.xyz += sceneColor.Load(dtID).xyz;
+        
+        sceneColorRW[dtID.xy] = outColor;
+    }
+    
+}

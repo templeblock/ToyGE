@@ -104,7 +104,11 @@ void InitSampleCoordsPS(
     
     float2 sampleUV = sampleCoord * float2(0.5f, -0.5f) + float2(0.5f, 0.5f);
     
+    #ifdef NO_DEPTH
+    cameraZ = 1.0;
+    #else
     cameraZ = sceneLinearDepthTex.SampleLevel(pointSampler, sampleUV, 0).x;
+    #endif
 }
 
 void MarkRayMarchingSamplesPS(DrawQuadVSOut vsOut)
@@ -128,7 +132,11 @@ void RayMarchingPS(
     float3 posFromDepthView  = GetViewPosFromLinear(float3(sampleCoord, linearDepth), viewToClipMatrix, viewNear, viewFar);
 #else
     float2 clipPosXY = vsOut.uv * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    #ifdef NO_DEPTH
+    float linearDepth = 1.0;
+    #else
     float linearDepth   = sceneLinearDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    #endif
     float3 posFromDepthView  = GetViewPosFromLinear(float3(clipPosXY, linearDepth), viewToClipMatrix, viewNear, viewFar);
 #endif
     float3 posFromDepthWorld = mul(float4(posFromDepthView, 1.0), viewToWorldMatrix).xyz;
@@ -224,7 +232,11 @@ float4 UnWarpSamplesPS(DrawQuadVSOut vsOut) : SV_TARGET
     float2 posH = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
     float2 rayDir = normalize(posH - lightClipPos);
     
+    #ifdef NO_DEPTH
+    float cameraDepth = 1.0;
+    #else
     float cameraDepth = sceneLinearDepthTex.Load(uint3(vsOut.pos.xy, 0)).x;
+    #endif
     
     float4 bounds = float4(-1.0f, -1.0f, 1.0f, 1.0f) + texSize.zwzw * float4(1.0, 1.0, -1.0, -1.0);
     float4 halfSapceEquationTerms = (posH.xxyy - bounds.xzyw) * rayDir.yyxx;
@@ -275,9 +287,13 @@ float4 UnWarpSamplesPS(DrawQuadVSOut vsOut) : SV_TARGET
         float2 leftSampleUV  = float2( (leftSampleIndex + 0.5) / MAX_SAMPLES_PERLINE, lineIndexCoord[i]);
         float2 rightSampleUV = float2( (leftSampleIndex + 1.5) / MAX_SAMPLES_PERLINE, lineIndexCoord[i]);
         
+        #ifdef NO_DEPTH
+        float2 depthWeights = 1.0;
+        #else
         float leftCameraDepth  = sampleDepthTex.SampleLevel(pointSampler, leftSampleUV, 0).x;
         float rightCameraDepth = sampleDepthTex.SampleLevel(pointSampler, rightSampleUV, 0).x;
         float2 depthWeights = 1.0 / max(1e-5, abs( float2(leftCameraDepth, rightCameraDepth) - cameraDepth ));
+        #endif
         
         float2 weights = float2(leftSampleWeight, 1.0 - leftSampleWeight) * lineWeights[i] * depthWeights;
         

@@ -13,7 +13,7 @@ public:
 	SampleSSR()
 		: _enableSSR(true),
 		_ssrMaxRoughness(0.9f),
-		_ssrIntensity(15.0f)
+		_ssrIntensity(2.0f)
 	{
 		_sampleName = "SSR";
 	}
@@ -89,6 +89,13 @@ public:
 		for (auto obj : objs)
 			obj->SetMaterial(mat);*/
 
+		auto reflectionMapCapture = std::make_shared<ReflectionMapCapture>();
+		reflectionMapCapture->SetPos(float3(0.0f, 6.0f, 0.0f));
+		reflectionMapCapture->SetRadius(40.0f);
+
+		Global::GetScene()->AddReflectionMapCapture(reflectionMapCapture);
+		Global::GetScene()->InitReflectionMaps();
+
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "SSR");
 
@@ -112,10 +119,10 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bSSR = _enableSSR;
+		_renderView->sceneRenderingConfig.bSSR = _enableSSR;
 
-		Global::GetRenderEngine()->GetSceneRenderer()->ssrMaxRoughness = _ssrMaxRoughness;
-		Global::GetRenderEngine()->GetSceneRenderer()->ssrIntensity = _ssrIntensity;
+		_renderView->sceneRenderingConfig.ssrMaxRoughness = _ssrMaxRoughness;
+		_renderView->sceneRenderingConfig.ssrIntensity = _ssrIntensity;
 	}
 };
 

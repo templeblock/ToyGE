@@ -14,3 +14,4 @@
 #include "ToyGE\RenderEngine\Effects\TweakBarRenderer.h"
 #include "ToyGE\RenderEngine\Effects\VolumetricLight.h"
 #include "ToyGE\RenderEngine\Effects\EyeAdaption.h"
+#include "ToyGE\RenderEngine\Effects\EnvironmentReflectionRenderer.h"

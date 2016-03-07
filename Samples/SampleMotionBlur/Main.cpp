@@ -23,6 +23,8 @@ public:
 	{
 		SampleCommon::Init();
 
+		_renderView->sceneRenderingConfig.bGenVelocityMap = true;
+
 		auto pp = std::make_shared<PostProcessing>();
 		_mb = std::make_shared<MotionBlur>();
 		pp->AddRender(_mb);
@@ -31,7 +33,8 @@ public:
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap = true;
+		_renderView->sceneRenderingConfig.bSSR = false;
+
 
 		_renderView->GetCamera()->Pitch(PI_DIV2);
 
@@ -50,10 +53,10 @@ public:
 		auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
 		_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
-		auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
+		/*auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 		auto reflectionMap = std::make_shared<ReflectionMap>();
 		reflectionMap->SetEnvironmentMap(texAsset->GetTexture());
-		reflectionMap->InitPreComputedData();
+		reflectionMap->InitPreComputedData();*/
 
 		auto mat = std::make_shared<Material>();
 		mat->SetBaseColor(1.0f);
@@ -63,8 +66,14 @@ public:
 		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(mat);
-			obj->SetReflectionMap(reflectionMap);
+			//obj->SetReflectionMap(reflectionMap);
 		}
+
+		auto capture = std::make_shared<ReflectionMapCapture>();
+		capture->SetPos(0.0f);
+		capture->SetRadius(20.0f);
+		scene->AddReflectionMapCapture(capture);
+		scene->InitReflectionMaps();
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "MotionBlur");

@@ -247,6 +247,7 @@ namespace ToyGE
 	SpotLightShadow::SpotLightShadow()
 	{
 		_depthRenderView = std::make_shared<RenderView>();
+		_depthRenderView->sceneRenderingConfig.bTAA = false;
 
 		_spotShadowViewCB = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
 		RenderBufferDesc bufDesc;
@@ -319,7 +320,7 @@ namespace ToyGE
 		// Render depth
 		_depthRenderView->SetViewport(GetTextureQuadViewport(depthTex));
 		_depthRenderView->SetCamera(spotCamera);
-		_depthRenderView->UpdateParamsBuffer(false);
+		_depthRenderView->UpdateParamsBuffer();
 		/*if (bOutputViewPos)
 		{
 			RenderDepth(depthTex->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT), _depthRenderView, viewPosTex->GetRenderTargetView(0, 0, 1));
@@ -357,6 +358,7 @@ namespace ToyGE
 	PointLightShadow::PointLightShadow()
 	{
 		_depthRenderView = std::make_shared<RenderView>();
+		_depthRenderView->sceneRenderingConfig.bTAA = false;
 
 		_pointShadowViewCB = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
 		RenderBufferDesc bufDesc;
@@ -446,7 +448,7 @@ namespace ToyGE
 			// Render depth
 			_depthRenderView->SetViewport(GetTextureQuadViewport(depthTex));
 			_depthRenderView->SetCamera(pointCamera);
-			_depthRenderView->UpdateParamsBuffer(false);
+			_depthRenderView->UpdateParamsBuffer();
 
 			/*if (bOutputViewPos)
 			{
@@ -494,10 +496,16 @@ namespace ToyGE
 
 	CascadedShadow::CascadedShadow()
 	{
-		for(auto & view : _depthRenderView)
+		for (auto & view : _depthRenderView)
+		{
 			view = std::make_shared<RenderView>();
+			view->sceneRenderingConfig.bTAA = false;
+		}
 		for (auto & view : _rsmRenderView)
+		{
 			view = std::make_shared<RenderView>();
+			view->sceneRenderingConfig.bTAA = false;
+		}
 
 		_cascadedShadowViewCB = Global::GetRenderEngine()->GetRenderFactory()->CreateBuffer();
 		RenderBufferDesc bufDesc;
@@ -626,7 +634,7 @@ namespace ToyGE
 			// Render depth
 			_depthRenderView[splitIndex]->SetViewport(GetTextureQuadViewport(depthTex));
 			_depthRenderView[splitIndex]->SetCamera(dirCamera);
-			_depthRenderView[splitIndex]->UpdateParamsBuffer(false);
+			_depthRenderView[splitIndex]->UpdateParamsBuffer();
 			RenderDepth(depthTex->GetDepthStencilView(0, splitIndex, 1, RENDER_FORMAT_D24_UNORM_S8_UINT), _depthRenderView[splitIndex]);
 
 			_splits.push_back(split.x());
@@ -728,7 +736,7 @@ namespace ToyGE
 			// Render depth
 			_rsmRenderView[splitIndex]->SetViewport(GetTextureQuadViewport(rsmRadiance));
 			_rsmRenderView[splitIndex]->SetCamera(dirCamera);
-			_rsmRenderView[splitIndex]->UpdateParamsBuffer(false);
+			_rsmRenderView[splitIndex]->UpdateParamsBuffer();
 			RenderRSM(
 				_rsmRenderView[splitIndex], 
 				rsmRadiance->GetRenderTargetView(0, 0, 1), 

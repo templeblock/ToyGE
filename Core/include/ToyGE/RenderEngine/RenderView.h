@@ -5,6 +5,7 @@
 #include "ToyGE\RenderEngine\RenderResourcePool.h"
 #include "ToyGE\RenderEngine\RenderViewport.h"
 #include "ToyGE\Math\Math.h"
+#include "ToyGE\RenderEngine\SceneRenderer.h"
 
 namespace ToyGE
 {
@@ -27,7 +28,9 @@ namespace ToyGE
 		float4x4	worldToClipMatrixNoJitter;
 		float4x4	viewToWorldMatrix;
 		float4x4	clipToViewMatrix;
+		float4x4	clipToViewMatrixNoJitter;
 		float4x4	clipToWorldMatrix;
+		float4x4	clipToWorldMatrixNoJitter;
 		float4x4	preWorldToViewMatrix;
 		float4x4	preViewToClipMatrix;
 		float4x4	preWorldToClipMatrix;
@@ -132,15 +135,20 @@ namespace ToyGE
 	class TOYGE_CORE_API RenderView : public std::enable_shared_from_this<RenderView>
 	{
 	public:
+		SceneRenderingConfig	sceneRenderingConfig;
+		PooledTextureRef		preAdaptedExposureScale;
+		PooledTextureRef		preFrameResult;
+
+		static const int32_t temporalAANumSamples = 8;
 		float2 temporalAAJitter;
 
 		RenderView();
 
-		void PreRender(bool bTAA);
+		void PreRender();
 
 		void PostRender();
 
-		void UpdateParamsBuffer(bool bTAA);
+		void UpdateParamsBuffer();
 
 		void BindShaderParams(const Ptr<Shader> & shader) const;
 
@@ -178,7 +186,6 @@ namespace ToyGE
 		Ptr<PostProcessing>		_postProcessing;
 		ViewParams				_viewParams;
 		Ptr<RenderBuffer>		_paramsBuffer;
-
 	};
 }
 

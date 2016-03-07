@@ -32,7 +32,9 @@ public:
 	{
 		SampleCommon::Init();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap = true;
+		_renderView->sceneRenderingConfig.bGenVelocityMap = true;
+		_renderView->sceneRenderingConfig.bReflectAmbientMap = false;
+		_renderView->sceneRenderingConfig.bSSR = false;
 
 		auto pp = std::make_shared<PostProcessing>();
 		pp->AddRender(std::make_shared<MotionBlur>());
@@ -48,13 +50,13 @@ public:
 		//Init Scene
 		auto scene = Global::GetScene();
 
-		scene->SetAmbientColor(0.02f);
+		//scene->SetAmbientColor(0.02f);
 
 		//Add Light
 		auto pointLight = LightActor::Create<PointLightComponent>(scene);
 		pointLight->GetLight<PointLightComponent>()->SetPos(float3(0.0f, 6.0f, 0.0f));
 		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
-		pointLight->GetLight<PointLightComponent>()->SetIntensity(20.0f);
+		pointLight->GetLight<PointLightComponent>()->SetIntensity(60.0f);
 		pointLight->GetLight<PointLightComponent>()->SetCastShadow(true);
 
 		std::vector<Ptr<RenderComponent>> objs;
@@ -62,6 +64,12 @@ public:
 		auto model = Asset::FindAndInit<MeshAsset>("Models/crytek-sponza/sponza.tmesh");
 		model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.01f, 0.01f, 0.01f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
+		auto reflectionMapCapture = std::make_shared<ReflectionMapCapture>();
+		reflectionMapCapture->SetPos(float3(0.0f, 6.0f, 0.0f));
+		reflectionMapCapture->SetRadius(40.0f);
+
+		Global::GetScene()->AddReflectionMapCapture(reflectionMapCapture);
+		Global::GetScene()->InitReflectionMaps();
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "DeferredRendering");

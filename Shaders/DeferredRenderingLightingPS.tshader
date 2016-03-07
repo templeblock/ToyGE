@@ -53,26 +53,26 @@ void DeferredRenderingLightingPS(
     lighting1 += mat.emissive;
 }
 
-float3 IBLPS(DrawQuadVSOut vsOut) : SV_TARGET
-{
-    GBuffer gbuf;
-    
-    gbuf.gbuf0 = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0);
-    gbuf.gbuf1 = gbuffer1.SampleLevel(pointSampler, vsOut.uv, 0);
-    gbuf.gbuf2 = gbuffer2.SampleLevel(pointSampler, vsOut.uv, 0);
-    
-    Material mat = GBufferToMaterial(gbuf);
-    
-    float linearClipDepth = sceneLinearClipDepth.SampleLevel(pointSampler, vsOut.uv, 0);
-    float2 clipPos_xy = GetClipPosXYFromScreen(vsOut.pos.xy, viewSize);
-    float3 viewPos = GetViewPosFromLinear(float3(clipPos_xy, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
-    float3 worldPos = mul(float4(viewPos, 1.0), viewToWorldMatrix).xyz; 
-    
-    float3 n = mat.normal;
-    float3 v = normalize(viewWorldPosition - worldPos);
-    float3 r = reflect(-v, n);
-    
-    float n_dot_v = max( 0.0, dot(n, v) );
-    
-    return ComputeIBL(r, mat.roughness, n_dot_v, mat.specularColor, mat.diffuseColor);
-}
+// float3 IBLPS(DrawQuadVSOut vsOut) : SV_TARGET
+// {
+//     GBuffer gbuf;
+//     
+//     gbuf.gbuf0 = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0);
+//     gbuf.gbuf1 = gbuffer1.SampleLevel(pointSampler, vsOut.uv, 0);
+//     gbuf.gbuf2 = gbuffer2.SampleLevel(pointSampler, vsOut.uv, 0);
+//     
+//     Material mat = GBufferToMaterial(gbuf);
+//     
+//     float linearClipDepth = sceneLinearClipDepth.SampleLevel(pointSampler, vsOut.uv, 0);
+//     float2 clipPos_xy = GetClipPosXYFromScreen(vsOut.pos.xy, viewSize);
+//     float3 viewPos = GetViewPosFromLinear(float3(clipPos_xy, linearClipDepth), viewToClipMatrix, viewNear, viewFar);
+//     float3 worldPos = mul(float4(viewPos, 1.0), viewToWorldMatrix).xyz; 
+//     
+//     float3 n = mat.normal;
+//     float3 v = normalize(viewWorldPosition - worldPos);
+//     float3 r = reflect(-v, n);
+//     
+//     float n_dot_v = max( 0.0, dot(n, v) );
+//     
+//     return ComputeIBL(r, mat.roughness, n_dot_v, mat.specularColor, mat.diffuseColor);
+// }

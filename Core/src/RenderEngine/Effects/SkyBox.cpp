@@ -23,19 +23,8 @@ namespace ToyGE
 
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		/*auto cam = view->GetCamera();
-		auto camPos = cam->GetPos();
-		float camFar = cam->GetFar();
-		auto viewMat = cam->GetViewMatrix();
-		auto projMat = cam->GetProjMatrix();
-		auto viewMatXM = XMLoadFloat4x4(&viewMat);
-		auto projMatXM = XMLoadFloat4x4(&projMat);*/
-		//auto scaleMatXM = XMMatrixIdentity();
 		auto translationMat = translation(view->GetCamera()->GetPos());
 		auto transformMat = mul(translationMat, view->GetCamera()->GetViewProjMatrix());
-		/*XMFLOAT4X4 viewProj;
-		XMStoreFloat4x4(&viewProj, viewProjXM);*/
-
 
 		auto vs = Shader::FindOrCreate<SkyBoxVS>();
 		auto ps = Shader::FindOrCreate<SkyBoxPS>();

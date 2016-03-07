@@ -41,15 +41,44 @@ namespace ToyGE
 		CLASS_SET(AmbientColor, float3, _ambientColor);
 		CLASS_GET(AmbientColor, float3, _ambientColor);
 
-		CLASS_SET(AmbientTexture, Ptr<class Texture>, _ambientTex);
+		void SetAmbientTexture(const Ptr<class Texture> & _ambientTex);
 		CLASS_GET(AmbientTexture, Ptr<class Texture>, _ambientTex);
+
+		CLASS_GET(AmbientReflectionMap, Ptr<class ReflectionMap>, _ambientReflectionMap);
+
+		void AddReflectionMapCapture(const Ptr<class ReflectionMapCapture> & capture)
+		{
+			_reflectionMapCaptures.push_back(capture);
+		}
+		const std::vector<Ptr<class ReflectionMapCapture>> & GetReflectionMapCaptures() const
+		{
+			return _reflectionMapCaptures;
+		}
+
+		void InitReflectionMaps();
+
+		Ptr<Texture> GetReflectionMaps() const
+		{
+			return _reflectionMaps;
+		}
+		Ptr<class RenderBuffer> GetCapturesPosRadiusBuffer() const
+		{
+			return _capturesPosRadiusBuffer;
+		}
 
 	private:
 		static int32_t actorID;
 		std::map<int32_t, Ptr<Actor>> _actorsMap;
+
 		std::vector<Ptr<RenderView>> _views;
+
+		std::vector<Ptr<class ReflectionMapCapture>> _reflectionMapCaptures;
+		Ptr<Texture> _reflectionMaps;
+		Ptr<class RenderBuffer> _capturesPosRadiusBuffer;
+
 		float3 _ambientColor;
 		Ptr<class Texture> _ambientTex;
+		Ptr<class ReflectionMap> _ambientReflectionMap;
 	};
 }
 

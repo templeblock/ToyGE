@@ -14,6 +14,7 @@
 #include "ToyGE\RenderEngine\SceneRenderer.h"
 #include "ToyGE\RenderEngine\Camera.h"
 #include "ToyGE\RenderEngine\ReflectionMap.h"
+#include "ToyGE\RenderEngine\ReflectionMapCapture.h"
 #include "ToyGE\RenderEngine\Actor.h"
 #include "ToyGE\RenderEngine\StaticMeshActor.h"
 #include "ToyGE\RenderEngine\LightActor.h"

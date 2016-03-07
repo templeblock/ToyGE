@@ -19,6 +19,7 @@ namespace ToyGE
 		auto gbuffer1 = view->GetViewRenderContext()->GetSharedTexture("GBuffer1");
 
 		TextureDesc ssrDesc = sceneTex->GetDesc();
+		ssrDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
 		auto ssrResultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, ssrDesc });
 		auto ssrResult = ssrResultTexRef->Get()->Cast<Texture>();
 
@@ -110,7 +111,7 @@ namespace ToyGE
 			ps->SetSRV("sceneDepth", sceneClipDepth->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS));
 			ps->SetSRV("sceneTex", ssrShared->GetShaderResourceView());
 			//ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
-			ps->SetSRV("adaptedExposureScale", adaptedExposureScale->GetShaderResourceView());
+			//ps->SetSRV("adaptedExposureScale", adaptedExposureScale->GetShaderResourceView());
 			if (_preSSRResultRef)
 				ps->SetSRV("historyTex", _preSSRResultRef->Get()->Cast<Texture>()->GetShaderResourceView());
 			else
@@ -129,7 +130,8 @@ namespace ToyGE
 			_preSSRResultRef = ssrResultTexRef;
 		}
 
-		rc->SetBlendState(
+
+		/*rc->SetBlendState(
 			BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
 
 
@@ -139,10 +141,12 @@ namespace ToyGE
 			ssrAAedResultTex->GetShaderResourceView(),
 			sceneTex->GetRenderTargetView(0, 0, 1), 
 			{ COLOR_WRITE_R, COLOR_WRITE_G ,COLOR_WRITE_B ,COLOR_WRITE_A }, 0.0f, 0.0f, nullptr,
-			sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));*/
 
 		rc->SetBlendState(nullptr);
 		rc->SetDepthStencilState(nullptr);
+
+		view->GetViewRenderContext()->SetSharedResource("SSR", ssrAAedResultTexRef);
 	}
 
 	PooledTextureRef SSR::BuildHZB(const Ptr<Texture> & depthTex)
@@ -206,7 +210,7 @@ namespace ToyGE
 		ps->SetSRV("ssrTex", ssrResult->GetShaderResourceView());
 		ps->SetSRV("gbuffer1", gbuffer1->GetShaderResourceView());
 		ps->SetSRV("depthTex", depthTex->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS));
-		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("pointClampSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 		ps->Flush();
 
 		DrawQuad({ resultTex->GetRenderTargetView(0, 0, 1) },

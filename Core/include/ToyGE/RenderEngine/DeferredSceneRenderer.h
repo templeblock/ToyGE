@@ -31,7 +31,7 @@ namespace ToyGE
 	private:
 		Ptr<class SkyBox> _skyBox;
 		Ptr<class TranslucentRendering> _translucentRendering;
-		PooledTextureRef _preFrameResult;
+		Ptr<class EnvironmentReflectionRenderer> _envReflectionRenderer;
 	};
 }
 

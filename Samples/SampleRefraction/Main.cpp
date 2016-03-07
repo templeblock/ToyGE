@@ -78,6 +78,13 @@ public:
 				obj->SetMaterial(mat);
 		}
 
+		auto reflectionMapCapture = std::make_shared<ReflectionMapCapture>();
+		reflectionMapCapture->SetPos(float3(0.0f, 6.0f, 0.0f));
+		reflectionMapCapture->SetRadius(40.0f);
+
+		Global::GetScene()->AddReflectionMapCapture(reflectionMapCapture);
+		Global::GetScene()->InitReflectionMaps();
+
 		// Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "Refraction");
 

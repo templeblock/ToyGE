@@ -2,7 +2,8 @@
 #define MVO_VIEW_POSITION 1
 
 #ifdef GEN_VELOCITY
-#define MVO_PRE_VIEW_POSITION 1
+#define MVO_PRE_CLIP_POSITION 1
+#define MVO_CLIP_POSITION 1
 #endif
 
 #include "MeshVertexInput.tshader"
@@ -16,7 +17,7 @@ Texture2D depthTex;
 Texture2D sceneTex;
 Texture2D lightingTex;
 
-SamplerState linearSampler;
+//SamplerState linearSampler;
 SamplerState pointSampler;
 
 cbuffer cb_ambient
@@ -45,9 +46,9 @@ void ForwardTranslucentRenderingPS(
 
     out float3 color0 : SV_TARGET0,
     out float3 color1 : SV_TARGET1
-#ifdef GEN_VELOCITY
-    , out float2  velocity : SV_TARGET2
-#endif
+// #ifdef GEN_VELOCITY
+//     , out float2  velocity : SV_TARGET2
+// #endif
 
 #endif
     )
@@ -76,7 +77,7 @@ void ForwardTranslucentRenderingPS(
     
     float4 traceResult = RayTracing(
         depthTex,
-        linearSampler,
+        bilinearSampler,
         rayStartUVZ,
         rayDirUVZ, 
         16, 
@@ -87,7 +88,7 @@ void ForwardTranslucentRenderingPS(
     
     [branch] if(traceResult.w != 0.0)
     {
-        traceColor += sceneTex.SampleLevel(linearSampler, traceResult.xy, 0).xyz;
+        traceColor += sceneTex.SampleLevel(bilinearSampler, traceResult.xy, 0).xyz;
     }
     
     float3 lighting = lightingTex.SampleLevel(pointSampler, inputs.svPosition.xy * invViewSize, 0).xyz;
@@ -102,18 +103,48 @@ void ForwardTranslucentRenderingPS(
     
 #endif
 
-#ifdef GEN_VELOCITY
+#if (defined GEN_VELOCITY) && (defined TRASLUCENT_REFRACTION)
     velocity = 0.0f;
     
-    float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), viewToClipMatrix);
+    // float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), preViewToClipMatrix);
+    float4 preClipPos = inputs.preClipPosition;
     preClipPos /= preClipPos.w;
-    
+    preClipPos.xy -= preViewToClipMatrix[2].xy;
     float2 velStart = preClipPos.xy * float2(0.5f, -0.5f) + 0.5f;
-    float2 velEnd   = inputs.svPosition.xy * invViewSize;
+    
+    //float4 clipPos = mul(float4(inputs.viewPosition, 1.0f), viewToClipMatrix);
+    float4 clipPos = inputs.clipPosition;
+    clipPos /= clipPos.w;
+    clipPos.xy -= viewToClipMatrix[2].xy;
+    float2 velEnd   = clipPos.xy * float2(0.5f, -0.5f) + 0.5f;
     
     velocity = (velEnd - velStart);
 #endif
     
+}
+
+void ForwardTranslucentRenderingVelocityPS(
+    MeshVertexVSOutputs inputs,
+    out float2  velocity : SV_TARGET0
+)
+{
+#ifdef GEN_VELOCITY
+    velocity = 0.0f;
+    
+    // float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), preViewToClipMatrix);
+    float4 preClipPos = inputs.preClipPosition;
+    preClipPos /= preClipPos.w;
+    preClipPos.xy -= preViewToClipMatrix[2].xy;
+    float2 velStart = preClipPos.xy * float2(0.5f, -0.5f) + 0.5f;
+    
+    //float4 clipPos = mul(float4(inputs.viewPosition, 1.0f), viewToClipMatrix);
+    float4 clipPos = inputs.clipPosition;
+    clipPos /= clipPos.w;
+    clipPos.xy -= viewToClipMatrix[2].xy;
+    float2 velEnd   = clipPos.xy * float2(0.5f, -0.5f) + 0.5f;
+    
+    velocity = (velEnd - velStart);
+#endif
 }
 
 void ForwardTranslucentLightingPS(

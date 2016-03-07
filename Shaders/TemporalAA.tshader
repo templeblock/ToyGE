@@ -12,6 +12,10 @@
 #define TAA_HISTORY_BICUBIC 1
 #endif
 
+#ifndef TAA_ADAPTEDEXPOSURE
+#define TAA_ADAPTEDEXPOSURE 1
+#endif
+
 Texture2D sceneDepth;
 Texture2D sceneTex;
 Texture2D velocityTex;
@@ -89,7 +93,11 @@ void Bicubic2DCatmullRom( in float2 uv, in float4 texSize, out float2 outSamples
 
 float4 TemporalAAPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
+    #if TAA_ADAPTEDEXPOSURE
     float exposureScale = adaptedExposureScale.Load(int3(0, 0, 0)).x;
+    #else
+    float exposureScale = 1.0;
+    #endif
     
     // Find history pixel with velocity
     float centerDepth = sceneDepth.SampleLevel(pointSampler, vsOut.uv, 0).x;

@@ -39,13 +39,26 @@ namespace ToyGE
 
 		AtmosphereRendering();
 
-		void Render(const Ptr<RenderView> & view) override;
+		virtual void Render(const Ptr<RenderView> & view) override;
 
-		CLASS_SET(SunDirection, float3, _sunDirection);
+		void RenderCubeMap(const Ptr<Texture> & target);
 
-		CLASS_SET(SunRadiance, float3, _sunRadiance);
+		void SetSunDirection(const float3 & sunDirection)
+		{
+			_sunDirection = normalize(sunDirection);
+		}
+		void SetSunRadiance(const float3 & sunRadiance)
+		{
+			_sunRadiance = sunRadiance;
+		}
+		void SetSunRenderRadius(float sunRenderRadius)
+		{
+			_sunRenderRadius = sunRenderRadius;
+		}
 
-		CLASS_SET(SunRenderRadius, float, _sunRenderRadius);
+		void UpdateSunLight(const Ptr<class DirectionalLightComponent> & light);
+
+		void UpdateAmbientMap(const Ptr<class Scene> & scene);
 
 		float3 ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height);
 

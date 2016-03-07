@@ -13,7 +13,7 @@ cbuffer cb_ambient
     float3 ambientColor;
 };
 
-float3 DeferredRenderingShadingPS(DrawQuadVSOut vsOut) : SV_TARGET
+float4 DeferredRenderingShadingPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
   GBuffer gbuf;
   
@@ -25,5 +25,5 @@ float3 DeferredRenderingShadingPS(DrawQuadVSOut vsOut) : SV_TARGET
     
   float3 color = mat.diffuseColor * (ambientColor + light0) + light1;
   
-  return color;
+  return float4(color, 1.0);
 }

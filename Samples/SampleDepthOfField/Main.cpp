@@ -35,6 +35,8 @@ public:
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
+		_renderView->sceneRenderingConfig.bSSR = false;
+
 		//_camera = std::static_pointer_cast<PhysicalCamera>(_renderView->GetCamera());
 
 		//Init Scene
@@ -45,10 +47,10 @@ public:
 		pointLight->GetLight<PointLightComponent>()->SetColor(1.0f);
 		pointLight->GetLight<PointLightComponent>()->SetIntensity(100.0f);
 
-		auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
+		/*auto texAsset = Asset::FindAndInit<TextureAsset>("Textures/uffizi_cross.dds");
 		auto reflectionMap = std::make_shared<ReflectionMap>();
 		reflectionMap->SetEnvironmentMap(texAsset->GetTexture());
-		reflectionMap->InitPreComputedData();
+		reflectionMap->InitPreComputedData();*/
 
 		/*auto backgroundRender = std::static_pointer_cast<SkyBox>(Global::GetRenderEngine()->GetRenderFramework()->GetSceneRenderer()->GetBackgroundRender());
 		auto bkTex = backgroundRender->GetTexture();
@@ -102,7 +104,7 @@ public:
 
 			for (auto & obj : actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 			{
-				obj->SetReflectionMap(reflectionMap);
+				//obj->SetReflectionMap(reflectionMap);
 				obj->SetMaterial(mat);
 			}
 		}
@@ -118,6 +120,12 @@ public:
 		_dof->SetFocalAreaLength(_focalAreaLength);
 		_dof->SetNearAreaLength(_nearAreaLength);
 		_dof->SetFarAreaLength(_farAreaLength);
+
+		/*auto capture = std::make_shared<ReflectionMapCapture>();
+		capture->SetPos(0.0f);
+		capture->SetRadius(40.0f);
+		scene->AddReflectionMapCapture(capture);
+		scene->InitReflectionMaps();*/
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "DepthOfField");

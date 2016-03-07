@@ -61,7 +61,7 @@ namespace ToyGE
 
 		AABBox GetBoundsAABB() const override;
 
-		void SetReflectionMap(const Ptr<ReflectionMap> & reflectionMap)
+		/*void SetReflectionMap(const Ptr<ReflectionMap> & reflectionMap)
 		{
 			_reflectionMap = reflectionMap;
 		}
@@ -79,7 +79,7 @@ namespace ToyGE
 		const Ptr<Texture> & GetEnvMap() const
 		{
 			return _envMap;
-		}
+		}*/
 
 		void SetCastShadows(bool bCastShadows)
 		{
@@ -109,8 +109,8 @@ namespace ToyGE
 		Ptr<Material> _material;
 		AABBox _localAABB;
 		AABBox _boundsAABB;
-		Ptr<ReflectionMap> _reflectionMap;
-		Ptr<Texture> _envMap;
+		/*Ptr<ReflectionMap> _reflectionMap;
+		Ptr<Texture> _envMap;*/
 		bool _bCastShadows;
 		bool _bCastCaustics;
 

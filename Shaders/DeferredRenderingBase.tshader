@@ -1,8 +1,6 @@
 // #define MVO_VIEW_POSITION 1
 
 #ifdef GEN_VELOCITY
-#define MVO_VIEW_POSITION 1
-#define MVO_PRE_VIEW_POSITION 1
 #define MVO_PRE_CLIP_POSITION 1
 #define MVO_CLIP_POSITION 1
 #endif

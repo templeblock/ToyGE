@@ -49,7 +49,7 @@ namespace ToyGE
 		for (int32_t i = 0; i < Global::GetScene()->NumViews(); ++i)
 		{
 			auto view = Global::GetScene()->GetView(i);
-			view->PreRender(GetSceneRenderer()->bTAA);
+			view->PreRender();
 			for (auto & light : view->GetViewRenderContext()->lights)
 			{
 				if (light->IsCastShadow() && light->GetShadowTechnique())

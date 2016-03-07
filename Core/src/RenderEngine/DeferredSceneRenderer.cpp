@@ -16,6 +16,7 @@
 #include "ToyGE\RenderEngine\RenderComponent.h"
 #include "ToyGE\RenderEngine\PostProcessing.h"
 #include "ToyGE\RenderEngine\Effects\Effects.h"
+#include "ToyGE\RenderEngine\Effects\EnvironmentReflectionRenderer.h"
 
 namespace ToyGE
 {
@@ -26,6 +27,7 @@ namespace ToyGE
 		Ptr<Material> _mat;
 		Ptr<DepthStencilState> _dss;
 		bool bTAA;
+		bool bGenVelocity;
 
 		virtual void BindView(const Ptr<class RenderView> & view) override
 		{
@@ -44,7 +46,7 @@ namespace ToyGE
 
 			std::map<String, String> macros;
 
-			if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap || bTAA)
+			if (bGenVelocity || bTAA)
 				macros["GEN_VELOCITY"] = "";
 
 			if (_mat)
@@ -79,12 +81,12 @@ namespace ToyGE
 			vs->Flush();
 			ps->Flush();
 
-			int32_t maskID = 1;
+			/*int32_t maskID = 1;
 			if (renderComponent->GetReflectionMap())
 			{
 				maskID = renderComponent->GetReflectionMap()->maskID;
 				ToyGE_ASSERT(maskID > 1);
-			}
+			}*/
 			Global::GetRenderEngine()->GetRenderContext()->SetDepthStencilState(
 				DepthStencilStateTemplate<
 				true,
@@ -94,7 +96,7 @@ namespace ToyGE
 				STENCIL_OP_KEEP,
 				STENCIL_OP_KEEP,
 				STENCIL_OP_REPLACE,
-				COMPARISON_ALWAYS>::Get(), (uint32_t)maskID);
+				COMPARISON_ALWAYS>::Get(), 1);
 
 			meshElement->Draw();
 
@@ -102,35 +104,23 @@ namespace ToyGE
 		}
 	};
 
-	static float CatmullRom(float x)
-	{
-		float ax = abs(x);
-		if (ax > 1.0f)
-			return ((-0.5f * ax + 2.5f) * ax - 4.0f) *ax + 2.0f;
-		else
-			return (1.5f * ax - 2.5f) * ax*ax + 1.0f;
-	}
-
-	
-
-
 	void DeferredSceneRenderer::Render(const Ptr<RenderView> & view)
 	{
 		InitBuffers(view);
 
 		Global::GetRenderEngine()->GetRenderContext()->SetViewport(view->GetViewport());
 
-		// Set reflection map mask id
-		int32_t index = 2; // start from 2, stencil 0 is background and 1 is objs rendered without reflection map
-		for (auto & drawBatch : view->GetViewRenderContext()->primitiveDrawList->drawBatches)
-		{
-			for (auto & renderComponent : drawBatch.second)
-			{
-				auto reflectionMap = renderComponent->GetReflectionMap();
-				if (reflectionMap && reflectionMap->maskID == -1)
-					reflectionMap->maskID = index++;
-			}
-		}
+		//// Set reflection map mask id
+		//int32_t index = 2; // start from 2, stencil 0 is background and 1 is objs rendered without reflection map
+		//for (auto & drawBatch : view->GetViewRenderContext()->primitiveDrawList->drawBatches)
+		//{
+		//	for (auto & renderComponent : drawBatch.second)
+		//	{
+		//		auto reflectionMap = renderComponent->GetReflectionMap();
+		//		if (reflectionMap && reflectionMap->maskID == -1)
+		//			reflectionMap->maskID = index++;
+		//	}
+		//}
 
 		// Base
 		RenderBase(view);
@@ -151,13 +141,14 @@ namespace ToyGE
 		// Shading
 		RenderShading(view);
 
-		// Background
+		// Render Ambient
+		if(view->sceneRenderingConfig.bRenderAmbient)
 		{
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
 
-			if (!bRenderingAtmosphere)
-			{
+			/*if (!view->sceneRenderingConfig.bRenderingAtmosphere)
+			{*/
 				if (!_skyBox)
 					_skyBox = std::make_shared<SkyBox>();
 				_skyBox->SetTexture(Global::GetScene()->GetAmbientTexture());
@@ -165,13 +156,13 @@ namespace ToyGE
 					renderResult->GetRenderTargetView(0, 0, 1),
 					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT),
 					view);
-			}
+			/*}
 			else
 			{
 				if (!_atmosphereRendering)
 					_atmosphereRendering = std::make_shared<AtmosphereRendering>();
 				_atmosphereRendering->Render(view);
-			}
+			}*/
 		}
 
 		// Translucent
@@ -180,7 +171,7 @@ namespace ToyGE
 
 			if (!_translucentRendering)
 				_translucentRendering = std::make_shared<TranslucentRendering>();
-			_translucentRendering->bOIT = bOIT;
+			_translucentRendering->bOIT = view->sceneRenderingConfig.bOIT;
 			_translucentRendering->Render(view, renderResult->GetRenderTargetView(0, 0, 1));
 		}
 
@@ -201,6 +192,61 @@ namespace ToyGE
 			_volumetricLight->Render(view);
 		}
 
+		// LPV
+		{
+			if (view->sceneRenderingConfig.bLPV)
+			{
+				if (!_lpv)
+					_lpv = std::make_shared<LPV>();
+				_lpv->Render(view);
+			}
+		}
+
+		// SSR
+		{
+			if (view->sceneRenderingConfig.bSSR)
+			{
+				if (!_ssrRenderer)
+					_ssrRenderer = std::make_shared<SSR>();
+				_ssrRenderer->SetSSRMaxRoughness(view->sceneRenderingConfig.ssrMaxRoughness);
+				_ssrRenderer->SetSSRIntensity(view->sceneRenderingConfig.ssrIntensity);
+				_ssrRenderer->Render(view);
+			}
+		}
+
+		// Render Env Reflection
+		if(view->sceneRenderingConfig.bRenderEnvReflection)
+		{
+			if (!_envReflectionRenderer)
+				_envReflectionRenderer = std::make_shared<EnvironmentReflectionRenderer>();
+			_envReflectionRenderer->Render(view);
+		}
+		else
+		{
+			auto ssrResult = view->GetViewRenderContext()->GetSharedTexture("SSR");
+			if (ssrResult)
+			{
+				auto sceneColor = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+				auto sceneDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+
+				auto rc = Global::GetRenderEngine()->GetRenderContext();
+
+				rc->SetBlendState(
+					BlendStateTemplate<false, false, true, BLEND_PARAM_ONE, BLEND_PARAM_ONE, BLEND_OP_ADD>::Get());
+				rc->SetDepthStencil(sceneDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+
+				Transform(
+					ssrResult->GetShaderResourceView(),
+					sceneColor->GetRenderTargetView(0, 0, 1),
+					{ COLOR_WRITE_R, COLOR_WRITE_G ,COLOR_WRITE_B ,COLOR_WRITE_A }, 0.0f, 0.0f, nullptr,
+					sceneDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+
+				rc->SetBlendState(nullptr);
+				rc->SetDepthStencilState(nullptr);
+
+			}
+		}
+
 		// Half scene
 		{
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
@@ -214,16 +260,6 @@ namespace ToyGE
 			view->GetViewRenderContext()->SetSharedResource("HalfScene", halfSceneRef);
 		}
 
-		// LPV
-		{
-			if (bLPV)
-			{
-				if (!_lpv)
-					_lpv = std::make_shared<LPV>();
-				_lpv->Render(view);
-			}
-		}
-
 		// Eye adaption
 		{
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
@@ -234,18 +270,6 @@ namespace ToyGE
 			eyeAdaption->Render(view);
 		}
 
-		// SSR
-		{
-			if (bSSR)
-			{
-				if (!_ssrRenderer)
-					_ssrRenderer = std::make_shared<SSR>();
-				_ssrRenderer->SetSSRMaxRoughness(ssrMaxRoughness);
-				_ssrRenderer->SetSSRIntensity(ssrIntensity);
-				_ssrRenderer->Render(view);
-			}
-		}
-
 		// PostProcessing PreTAASetup
 		{
 			if (view->GetPostProcessing())
@@ -254,13 +278,14 @@ namespace ToyGE
 
 		// TAA
 		{
-			auto adaptedExposureScale = view->GetViewRenderContext()->GetSharedTexture("AdaptedExposureScale");
-			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
-			auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
-			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
 
-			if (bTAA)
+			if (view->sceneRenderingConfig.bTAA)
 			{
+				auto adaptedExposureScale = view->GetViewRenderContext()->GetSharedTexture("AdaptedExposureScale");
+				auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+				auto sceneLinearClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneLinearClipDepth");
+				auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+
 				auto newResultRef = TexturePool::Instance().FindFree({ TEXTURE_2D, renderResult->GetDesc() });
 				auto newResult = newResultRef->Get()->Cast<Texture>();
 
@@ -303,8 +328,8 @@ namespace ToyGE
 				ps->SetSRV("sceneTex", renderResult->GetShaderResourceView());
 				ps->SetSRV("velocityTex", velocityTex->GetShaderResourceView());
 				ps->SetSRV("adaptedExposureScale", adaptedExposureScale->GetShaderResourceView());
-				if (_preFrameResult)
-					ps->SetSRV("historyTex", _preFrameResult->Get()->Cast<Texture>()->GetShaderResourceView());
+				if (view->preFrameResult)
+					ps->SetSRV("historyTex", view->preFrameResult->Get()->Cast<Texture>()->GetShaderResourceView());
 				else
 					ps->SetSRV("historyTex", nullptr);
 				ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
@@ -314,13 +339,13 @@ namespace ToyGE
 
 				DrawQuad({ newResult->GetRenderTargetView(0, 0, 1) });
 
-				_preFrameResult = newResultRef;
+				view->preFrameResult = newResultRef;
 				view->GetViewRenderContext()->SetSharedResource("RenderResult", newResultRef);
 
 			}
 			else
 			{
-				_preFrameResult = nullptr;
+				view->preFrameResult = nullptr;
 			}
 		}
 
@@ -372,7 +397,7 @@ namespace ToyGE
 		view->GetViewRenderContext()->SetSharedResource("Lighting1", lighting1);
 		view->GetViewRenderContext()->SetSharedResource("Shading", shading);
 
-		if (bGenVelocityMap || bTAA)
+		if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 		{
 			desc.format = RENDER_FORMAT_R16G16_FLOAT;
 			auto velocity = TexturePool::Instance().FindFree({ TEXTURE_2D, desc });
@@ -394,7 +419,7 @@ namespace ToyGE
 
 		rc->SetViewport(view->GetViewport());
 
-		if (bGenVelocityMap || bTAA)
+		if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 		{
 			rc->SetRenderTargets(
 			{
@@ -435,7 +460,8 @@ namespace ToyGE
 		rc->SetBlendState(nullptr);
 
 		auto drawingPolicy = std::make_shared<DeferredMeshDrawingPolicy>();
-		drawingPolicy->bTAA = bTAA;
+		drawingPolicy->bTAA = view->sceneRenderingConfig.bTAA;
+		drawingPolicy->bGenVelocity = view->sceneRenderingConfig.bGenVelocityMap;
 		view->GetViewRenderContext()->primitiveDrawList->Draw(drawingPolicy, view);
 
 		rc->SetDepthStencilState(nullptr);
@@ -501,7 +527,7 @@ namespace ToyGE
 		}
 
 		// IBL
-		std::set<Ptr<ReflectionMap>> reflectionMaps;
+		/*std::set<Ptr<ReflectionMap>> reflectionMaps;
 		for (auto & drawBatch : view->GetViewRenderContext()->primitiveDrawList->drawBatches)
 		{
 			for (auto & renderComponent : drawBatch.second)
@@ -546,7 +572,7 @@ namespace ToyGE
 				0.0f, 0.0f, 0.0f, 0.0f,
 				0.0f, 0.0f, 1.0f, 1.0f,
 				sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
-		}
+		}*/
 
 		rc->SetBlendState(nullptr);
 		rc->SetDepthStencilState(nullptr);

@@ -11,31 +11,33 @@ namespace ToyGE
 	{
 		auto rc = Global::GetRenderEngine()->GetRenderContext();
 
-		if (!_prevAdaptedExposureScaleRef || !_adaptedExposureScaleRef)
+		TextureDesc texDesc;
+		texDesc.width = texDesc.height = texDesc.depth = 1;
+		texDesc.mipLevels = texDesc.arraySize = 1;
+		texDesc.format = RENDER_FORMAT_R32_FLOAT;
+		texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
+		texDesc.cpuAccess = 0;
+		texDesc.sampleCount = 1;
+		texDesc.sampleQuality = 0;
+		texDesc.bCube = false;
+		auto adaptedExposureScaleRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		if (!view->preAdaptedExposureScale)
 		{
-			TextureDesc texDesc;
-			texDesc.width = texDesc.height = texDesc.depth = 1;
-			texDesc.mipLevels = texDesc.arraySize = 1;
-			texDesc.format = RENDER_FORMAT_R32_FLOAT;
-			texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET;
-			texDesc.cpuAccess = 0;
-			texDesc.sampleCount = 1;
-			texDesc.sampleQuality = 0;
-			texDesc.bCube = false;
-
-			_prevAdaptedExposureScaleRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
-			_adaptedExposureScaleRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
-
-			rc->ClearRenderTarget(_prevAdaptedExposureScaleRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
-			rc->ClearRenderTarget(_adaptedExposureScaleRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
+			view->preAdaptedExposureScale = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			rc->ClearRenderTarget(view->preAdaptedExposureScale->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
 		}
 
 		auto halfSceneTex = view->GetViewRenderContext()->GetSharedTexture("HalfScene");
 
 		auto histogramRef = BuildHistogram(halfSceneTex);
-		ComputeEyeAdaption(histogramRef->Get()->Cast<Texture>());
+		ComputeEyeAdaption(
+			histogramRef->Get()->Cast<Texture>(),
+			view->preAdaptedExposureScale->Get()->Cast<Texture>(),
+			adaptedExposureScaleRef->Get()->Cast<Texture>());
 
-		view->GetViewRenderContext()->SetSharedResource("AdaptedExposureScale", _adaptedExposureScaleRef);
+		view->GetViewRenderContext()->SetSharedResource("AdaptedExposureScale", adaptedExposureScaleRef);
+
+		view->preAdaptedExposureScale.swap(adaptedExposureScaleRef);
 	}
 
 	PooledTextureRef EyeAdaption::BuildHistogram(const Ptr<Texture> & scene)
@@ -97,9 +99,12 @@ namespace ToyGE
 		return histogramMergeRef;
 	}
 
-	void EyeAdaption::ComputeEyeAdaption(const Ptr<Texture> & histogram)
+	void EyeAdaption::ComputeEyeAdaption(
+		const Ptr<Texture> & histogram,
+		const Ptr<Texture> & prevAdaptedExposureScale,
+		const Ptr<Texture> & adaptedExposureScale)
 	{
-		_prevAdaptedExposureScaleRef.swap(_adaptedExposureScaleRef);
+		//_prevAdaptedExposureScaleRef.swap(_adaptedExposureScaleRef);
 
 		float histogramIllumScale = 1.0f / (histogramMax - histogramMin);
 		float histogramIllumOffset = -histogramMin * histogramIllumScale;
@@ -114,9 +119,9 @@ namespace ToyGE
 		ps->SetScalar("eyeAdaptionMin", 0.04f);
 		ps->SetScalar("eyeAdaptionMax", 2.2f);
 		ps->SetSRV("histogram", histogram->GetShaderResourceView());
-		ps->SetSRV("prevAdaptedExposureScale", _prevAdaptedExposureScaleRef->Get()->Cast<Texture>()->GetShaderResourceView());
+		ps->SetSRV("prevAdaptedExposureScale", prevAdaptedExposureScale->GetShaderResourceView());
 		ps->Flush();
 
-		DrawQuad({ _adaptedExposureScaleRef->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1) });
+		DrawQuad({ adaptedExposureScale->GetRenderTargetView(0, 0, 1) });
 	}
 }

@@ -4,25 +4,50 @@
 #include "Common.tshader"
 
 Texture2D iblLUT;
-TextureCube iblPreFilteredEnvMap;
+// TextureCube iblPreFilteredEnvMap;
 
 SamplerState iblSampler;
 
 float4 iblLUTSize;
-float numEnvMapMipLevels;
+// float numEnvMapMipLevels;
 
-float3 ComputeIBL(float3 reflectDir, float roughness, float NoV, float3 specularColor, float3 diffuseColor)
+// float3 ComputeIBL(
+//     TextureCubeArray envCubeMap,
+//     uint   arrayIndex,
+//     float  roughness, 
+//     float3 reflectDir,  
+//     float  n_dot_v, 
+//     float3 diffuseColor, 
+//     float3 specularColor
+//     )
+// {
+//     float2 lutCoord = lerp(iblLUTSize.zw, 1.0 - iblLUTSize.zw, float2(n_dot_v, roughness)); 
+//     float2 lutSample = iblLUT.SampleLevel(iblSampler, lutCoord, 0).xy;
+//     
+//     float mipLevel = lerp(0.0f, numEnvMapMipLevels - 1.0f, roughness);
+//     float3 specularIBL = iblPreFilteredEnvMap.SampleLevel(iblSampler, reflectDir, mipLevel).xyz * (specularColor * lutSample.x + lutSample.y);
+//     
+//     // float2 lutSample2 = LUT.SampleLevel(iblSampler, float2(NoV, 1.0f), 0).xy;
+//     float3 diffuseIBL = iblPreFilteredEnvMap.SampleLevel(iblSampler, reflectDir, numEnvMapMipLevels - 2).xyz * diffuseColor / PI / PI;
+//     
+//     return  specularIBL + diffuseIBL;
+// }
+
+float2 GetLUTSample(float n_dot_v, float roughness)
 {
-    float2 lutCoord = lerp(iblLUTSize.zw, 1.0 - iblLUTSize.zw, float2(NoV, roughness)); 
+    float2 lutCoord = lerp(iblLUTSize.zw, 1.0 - iblLUTSize.zw, float2(n_dot_v, roughness)); 
     float2 lutSample = iblLUT.SampleLevel(iblSampler, lutCoord, 0).xy;
     
-    float mipLevel = lerp(0.0f, numEnvMapMipLevels - 1.0f, roughness);
-    float3 specularIBL = iblPreFilteredEnvMap.SampleLevel(iblSampler, reflectDir, mipLevel).xyz * (specularColor * lutSample.x + lutSample.y);
-    
-    // float2 lutSample2 = LUT.SampleLevel(iblSampler, float2(NoV, 1.0f), 0).xy;
-    float3 diffuseIBL = iblPreFilteredEnvMap.SampleLevel(iblSampler, reflectDir, numEnvMapMipLevels - 2).xyz * diffuseColor / PI / PI;
-    
-    return  specularIBL + diffuseIBL;
+    return lutSample;
+}
+
+float3 ComputeIBL(
+    float3 envColor,
+    float2 lutSample,
+    float3 specularColor
+)
+{
+    return envColor * (specularColor * lutSample.x + saturate( 50.0 * specularColor.g ) * lutSample.y);
 }
 
 #endif

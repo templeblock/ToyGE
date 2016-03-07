@@ -76,6 +76,8 @@ namespace ToyGE
 			ps->Flush();
 
 			meshElement->DrawDepth(bWithOpacityMask);
+
+			renderComponent->StoreWorldTransformCache();
 		}
 	};
 
@@ -231,7 +233,7 @@ namespace ToyGE
 
 			if (obj.mat->IsRefraction())
 				macros["TRASLUCENT_REFRACTION"] = "";
-			if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+			if (obj.mat->IsRefraction() && (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA) )
 				macros["GEN_VELOCITY"] = "";
 
 			obj.mat->BindMacros(macros);
@@ -261,7 +263,8 @@ namespace ToyGE
 
 				ps->SetSRV("sceneTex", tmpSceneTex->GetShaderResourceView());
 				ps->SetSRV("depthTex", tmpDepthTex->GetShaderResourceView(0, 0, 0, 0, false, RENDER_FORMAT_R24_UNORM_X8_TYPELESS));
-				ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+				ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+				ps->SetSampler("bilinearSampler", SamplerTemplate<>::Get());
 
 				rc->SetBlendState(nullptr);
 			}
@@ -280,16 +283,16 @@ namespace ToyGE
 
 			if (obj.mat->IsRefraction())
 			{
-				if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+				if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 					rc->SetRenderTargets({ target, velocity->GetRenderTargetView(0, 0, 1) });
 				else
 					rc->SetRenderTargets({ target });
 			}
 			else
 			{
-				if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+				/*if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 					rc->SetRenderTargets({ target, nullptr, velocity->GetRenderTargetView(0, 0, 1) });
-				else
+				else*/
 					rc->SetRenderTargets({ target });
 			}
 
@@ -301,7 +304,33 @@ namespace ToyGE
 			rc->SetDepthStencilState(nullptr);
 			rc->SetBlendState(nullptr);
 		}
+
+		if (!obj.mat->IsRefraction() && (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA))
+		{
+			std::map<String, String> macros;
+			macros["GEN_VELOCITY"] = "";
+			obj.renderComponent->GetMeshElement()->BindMacros(macros);
+
+			auto vs = Shader::FindOrCreate<ForwardTranslucentRenderingVS>(macros);
+			auto ps = Shader::FindOrCreate<ForwardTranslucentRenderingVelocityPS>(macros);
+
+			obj.renderComponent->BindShaderParams(vs);
+			obj.renderComponent->BindShaderParams(ps);
+
+			view->BindShaderParams(vs);
+			view->BindShaderParams(ps);
+
+			vs->Flush();
+			ps->Flush();
+
+			rc->SetViewport(GetTextureQuadViewport(targetTex));
+
+			rc->SetRenderTargets({ velocity->GetRenderTargetView(0, 0, 1) });
+
+			obj.renderComponent->GetMeshElement()->Draw();
+		}
 		
+		obj.renderComponent->StoreWorldTransformCache();
 	}
 
 	void TranslucentRendering::ForwardRender(
@@ -502,7 +531,7 @@ namespace ToyGE
 
 				std::map<String, String> macros;
 
-				if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+				if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 					macros["GEN_VELOCITY"] = "";
 
 				if(light)
@@ -550,7 +579,7 @@ namespace ToyGE
 
 				rc->SetViewport(GetTextureQuadViewport(targetTex));
 
-				if (Global::GetRenderEngine()->GetSceneRenderer()->bGenVelocityMap)
+				if (view->sceneRenderingConfig.bGenVelocityMap || view->sceneRenderingConfig.bTAA)
 					rc->SetRenderTargets({ velocity->GetRenderTargetView(0, 0, 1) });
 				else
 					rc->SetRenderTargets({});

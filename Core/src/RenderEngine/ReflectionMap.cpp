@@ -40,7 +40,7 @@ namespace ToyGE
 
 	ReflectionMap::ReflectionMap()
 	{
-		_preComputedMapSize = 512;
+		_preComputedMapSize = 128;
 	}
 
 	void ReflectionMap::InitPreComputedData()

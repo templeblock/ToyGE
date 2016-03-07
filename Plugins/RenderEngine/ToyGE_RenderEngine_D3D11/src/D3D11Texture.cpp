@@ -131,7 +131,7 @@ namespace ToyGE
 		int32_t dstMipLevel, int32_t dstArrayIndex, int32_t xOffset, int32_t yOffset, int32_t zOffset,
 		int32_t srcMipLevel, int32_t srcArrayIndex, const std::shared_ptr<Box> & srcBox) const
 	{
-		if (dst->GetDesc().format != _desc.format || dst->GetDesc().bCube != _desc.bCube || dst->GetType() != _type)
+		if (dst->GetDesc().format != _desc.format)
 			return false;
 
 		auto & dstSize = dst->GetMipSize(dstMipLevel);

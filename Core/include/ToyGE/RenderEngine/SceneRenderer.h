@@ -10,38 +10,33 @@ namespace ToyGE
 {
 	class RenderView;
 
-	class TOYGE_CORE_API SceneRenderer
+	class SceneRenderingConfig
 	{
 	public:
-		static const int32_t temporalAANumSamples = 8;
-
 		bool bGenVelocityMap = false;
-		bool bRenderingAtmosphere = false;
 		bool bOIT = true;
 		bool bTAA = true;
 		bool bLPV = false;
+		bool bRenderEnvReflection = true;
+		bool bReflectAmbientMap = true;
+		bool bRenderAmbient = true;
 
 		bool bSSR = true;
 		float ssrMaxRoughness = 0.8f;
 		float ssrIntensity = 1.0f;
+	};
 
+	class TOYGE_CORE_API SceneRenderer
+	{
+	public:
 		SceneRenderer();
 
 		virtual ~SceneRenderer() = default;
 
-		void SetSunDirection(const float3 & sunDirection);
-
-		void SetSunRadiance(const float3 & sunRadiance);
-
-		void SetSunRenderRadius(float sunRenderRadius);
-
-		void SetSunLight(const Ptr<class DirectionalLightComponent> & light);
-		Ptr<class DirectionalLightComponent> GetSunLight() const
+		Ptr<class AtmosphereRendering> GetAtmosphereRenderer() const
 		{
-			return _sunLight;
+			return _atmosphereRendering;
 		}
-
-		void UpdateSunLight();
 
 		virtual void Render(const Ptr<RenderView> & view) = 0;
 
@@ -56,11 +51,6 @@ namespace ToyGE
 		}
 
 	protected:
-		float3 _sunDirection;
-		float3 _sunRadiance;
-		float _sunRenderRadius;
-		Ptr<class DirectionalLightComponent> _sunLight;
-
 		Ptr<class AtmosphereRendering> _atmosphereRendering;
 		Ptr<class LPV> _lpv;
 		Ptr<class VolumetricLight> _volumetricLight;

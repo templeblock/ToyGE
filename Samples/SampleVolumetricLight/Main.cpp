@@ -27,7 +27,7 @@ public:
 	{
 		SampleCommon::Init();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bTAA = true;
+		_renderView->sceneRenderingConfig.bTAA = true;
 
 		auto pp = std::make_shared<PostProcessing>();
 		/*_vl = std::make_shared<VolumetricLight>();
@@ -88,6 +88,12 @@ public:
 
 		for (auto obj : objs)
 			obj->SetMaterial(mat);*/
+
+		auto capture = std::make_shared<ReflectionMapCapture>();
+		capture->SetPos(float3(0.0f, 6.0f, 0.0));
+		capture->SetRadius(40.0f);
+		scene->AddReflectionMapCapture(capture);
+		scene->InitReflectionMaps();
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "VolumetricLight");

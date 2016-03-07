@@ -3,6 +3,7 @@
 #include "ToyGE\RenderEngine\LightComponent.h"
 #include "ToyGE\RenderEngine\Camera.h"
 #include "ToyGE\RenderEngine\ShadowTechnique.h"
+#include "ToyGE\RenderEngine\Scene.h"
 
 namespace ToyGE
 {
@@ -45,23 +46,27 @@ namespace ToyGE
 		float2 targetSize = view->GetViewParams().viewSize;
 
 		auto & cameraPos = view->GetCamera()->GetPos();
-		float sunDist = 1e+10;
+		float sunDist = 1e+2;
 		auto sunPosW = cameraPos - _sunDirection * sunDist;
-		/*float3(
-			cameraPos.x - _sunDirection.x * sunDist,
-			cameraPos.y - _sunDirection.y * sunDist,
-			cameraPos.z - _sunDirection.z * sunDist);*/
-		/*auto sunPosWXM = XMLoadFloat3(&sunPosW);
-		auto viewXM = XMLoadFloat4x4(&view->GetCamera()->GetViewMatrix());*/
 		auto sunPosV= transform_coord(sunPosW, view->GetCamera()->GetViewMatrix());
-		//sunPosVXM = XMVectorSetW(sunPosVXM, 1.0f);
-		//auto projXM = XMLoadFloat4x4(&view->GetCamera()->GetProjMatrix());
-		auto sunPosH = transform_coord(sunPosV, view->GetCamera()->GetProjMatrix());
-		/*float4 sunPosH;
-		XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&sunPosH), sunPosHXM);*/
-		/*sunPosH.x() /= sunPosH.w();
-		sunPosH.y() /= sunPosH.w();
-		sunPosH.z() /= sunPosH.w();*/
+		float4 sunPosH = 0.0f;
+		if (sunPosV.z() == 0.0f)
+		{
+			sunPosH = sunPosV;
+			float scale = 2.0f / max(abs(sunPosH.x()), abs(sunPosH.y()));
+			sunPosH.x() *= scale;
+			sunPosH.y() *= scale;
+		}
+		else
+		{
+			sunPosH = transform_coord(sunPosV, view->GetCamera()->GetProjMatrix());
+			/*if (abs(sunPosH.x()) > 1.0f || abs(sunPosH.y()) > 1.0f)
+			{
+				float scale = 2.0f / max(abs(sunPosH.x()), abs(sunPosH.y()));
+				sunPosH.x() *= scale;
+				sunPosH.y() *= scale;
+			}*/
+		}
 
 		if (bEpipolarSampling)
 		{
@@ -138,12 +143,22 @@ namespace ToyGE
 			// Render sun
 			if (sunPosV.z() > 0.0f)
 			{
-				//sunPosH.x() = sunPosH.y() = -100.0f;
-				RenderSun(
-					float2(sunPosH.x(), sunPosH.y()),
-					view,
-					targetTex->GetRenderTargetView(0, 0, 1),
-					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+				if (sceneClipDepth)
+				{
+					RenderSun(
+						float2(sunPosH.x(), sunPosH.y()),
+						view,
+						targetTex->GetRenderTargetView(0, 0, 1),
+						sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+				}
+				else
+				{
+					RenderSun(
+						float2(sunPosH.x(), sunPosH.y()),
+						view,
+						targetTex->GetRenderTargetView(0, 0, 1),
+						nullptr);
+				}
 			}
 
 			view->GetViewRenderContext()->SetSharedResource("RenderResult", targetTexRef);
@@ -168,14 +183,134 @@ namespace ToyGE
 			// Render sun
 			if (sunPosV.z() > 0.0f)
 			{
-				RenderSun(
-					float2(sunPosH.x(), sunPosH.y()),
-					view,
-					sceneTex->GetRenderTargetView(0, 0, 1),
-					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+				if (sceneClipDepth)
+				{
+					RenderSun(
+						float2(sunPosH.x(), sunPosH.y()),
+						view,
+						sceneTex->GetRenderTargetView(0, 0, 1),
+						sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+				}
+				else
+				{
+					RenderSun(
+						float2(sunPosH.x(), sunPosH.y()),
+						view,
+						sceneTex->GetRenderTargetView(0, 0, 1),
+						nullptr);
+				}
 			}
 		}
 		
+	}
+
+	void AtmosphereRendering::RenderCubeMap(const Ptr<Texture> & target)
+	{
+		bool bEpipolarSave = bEpipolarSampling;
+		bEpipolarSampling = false;
+
+		static std::vector<float3> viewDir =
+		{
+			float3(1.0f, 0.0f, 0.0f),
+			float3(-1.0f, 0.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, -1.0f, 0.0f),
+			float3(0.0f, 0.0f, 1.0f),
+			float3(0.0f, 0.0f, -1.0f)
+		};
+		static std::vector<float3> upDir =
+		{
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 0.0f, -1.0f),
+			float3(0.0f, 0.0f, 1.0f),
+			float3(0.0f, 1.0f, 0.0f),
+			float3(0.0f, 1.0f, 0.0f)
+		};
+
+		RenderViewport vp;
+		vp.topLeftX = 0.0f;
+		vp.topLeftY = 0.0f;
+		vp.width = (float)target->GetDesc().width;
+		vp.height = (float)target->GetDesc().height;
+		vp.minDepth = 0.0f;
+		vp.maxDepth = 1.0f;
+
+		auto view = std::make_shared<RenderView>();
+		view->SetViewport(vp);
+
+		auto camera = std::make_shared<PerspectiveCamera>(PI_DIV2, 1.0f, 0.1f, 100.0f);
+		view->SetCamera(camera);
+
+		for (int i = 0; i < 6; ++i)
+		{
+			auto texDesc = target->GetDesc();
+			texDesc.bCube = false;
+			texDesc.arraySize = 1;
+			texDesc.mipLevels = 1;
+			auto tmpTargetRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+			auto tmpTarget = tmpTargetRef->Get()->Cast<Texture>();
+
+			view->GetViewRenderContext()->SetSharedResource("RenderResult", tmpTargetRef);
+			view->SetRenderTarget(tmpTarget->GetRenderTargetView(0, 0, 1));
+
+			Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(tmpTarget->GetRenderTargetView(0, 0, 1), 0.0f);
+
+			camera->LookTo(0.0f, viewDir[i], upDir[i]);
+			view->UpdateParamsBuffer();
+
+			Render(view);
+
+			ToyGE_ASSERT( tmpTarget->CopyTo(target, 0, i, 0, 0, 0, 0, 0) );
+		}
+		target->GenerateMips();
+
+		bEpipolarSampling = bEpipolarSave;
+	}
+
+	void AtmosphereRendering::UpdateSunLight(const Ptr<class DirectionalLightComponent> & light)
+	{
+		auto radiance = ComputeSunRadianceAt(_sunDirection, _sunRadiance, 1.0f);
+		auto maxV = std::max<float>(std::max<float>(radiance.x(), radiance.y()), radiance.z());
+		if (maxV > 1e-4f)
+		{
+			float3 color = radiance / maxV;
+			light->SetColor(color);
+			light->SetIntensity(maxV);
+		}
+		else
+		{
+			light->SetColor(0.0f);
+			light->SetIntensity(0.0f);
+		}
+		light->SetDirection(_sunDirection);
+	}
+
+	void AtmosphereRendering::UpdateAmbientMap(const Ptr<class Scene> & scene)
+	{
+		static Ptr<Texture> ambientMap;
+		if (!ambientMap)
+		{
+			// Init target texture
+			TextureDesc texDesc;
+			texDesc.width = texDesc.height = 512;
+			texDesc.depth = 1;
+			texDesc.arraySize = 1;
+			texDesc.bCube = true;
+			texDesc.bindFlag = TEXTURE_BIND_SHADER_RESOURCE | TEXTURE_BIND_RENDER_TARGET | TEXTURE_BIND_GENERATE_MIPS;
+			texDesc.cpuAccess = 0;
+			texDesc.format = RENDER_FORMAT_R16G16B16A16_FLOAT;
+			texDesc.mipLevels = 0;
+			texDesc.sampleCount = 1;
+			texDesc.sampleQuality = 0;
+
+			ambientMap = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+			ambientMap->SetDesc(texDesc);
+			ambientMap->Init();
+		}
+
+		RenderCubeMap(ambientMap);
+		scene->SetAmbientTexture(ambientMap);
 	}
 
 	float3 AtmosphereRendering::ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height)
@@ -752,13 +887,16 @@ namespace ToyGE
 		std::map<String, String> macros;
 		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
 		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+		if(!sceneLinearDepthTex)
+			macros["NO_DEPTH"] = "";
 
 		auto ps = Shader::FindOrCreate<InitSampleCoordsPS>(macros);
 
 		ps->SetScalar("texSize", viewSize);
 
 		ps->SetSRV("sampleLinesTex", sampleLinesTex->GetShaderResourceView());
-		ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
+		if(sceneLinearDepthTex)
+			ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
 
 		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
@@ -897,12 +1035,16 @@ namespace ToyGE
 
 		auto lightAccumTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 		auto attenuationTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(lightAccumTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(attenuationTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
 
 		std::map<String, String> macros;
 		if (bEpipolarSampling)
 			macros["EPIPOLAR_SAMPLING"] = "";
 		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
 		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+		if (!depthTex)
+			macros["NO_DEPTH"] = "";
 
 		auto ps = Shader::FindOrCreate<RayMarchingPS>(macros);
 
@@ -931,7 +1073,8 @@ namespace ToyGE
 		}
 		else
 		{
-			ps->SetSRV("sceneLinearDepthTex", depthTex->GetShaderResourceView());
+			if(depthTex)
+				ps->SetSRV("sceneLinearDepthTex", depthTex->GetShaderResourceView());
 		}
 		ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
 		ps->SetSRV("inScatteringLUTR", _inScatteringLUTR->GetShaderResourceView());
@@ -991,6 +1134,8 @@ namespace ToyGE
 
 		outLightAccumTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 		outAttenuationTex = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(outLightAccumTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
+		Global::GetRenderEngine()->GetRenderContext()->ClearRenderTarget(outAttenuationTex->Get()->Cast<Texture>()->GetRenderTargetView(0, 0, 1), 0.0f);
 
 		std::map<String, String> macros;
 		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
@@ -1045,6 +1190,8 @@ namespace ToyGE
 		std::map<String, String> macros;
 		macros["NUM_SAMPLELINES"] = std::to_string(_numSampleLines);
 		macros["MAX_SAMPLES_PERLINE"] = std::to_string(_maxSamplesPerLine);
+		if (!sceneLinearDepthTex)
+			macros["NO_DEPTH"] = "";
 
 		auto ps = Shader::FindOrCreate<UnWarpSamplesPS>(macros);
 
@@ -1056,7 +1203,8 @@ namespace ToyGE
 		ps->SetSRV("sampleLinesTex", sampleLinesTex->GetShaderResourceView());
 		ps->SetSRV("sampleDepthTex", sampleDepthTex->GetShaderResourceView());
 		ps->SetSRV("sceneTex", sceneTex->GetShaderResourceView());
-		ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
+		if(sceneLinearDepthTex)
+			ps->SetSRV("sceneLinearDepthTex", sceneLinearDepthTex->GetShaderResourceView());
 
 		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
@@ -1131,7 +1279,7 @@ namespace ToyGE
 			STENCIL_OP_KEEP,
 			COMPARISON_EQUAL>::Get(), 0);
 
-		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_SRC_ALPHA, BLEND_PARAM_ONE>::Get());
+		rc->SetBlendState(BlendStateTemplate<false, false, true, BLEND_PARAM_SRC_ALPHA, BLEND_PARAM_ONE, BLEND_OP_ADD, BLEND_PARAM_ZERO>::Get());
 
 		rc->SetVertexBuffer({});
 		rc->SetIndexBuffer(nullptr);

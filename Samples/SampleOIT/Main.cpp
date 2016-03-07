@@ -20,6 +20,8 @@ public:
 	{
 		SampleCommon::Init();
 
+		_renderView->sceneRenderingConfig.bSSR = false;
+
 		auto pp = std::make_shared<PostProcessing>();
 		pp->AddRender(std::make_shared<ToneMapping>());
 		//pp->AddRender(std::make_shared<FXAA>());
@@ -63,15 +65,7 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		/*auto renderConfig = _renderView->GetRenderConfig();
-		if (_enableOIT)
-			renderConfig->configMap["OIT"] = "true";
-		else
-			renderConfig->configMap["OIT"] = "false";*/
-		if (_enableOIT)
-			Global::GetRenderEngine()->GetSceneRenderer()->bOIT = true;
-		else
-			Global::GetRenderEngine()->GetSceneRenderer()->bOIT = false;
+		_renderView->sceneRenderingConfig.bOIT = _enableOIT;
 
 		for (auto obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{

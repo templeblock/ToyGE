@@ -17,12 +17,15 @@ namespace ToyGE
 		virtual void Render(const Ptr<RenderView> & view) override;
 
 	private:
-		PooledTextureRef _prevAdaptedExposureScaleRef;
-		PooledTextureRef _adaptedExposureScaleRef;
+		//PooledTextureRef _prevAdaptedExposureScaleRef;
+		//PooledTextureRef _adaptedExposureScaleRef;
 
 		PooledTextureRef BuildHistogram(const Ptr<Texture> & scene);
 
-		void ComputeEyeAdaption(const Ptr<Texture> & histogram);
+		void ComputeEyeAdaption(
+			const Ptr<Texture> & histogram,
+			const Ptr<Texture> & prevAdaptedExposureScale,
+			const Ptr<Texture> & adaptedExposureScale);
 	};
 }
 

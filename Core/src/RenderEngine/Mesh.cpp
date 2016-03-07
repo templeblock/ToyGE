@@ -531,7 +531,7 @@ namespace ToyGE
 				float x = radius * sin(theta) * cos(phi);
 				float y = radius * cos(theta);
 				float z = radius * sin(theta) * -sin(phi);
-				builder.Add(normalize(float3(x, y, z)));
+				builder.Add(float3(x, y, z));
 				builder.Add(normalize(float3(x, y, z)));
 			}
 		}

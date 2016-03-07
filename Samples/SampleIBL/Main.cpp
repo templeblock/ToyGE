@@ -15,18 +15,21 @@ public:
 		SCENE0 = 0UL,
 		SCENE1 = 1UL,
 		SCENE2 = 2UL,
-		SCENE3 = 3UL
+		SCENE3 = 3UL,
+		SCENE4 = 4UL,
+		SCENE5 = 5UL
 	};
 
 	struct SceneData
 	{
 		Ptr<Texture> tex;
-		Ptr<ReflectionMap> reflecMap;
+		//Ptr<ReflectionMap> reflecMap;
 	};
 
 	std::map<SceneType, SceneData> _sceneMap;
 	SceneType _curScene;
 	Ptr<Actor> _actor;
+	//Ptr<ReflectionMapCapture> _capture;
 
 	SampleIBL()
 		: _matBaseColor(1.0f),
@@ -47,6 +50,8 @@ public:
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
 		_renderView->SetPostProcessing(pp);
 
+		_renderView->sceneRenderingConfig.bSSR = false;
+
 		//Init Scene
 		auto scene = Global::GetScene();
 
@@ -62,10 +67,12 @@ public:
 
 		String bkTexs[] = 
 		{
-			"Textures/rnl_cross.dds",
-			"Textures/galileo_cross.dds",
-			"Textures/uffizi_cross.dds",
-			"Textures/stpeters_cross_mmp_ABGR16F.dds"
+			"Textures/CubeMaps/pisa.dds",
+			"Textures/CubeMaps/uffizi_cross.dds",
+			"Textures/CubeMaps/doge2.dds",
+			"Textures/CubeMaps/ennis.dds",
+			"Textures/CubeMaps/glacier.dds",
+			"Textures/CubeMaps/grace-new.dds"
 		};
 
 		for (int32_t i = 0; i < _countof(bkTexs); ++i)
@@ -74,11 +81,11 @@ public:
 			auto texAsset = Asset::FindAndInit<TextureAsset>(bkTexs[i]);
 			sceneData.tex = texAsset->GetTexture();
 
-			auto reflectionMap = std::make_shared<ReflectionMap>();
+			/*auto reflectionMap = std::make_shared<ReflectionMap>();
 			reflectionMap->SetEnvironmentMap(sceneData.tex);
 			reflectionMap->InitPreComputedData();
 
-			sceneData.reflecMap = reflectionMap;
+			sceneData.reflecMap = reflectionMap;*/
 
 			_sceneMap[static_cast<SceneType>(i)] = sceneData;
 		}
@@ -92,18 +99,26 @@ public:
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
-		auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
-		_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
+		/*auto model = Asset::FindAndInit<MeshAsset>("Models/stanford_bunny/stanford_bunny.tmesh");
+		_actor = model->GetMesh()->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.1f, 0.1f, 0.1f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));*/
+		auto mesh = CommonMesh::CreateSphere(1.0f, 50);
+		_actor = mesh->AddInstanceToScene(scene, float3(0.0f, 0.0f, 0.0f), float3(0.5f, 0.5f, 0.5f), Quaternion(0.0f, 0.0f, 0.0f, 1.0f));
 
 		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
-			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
+			//obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
 		}
 
 		auto camera = scene->GetView(0)->GetCamera();
 		camera->SetPos(float3(0.0f, 1.0f, 2.0f));
 		camera->Yaw(-PI);
+
+		/*_capture = std::make_shared<ReflectionMapCapture>();
+		_capture->SetPos(0.0f);
+		_capture->SetRadius(20.0f);
+		scene->AddReflectionMapCapture(_capture);
+		scene->InitReflectionMaps();*/
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "IBL");
@@ -127,7 +142,9 @@ public:
 			{ SCENE0, "Scene0" },
 			{ SCENE1, "Scene1" },
 			{ SCENE2, "Scene2" },
-			{ SCENE3, "Scene3" }
+			{ SCENE3, "Scene3" },
+			{ SCENE4, "Scene4" },
+			{ SCENE5, "Scene5" }
 		};
 		auto sceneEnumType = TwDefineEnum("SceneType", sceneEnumVal, _countof(sceneEnumVal));
 		TwAddVarRW(_twBar, "Scene", sceneEnumType, &_curScene, nullptr);
@@ -141,13 +158,19 @@ public:
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
-		Global::GetScene()->SetAmbientTexture(_sceneMap[_curScene].tex);
+		if (Global::GetScene()->GetAmbientTexture() != _sceneMap[_curScene].tex)
+		{
+			Global::GetScene()->SetAmbientTexture(_sceneMap[_curScene].tex);
+			//Global::GetScene()->InitReflectionMaps();
+		}
 
 		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
-			obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
+			//obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
 		}
+
+		//ReflectionMap::InitLUT();
 	}
 };
 

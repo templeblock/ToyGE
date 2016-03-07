@@ -2,7 +2,8 @@
 #define MVO_VIEW_POSITION 1
 
 #ifdef GEN_VELOCITY
-#define MVO_PRE_VIEW_POSITION 1
+#define MVO_PRE_CLIP_POSITION 1
+#define MVO_CLIP_POSITION 1
 #endif
 
 #include "MeshVertexInput.tshader"
@@ -127,11 +128,17 @@ void OITRenderingPS(
 #ifdef GEN_VELOCITY
     velocity = 0.0f;
     
-    float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), viewToClipMatrix);
+    // float4 preClipPos = mul(float4(inputs.preViewPosition, 1.0f), preViewToClipMatrix);
+    float4 preClipPos = inputs.preClipPosition;
     preClipPos /= preClipPos.w;
-    
+    preClipPos.xy -= preViewToClipMatrix[2].xy;
     float2 velStart = preClipPos.xy * float2(0.5f, -0.5f) + 0.5f;
-    float2 velEnd   = inputs.svPosition.xy * invViewSize;
+    
+    //float4 clipPos = mul(float4(inputs.viewPosition, 1.0f), viewToClipMatrix);
+    float4 clipPos = inputs.clipPosition;
+    clipPos /= clipPos.w;
+    clipPos.xy -= viewToClipMatrix[2].xy;
+    float2 velEnd   = clipPos.xy * float2(0.5f, -0.5f) + 0.5f;
     
     velocity = (velEnd - velStart);
 #endif

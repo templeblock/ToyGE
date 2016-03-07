@@ -39,12 +39,12 @@ float HZBBuildPS(DrawQuadVSOut vsOut) : SV_TARGET
 
 
 #define NUM_RAYS 4
-#define NUM_SAMPLES_PER_RAY 4 
+#define NUM_SAMPLES_PER_RAY 8 
     
 uint MortonCode( uint x )
 {
-	//x = (x ^ (x <<  8)) & 0x00ff00ff;
-	//x = (x ^ (x <<  4)) & 0x0f0f0f0f;
+	// x = (x ^ (x <<  8)) & 0x00ff00ff;
+	// x = (x ^ (x <<  4)) & 0x0f0f0f0f;
 	x = (x ^ (x <<  2)) & 0x33333333;
 	x = (x ^ (x <<  1)) & 0x55555555;
 	return x;
@@ -52,9 +52,9 @@ uint MortonCode( uint x )
 
 uint ReverseUIntBits( uint bits )
 {
-	//bits = ( bits << 16) | ( bits >> 16);
-	//bits = ( (bits & 0x00ff00ff) << 8 ) | ( (bits & 0xff00ff00) >> 8 );
-	//bits = ( (bits & 0x0f0f0f0f) << 4 ) | ( (bits & 0xf0f0f0f0) >> 4 );
+	// bits = ( bits << 16) | ( bits >> 16);
+	// bits = ( (bits & 0x00ff00ff) << 8 ) | ( (bits & 0xff00ff00) >> 8 );
+	// bits = ( (bits & 0x0f0f0f0f) << 4 ) | ( (bits & 0xf0f0f0f0) >> 4 );
 	bits = ( (bits & 0x33333333) << 2 ) | ( (bits & 0xcccccccc) >> 2 );
 	bits = ( (bits & 0x55555555) << 1 ) | ( (bits & 0xaaaaaaaa) >> 1 );
 	return bits;
@@ -185,25 +185,26 @@ float3 RandomTraceDir(float3 view, float3 normal, float roughness, float2 screen
 //     return float4(hitUVz, hitPos / (numSamples + 1));
 // }
 
-float3 SampleSceneColor(float4 hitResult)
+float4 SampleSceneColor(float4 hitResult)
 {
     float3 traceColor = 0.0f;
+    float fade = 0.0;
     {
-        traceColor = sceneTex.SampleLevel(linearSampler, hitResult.xy, 0).rgb;
+        traceColor.xyz = sceneTex.SampleLevel(linearSampler, hitResult.xy, 0).rgb;
         
         float2 hitCenterDist = abs( hitResult.xy - 0.5 ) * 2.0;
         hitCenterDist = saturate( hitCenterDist * 5.0 - 4.0 );
         float borderFade = saturate( 1.0 - dot(hitCenterDist, hitCenterDist) );
-        
-        traceColor *= borderFade;
-        
-        traceColor *= saturate( 4 - hitResult.w * 4 );
+        //float traceFade = saturate( 4 - hitResult.w * 4 );
+         
+        traceColor *= borderFade;// * traceFade;
+        fade = 1;
     }
     
-    return traceColor;
+    return float4(traceColor, fade);
 }
 
-float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
+float4 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
     GBuffer gbuf;
     
@@ -228,7 +229,7 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     float3 viewDir = normalize(-originViewPos);
     
     
-    float3 traceColor = 0.0f;
+    float4 traceColor = 0.0f;
     
     float3 rayClipStart  = float3(originClipPosXY, originClipDepth);
     float3 rayUVZStart   = float3(vsOut.uv, originClipDepth);
@@ -238,7 +239,7 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
 #if NUM_RAYS > 1
     uint frameRandom = ((uint)frameCount % 8) * 1551;
     
-    uint morton = MortonCode( uint(vsOut.pos.x) & 8 ) | ( MortonCode( uint(vsOut.pos.y) & 8 ) * 2 );
+    uint morton = MortonCode( uint(vsOut.pos.x) & 4 ) | ( MortonCode( uint(vsOut.pos.y) & 4 ) * 2 );
     uint screenPosRandom = ReverseUIntBits( morton );
     uint2 screenPosRandom2 = ScrambleTEA( uint2( vsOut.pos.xy ) ^ frameRandom, 3 ); 
     
@@ -250,12 +251,19 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     
         float3 traceViewDir = RandomTraceDir(viewDir, originViewNormal, roughness, vsOut.pos.xy, uint(i), screenPosRandom2);
         
-        if(traceViewDir.z < -0.99)
+        [branch]
+        if(traceViewDir.z < -0.9)
             continue;
         
         float3 traceViewEnd = originViewPos + traceViewDir;
+        [branch]
+        if(traceViewEnd.z < 0)
+            continue;
+        
         float4 traceClipEnd = mul(float4(traceViewEnd, 1.0), viewToClipMatrix);
         traceClipEnd /= traceClipEnd.w;
+        
+            
         float3 traceUVZEnd = float3(traceClipEnd.xy * float2(0.5, -0.5) + float2(0.5, 0.5), traceClipEnd.z);
         
         float3 traceUVZDir = traceUVZEnd - rayUVZStart;
@@ -272,13 +280,14 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
         
         [branch] if(traceResult.w != 0.0)
         {
-            float3 traceColorRay = SampleSceneColor(traceResult);
-            traceColorRay /= 1 + max(max(traceColorRay.x, traceColorRay.y), traceColorRay.z);
+            float4 traceColorRay = SampleSceneColor(traceResult);
+            traceColorRay.xyz /= 1 + max(max(traceColorRay.x, traceColorRay.y), traceColorRay.z);
         
             traceColor += traceColorRay;
         }       
     }
     traceColor /= float(NUM_RAYS);
+    traceColor.xyz /= 1 - max(max(traceColor.x, traceColor.y), traceColor.z);
     
 #else
     
@@ -316,24 +325,22 @@ float3 ScreenSpaceReflectionPS(DrawQuadVSOut vsOut) : SV_TARGET
     
 #endif
     
-    traceColor *= roughnessFade;
+    traceColor.xyz *= roughnessFade;
     
     float3 n = originViewNormal;
     float3 l = traceMainViewDir;
     float3 v = viewDir;
     float3 h = normalize(v + l);
     
-    traceColor /= PI;
-    
     float3 spec = Fresnel(max(1e-3, dot(v, h)), mat.specularColor);
     
-    float3 reflectColor = traceColor * ( mat.diffuseColor / PI + spec );
-    reflectColor *= ssrIntensity;
+    traceColor.xyz = traceColor.xyz * ( mat.diffuseColor / PI + spec );
+    traceColor.xyz *= ssrIntensity;
     
-    return reflectColor;
+    return traceColor;
 }
 
-float3 SSRNeighborSharePS(DrawQuadVSOut vsOut) : SV_TARGET
+float4 SSRNeighborSharePS(DrawQuadVSOut vsOut) : SV_TARGET
 {
     GBuffer gbuf;
     
@@ -361,7 +368,7 @@ float3 SSRNeighborSharePS(DrawQuadVSOut vsOut) : SV_TARGET
           vsOut.uv + float2( 0.0,  1.0) * texSize.zw
     };
     
-    float3 ssrColor = ssrTex.SampleLevel(pointClampSampler, vsOut.uv, 0).xyz;
+    float4 ssrColor = ssrTex.SampleLevel(pointClampSampler, vsOut.uv, 0);
     
     float weightSum = 1.0;
     [unroll] for(int i = 0; i < 4; ++i)
@@ -372,7 +379,7 @@ float3 SSRNeighborSharePS(DrawQuadVSOut vsOut) : SV_TARGET
         float3 sampleNormal = DecodeNormal(gbuffer1.SampleLevel(pointClampSampler, sampleUVs[i], 0).xyz);
         // float3 sampleViewNormal  = mul(sampleNormal, (float3x3)worldToViewMatrix);
         
-        float3 sampleSSR = ssrTex.SampleLevel(pointClampSampler, sampleUVs[i], 0).xyz;
+        float4 sampleSSR = ssrTex.SampleLevel(pointClampSampler, sampleUVs[i], 0);
         
         // float3 sampleTraceViewDir = reflect(sampleViewPos, sampleViewNormal);
         

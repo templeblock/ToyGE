@@ -31,5 +31,6 @@ float4 RenderSunPS(
 {
     float2 sunRadiusH = sunRadius * float2(viewToClipMatrix[0][0], viewToClipMatrix[1][1]);
     float2 dist = (posH - lightClipPos) / sunRadiusH;
-    return float4(sunRadiance, saturate(1.0 - dot(dist, dist)));
+    float4 posW = mul(float4(posH, 1.0, 1.0), clipToWorldMatrixNoJitter);
+    return float4(sunRadiance, saturate(1.0 - dot(dist, dist)) * (posW.y > 0));
 }

@@ -6,7 +6,6 @@ class SampleAtmosphere : public SampleCommon
 {
 public:
 	Ptr<DirectionalLightComponent> _light;
-	Ptr<AtmosphereRendering> _atmosRender;
 	Ptr<PostProcessVolumetricLight> _ppvl;
 	float3 _sunRadiance;
 	float3 _sunDir;
@@ -28,11 +27,13 @@ public:
 	{
 		SampleCommon::Init();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->bRenderingAtmosphere = true;
+		//_renderView->sceneRenderingConfig.bRenderingAtmosphere = true;
+		_renderView->sceneRenderingConfig.bSSR = false;
 
 		auto pp = std::make_shared<PostProcessing>();
 
 		_ppvl = std::make_shared<PostProcessVolumetricLight>();
+		_ppvl->SetEnable(false);
 		pp->AddRender(_ppvl);
 		pp->AddRender(std::make_shared<ToneMapping>());
 		//pp->AddRender(std::make_shared<FXAA>());
@@ -41,6 +42,7 @@ public:
 
 		auto camera =  std::static_pointer_cast<PerspectiveCamera>(_renderView->GetCamera());
 		camera->SetPos(float3(-0.5f, 0.5f, -3.0f));
+		//camera->LookTo(0.0f, float3(0.0f, 1.0f, 0.0), float3(0.0f, 0.0f, -1.0));
 		camera->SetFar(1e4);
 
 		//Init Scene
@@ -52,7 +54,7 @@ public:
 		dirLight->GetLight<DirectionalLightComponent>()->SetCastShadow(true);
 		_light = dirLight->GetLight<DirectionalLightComponent>();
 
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunLight(dirLight->GetLight<DirectionalLightComponent>());
+		//Global::GetRenderEngine()->GetSceneRenderer()->SetSunLight(dirLight->GetLight<DirectionalLightComponent>());
 		_ppvl->SetLight(_light);
 
 		//Add Objs
@@ -63,14 +65,14 @@ public:
 			auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);
 			mat->SetRoughness(0.0f);
-			mat->SetMetallic(0.0f);
+			mat->SetMetallic(1.0f);
 
 			for (auto obj : objs->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 				obj->SetMaterial(mat);
 		}
 
 		{
-			auto mat = std::make_shared<Material>();
+			/*auto mat = std::make_shared<Material>();
 			mat->SetBaseColor(1.0f);
 			mat->SetRoughness(1.0f);
 			mat->SetMetallic(0.0f);
@@ -84,7 +86,7 @@ public:
 			{
 				obj->SetMaterial(mat);
 				obj->SetCastShadows(false);
-			}
+			}*/
 		}
 
 		//Init UI
@@ -95,7 +97,7 @@ public:
 
 		TwAddVarRW(_twBar, "SunDirection", TW_TYPE_DIR3F, &_sunDir, nullptr);
 
-		TwAddVarRW(_twBar, "Density", TW_TYPE_FLOAT, &_ppvlDensity, nullptr);
+		/*TwAddVarRW(_twBar, "Density", TW_TYPE_FLOAT, &_ppvlDensity, nullptr);
 		TwSetParam(_twBar, "Density", "group", TW_PARAM_CSTRING, 1, "PPVolumetricLight");
 		TwSetParam(_twBar, "Density", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "Density", "max", TW_PARAM_FLOAT, 1, &minMax.y());
@@ -110,17 +112,28 @@ public:
 		TwSetParam(_twBar, "Decay", "group", TW_PARAM_CSTRING, 1, "PPVolumetricLight");
 		TwSetParam(_twBar, "Decay", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "Decay", "max", TW_PARAM_FLOAT, 1, &minMax.y());
-		TwSetParam(_twBar, "Decay", "step", TW_PARAM_FLOAT, 1, &step);
+		TwSetParam(_twBar, "Decay", "step", TW_PARAM_FLOAT, 1, &step);*/
 	}
 
 	void Update(float elapsedTime) override
 	{
 		SampleCommon::Update(elapsedTime);
 
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunRadiance(_sunRadiance);
-		Global::GetRenderEngine()->GetSceneRenderer()->SetSunDirection(_sunDir);
+		static float3 preSunRadiance = 0.0f;
+		static float3 preSunDir = 0.0f;
 
-		Global::GetRenderEngine()->GetSceneRenderer()->UpdateSunLight();
+		if (any(preSunRadiance != _sunRadiance) || any(preSunDir != _sunDir))
+		{
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->SetSunRadiance(_sunRadiance);
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->SetSunDirection(_sunDir);
+
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->UpdateSunLight(_light);
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->UpdateAmbientMap(Global::GetScene());
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->RecomputeSunRenderColor();
+
+			preSunRadiance = _sunRadiance;
+			preSunDir = _sunDir;
+		}
 
 		_ppvl->SetDensity(_ppvlDensity);
 		_ppvl->SetIntensity(_ppvlIntensity);
