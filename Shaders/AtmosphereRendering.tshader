@@ -192,6 +192,21 @@ void RayMarchingPS(
     outAttenuation = attenuationAccum;
 }
 
+float4 RenderHemiPanoramicMapPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float phi = (vsOut.uv.x - 0.5) * 2.0 * PI;
+    float theta = (vsOut.uv.y) * PI * 0.5;
+    float3 dir;
+    dir.x = sin(theta) * sin(phi);
+    dir.y = cos(theta);
+    dir.z = sin(theta) * cos(phi);
+    
+    float3 startPos = 0.0;
+    float3 inScattering = ComputeInScattering(startPos, dir, -lightDirection);
+    
+    return float4(inScattering * lightRadiance, 1.0);
+}
+
 void InterpolateRestSamplesPS(
     DrawQuadVSOut vsOut,
     out float3 outLightAccum : SV_TARGET0,

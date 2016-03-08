@@ -190,7 +190,7 @@ float4 SampleSceneColor(float4 hitResult)
     float3 traceColor = 0.0f;
     float fade = 0.0;
     {
-        traceColor.xyz = sceneTex.SampleLevel(linearSampler, hitResult.xy, 0).rgb;
+        traceColor.xyz = sceneTex.SampleLevel(pointClampSampler, hitResult.xy, 0).rgb;
         
         float2 hitCenterDist = abs( hitResult.xy - 0.5 ) * 2.0;
         hitCenterDist = saturate( hitCenterDist * 5.0 - 4.0 );

@@ -110,18 +110,6 @@ namespace ToyGE
 
 		Global::GetRenderEngine()->GetRenderContext()->SetViewport(view->GetViewport());
 
-		//// Set reflection map mask id
-		//int32_t index = 2; // start from 2, stencil 0 is background and 1 is objs rendered without reflection map
-		//for (auto & drawBatch : view->GetViewRenderContext()->primitiveDrawList->drawBatches)
-		//{
-		//	for (auto & renderComponent : drawBatch.second)
-		//	{
-		//		auto reflectionMap = renderComponent->GetReflectionMap();
-		//		if (reflectionMap && reflectionMap->maskID == -1)
-		//			reflectionMap->maskID = index++;
-		//	}
-		//}
-
 		// Base
 		RenderBase(view);
 
@@ -147,30 +135,17 @@ namespace ToyGE
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
 
-			/*if (!view->sceneRenderingConfig.bRenderingAtmosphere)
-			{*/
-				if (!_skyBox)
-					_skyBox = std::make_shared<SkyBox>();
-				_skyBox->SetTexture(Global::GetScene()->GetAmbientTexture());
-				_skyBox->Render(
-					renderResult->GetRenderTargetView(0, 0, 1),
-					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT),
-					view);
-			/*}
-			else
-			{
-				if (!_atmosphereRendering)
-					_atmosphereRendering = std::make_shared<AtmosphereRendering>();
-				_atmosphereRendering->Render(view);
-			}*/
+			if (view->GetScene())
+				view->GetScene()->GetAmbientMap()->Render(view);
+
+			if (view->GetScene()->IsRenderSun())
+				_atmosphereRendering->RenderSun(view);
 		}
 
 		// Translucent
 		{
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-			if (!_translucentRendering)
-				_translucentRendering = std::make_shared<TranslucentRendering>();
 			_translucentRendering->bOIT = view->sceneRenderingConfig.bOIT;
 			_translucentRendering->Render(view, renderResult->GetRenderTargetView(0, 0, 1));
 		}
@@ -187,8 +162,6 @@ namespace ToyGE
 
 		// Volumetric Light
 		{
-			if (!_volumetricLight)
-				_volumetricLight = std::make_shared<VolumetricLight>();
 			_volumetricLight->Render(view);
 		}
 
@@ -196,8 +169,6 @@ namespace ToyGE
 		{
 			if (view->sceneRenderingConfig.bLPV)
 			{
-				if (!_lpv)
-					_lpv = std::make_shared<LPV>();
 				_lpv->Render(view);
 			}
 		}
@@ -206,8 +177,6 @@ namespace ToyGE
 		{
 			if (view->sceneRenderingConfig.bSSR)
 			{
-				if (!_ssrRenderer)
-					_ssrRenderer = std::make_shared<SSR>();
 				_ssrRenderer->SetSSRMaxRoughness(view->sceneRenderingConfig.ssrMaxRoughness);
 				_ssrRenderer->SetSSRIntensity(view->sceneRenderingConfig.ssrIntensity);
 				_ssrRenderer->Render(view);
@@ -217,8 +186,6 @@ namespace ToyGE
 		// Render Env Reflection
 		if(view->sceneRenderingConfig.bRenderEnvReflection)
 		{
-			if (!_envReflectionRenderer)
-				_envReflectionRenderer = std::make_shared<EnvironmentReflectionRenderer>();
 			_envReflectionRenderer->Render(view);
 		}
 		else
@@ -264,10 +231,7 @@ namespace ToyGE
 		{
 			auto renderResult = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-			static Ptr<EyeAdaption> eyeAdaption;
-			if (!eyeAdaption)
-				eyeAdaption = std::make_shared<EyeAdaption>();
-			eyeAdaption->Render(view);
+			_eyeAdaption->Render(view);
 		}
 
 		// PostProcessing PreTAASetup

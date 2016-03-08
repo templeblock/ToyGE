@@ -726,4 +726,26 @@ namespace ToyGE
 
 		DrawQuad({ target });
 	}
+
+	void CubeMapToPnoramic(const Ptr<Texture> & cubeMap, const Ptr<Texture> & targetPanoramic)
+	{
+		auto ps = Shader::FindOrCreate<CubeMapToPanoramicPS>();
+
+		ps->SetSRV("cubeMap", cubeMap->GetShaderResourceView(0, 0, 0, 0, true));
+		ps->SetSampler("inSampler", SamplerTemplate<>::Get());
+		ps->Flush();
+
+		DrawQuad({ targetPanoramic->GetRenderTargetView(0, 0, 1) });
+	}
+
+	void CubeMapToHemiPnoramic(const Ptr<Texture> & cubeMap, const Ptr<Texture> & targetPanoramic)
+	{
+		auto ps = Shader::FindOrCreate<CubeMapToHemiPanoramicPS>();
+
+		ps->SetSRV("cubeMap", cubeMap->GetShaderResourceView(0, 0, 0, 0, true));
+		ps->SetSampler("inSampler", SamplerTemplate<>::Get());
+		ps->Flush();
+
+		DrawQuad({ targetPanoramic->GetRenderTargetView(0, 0, 1) });
+	}
 }

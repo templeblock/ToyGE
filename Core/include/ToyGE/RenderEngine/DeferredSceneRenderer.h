@@ -29,9 +29,7 @@ namespace ToyGE
 		void RenderShading(const Ptr<RenderView> & view);
 
 	private:
-		Ptr<class SkyBox> _skyBox;
-		Ptr<class TranslucentRendering> _translucentRendering;
-		Ptr<class EnvironmentReflectionRenderer> _envReflectionRenderer;
+		
 	};
 }
 

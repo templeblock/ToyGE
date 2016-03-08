@@ -69,11 +69,11 @@ public:
 			//obj->SetReflectionMap(reflectionMap);
 		}
 
-		auto capture = std::make_shared<ReflectionMapCapture>();
+		/*auto capture = std::make_shared<ReflectionMapCapture>();
 		capture->SetPos(0.0f);
 		capture->SetRadius(20.0f);
 		scene->AddReflectionMapCapture(capture);
-		scene->InitReflectionMaps();
+		scene->InitReflectionMaps();*/
 
 		//Init UI
 		TwSetParam(_twBar, nullptr, "label", TW_PARAM_CSTRING, 1, "MotionBlur");

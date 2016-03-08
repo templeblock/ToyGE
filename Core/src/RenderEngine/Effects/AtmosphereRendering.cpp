@@ -145,7 +145,7 @@ namespace ToyGE
 			{
 				if (sceneClipDepth)
 				{
-					RenderSun(
+					DoRenderSun(
 						float2(sunPosH.x(), sunPosH.y()),
 						view,
 						targetTex->GetRenderTargetView(0, 0, 1),
@@ -153,7 +153,7 @@ namespace ToyGE
 				}
 				else
 				{
-					RenderSun(
+					DoRenderSun(
 						float2(sunPosH.x(), sunPosH.y()),
 						view,
 						targetTex->GetRenderTargetView(0, 0, 1),
@@ -185,7 +185,7 @@ namespace ToyGE
 			{
 				if (sceneClipDepth)
 				{
-					RenderSun(
+					DoRenderSun(
 						float2(sunPosH.x(), sunPosH.y()),
 						view,
 						sceneTex->GetRenderTargetView(0, 0, 1),
@@ -193,7 +193,7 @@ namespace ToyGE
 				}
 				else
 				{
-					RenderSun(
+					DoRenderSun(
 						float2(sunPosH.x(), sunPosH.y()),
 						view,
 						sceneTex->GetRenderTargetView(0, 0, 1),
@@ -202,6 +202,49 @@ namespace ToyGE
 			}
 		}
 		
+	}
+
+	void AtmosphereRendering::RenderSun(const Ptr<RenderView> & view)
+	{
+		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");;
+		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+
+		auto & cameraPos = view->GetCamera()->GetPos();
+		float sunDist = 1e+2;
+		auto sunPosW = cameraPos - _sunDirection * sunDist;
+		auto sunPosV = transform_coord(sunPosW, view->GetCamera()->GetViewMatrix());
+		float4 sunPosH = 0.0f;
+		if (sunPosV.z() == 0.0f)
+		{
+			sunPosH = sunPosV;
+			float scale = 2.0f / max(abs(sunPosH.x()), abs(sunPosH.y()));
+			sunPosH.x() *= scale;
+			sunPosH.y() *= scale;
+		}
+		else
+		{
+			sunPosH = transform_coord(sunPosV, view->GetCamera()->GetProjMatrix());
+		}
+
+		if (sunPosV.z() > 0.0f)
+		{
+			if (sceneClipDepth)
+			{
+				DoRenderSun(
+					float2(sunPosH.x(), sunPosH.y()),
+					view,
+					sceneTex->GetRenderTargetView(0, 0, 1),
+					sceneClipDepth->GetDepthStencilView(0, 0, 1, RENDER_FORMAT_D24_UNORM_S8_UINT));
+			}
+			else
+			{
+				DoRenderSun(
+					float2(sunPosH.x(), sunPosH.y()),
+					view,
+					sceneTex->GetRenderTargetView(0, 0, 1),
+					nullptr);
+			}
+		}
 	}
 
 	void AtmosphereRendering::RenderCubeMap(const Ptr<Texture> & target)
@@ -268,6 +311,39 @@ namespace ToyGE
 		bEpipolarSampling = bEpipolarSave;
 	}
 
+	void AtmosphereRendering::RenderHemiPanoramicMap(const Ptr<Texture> & target)
+	{
+		auto ps = Shader::FindOrCreate<RenderHemiPanoramicMapPS>();
+		ps->SetScalar("lightRadiance", _sunRadiance);
+		ps->SetScalar("lightDirection", _sunDirection);
+
+		ps->SetScalar("lutSize", float4((float)_lutSize.x(), (float)_lutSize.y(), (float)_lutSize.z(), (float)_lutSize.w()));
+
+		ps->SetScalar("earthCenter", float3(0.0f, -_earthRadius, 0.0f));
+		ps->SetScalar("earthRadius", _earthRadius);
+		ps->SetScalar("atmosphereTopHeight", _atmosphereTopHeight);
+
+		ps->SetScalar("particleScaleHeight", float2(_particleScaleHeightR, _particleScaleHeightM));
+		ps->SetScalar("scatteringR", _scatteringR);
+		ps->SetScalar("scatteringM", _scatteringM);
+		ps->SetScalar("attenuationR", _attenuationR);
+		ps->SetScalar("attenuationM", _attenuationM);
+		ps->SetScalar("phaseG_M", _phaseG_M);
+
+		ps->SetSRV("opticalDepthLUT", _opticalDepthLUT->GetShaderResourceView());
+		ps->SetSRV("inScatteringLUTR", _inScatteringLUTR->GetShaderResourceView());
+		ps->SetSRV("inScatteringLUTM", _inScatteringLUTM->GetShaderResourceView());
+
+		ps->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
+		ps->SetSampler("linearSampler", SamplerTemplate<>::Get());
+
+		ps->Flush();
+
+		DrawQuad({ target->GetRenderTargetView(0, 0, 1) });
+
+		target->GenerateMips();
+	}
+
 	void AtmosphereRendering::UpdateSunLight(const Ptr<class DirectionalLightComponent> & light)
 	{
 		auto radiance = ComputeSunRadianceAt(_sunDirection, _sunRadiance, 1.0f);
@@ -286,10 +362,11 @@ namespace ToyGE
 		light->SetDirection(_sunDirection);
 	}
 
-	void AtmosphereRendering::UpdateAmbientMap(const Ptr<class Scene> & scene)
+	void AtmosphereRendering::UpdateAmbientAndReflectionMap(const Ptr<class Scene> & scene)
 	{
-		static Ptr<Texture> ambientMap;
-		if (!ambientMap)
+		static Ptr<Texture> ambientCubeMap;
+		static Ptr<Texture> ambientPanoramicMap;
+		if (!ambientCubeMap)
 		{
 			// Init target texture
 			TextureDesc texDesc;
@@ -304,13 +381,23 @@ namespace ToyGE
 			texDesc.sampleCount = 1;
 			texDesc.sampleQuality = 0;
 
-			ambientMap = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
-			ambientMap->SetDesc(texDesc);
-			ambientMap->Init();
+			ambientCubeMap = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+			ambientCubeMap->SetDesc(texDesc);
+			ambientCubeMap->Init();
+
+			texDesc.width = 2048;
+			texDesc.height = 2048;
+			texDesc.bCube = false;
+			ambientPanoramicMap = Global::GetRenderEngine()->GetRenderFactory()->CreateTexture(TEXTURE_2D);
+			ambientPanoramicMap->SetDesc(texDesc);
+			ambientPanoramicMap->Init();
 		}
 
-		RenderCubeMap(ambientMap);
-		scene->SetAmbientTexture(ambientMap);
+		RenderCubeMap(ambientCubeMap);
+		RenderHemiPanoramicMap(ambientPanoramicMap);
+
+		scene->SetAmbientMapTexture(ambientPanoramicMap, AM_HEMIPANORAMIC);
+		scene->UpdateAmbientReflectionMap(ambientCubeMap);
 	}
 
 	float3 AtmosphereRendering::ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height)
@@ -1237,7 +1324,7 @@ namespace ToyGE
 		rc->SetBlendState(nullptr);
 	}
 
-	void AtmosphereRendering::RenderSun(
+	void AtmosphereRendering::DoRenderSun(
 		const float2 & lightClipPos,
 		const Ptr<RenderView> & view,
 		const Ptr<RenderTargetView> & target,

@@ -1,0 +1,71 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+
+TextureCube ambientCubeMap;
+Texture2D ambientPanoramicMap;
+SamplerState inSampler;
+ 
+float4x4 transform;
+    
+void AmbientCubeMapVS(
+    float3 pos : POSITION,
+    out float4 clipPos : SV_POSITION,
+    out float3 dir : DIRECTION)
+{
+    clipPos = mul(float4(pos, 1.0f), transform);
+    clipPos.z = clipPos.w;
+    dir = pos;
+}
+    
+float4 AmbientCubeMapPS(
+    float4 clipPos : SV_POSITION,
+    float3 dir : DIRECTION) : SV_TARGET
+{
+    return float4(ambientCubeMap.Sample(inSampler, dir).xyz, 1.0);
+}
+
+
+void AmbientPanoramicMapVS(
+    float3 pos : POSITION,
+    float2 uv : TEXCOORD,
+    out float4 svPos : SV_POSITION,
+    out float2 outUV : TEXCOORD)
+{
+    svPos = mul(float4(pos, 1.0f), transform);
+    svPos.z = svPos.w;
+    
+    outUV = uv.xy;
+}
+    
+float4 AmbientPanoramicMapPS(
+    float4 svPos : SV_POSITION,
+    float2 uv : TEXCOORD) : SV_TARGET
+{
+    uv.x = frac(uv.x + 0.5);
+    
+    return float4(ambientPanoramicMap.SampleLevel(inSampler, uv, 0).xyz, 1.0);
+}
+
+
+void AmbientHemiPanoramicMapVS(
+    float3 pos : POSITION,
+    float2 uv : TEXCOORD,
+    out float4 svPos : SV_POSITION,
+    out float2 outUV : TEXCOORD)
+{
+    svPos = mul(float4(pos, 1.0f), transform);
+    svPos.z = svPos.w;
+    
+    outUV = uv.xy;
+    outUV.y *= 2.0;
+}
+    
+float4 AmbientHemiPanoramicMapPS(
+    float4 svPos : SV_POSITION,
+    float2 uv : TEXCOORD) : SV_TARGET
+{
+    uv.x = frac(uv.x + 0.5);
+    
+    return float4(ambientPanoramicMap.SampleLevel(inSampler, uv, 0).xyz, 1.0);
+}

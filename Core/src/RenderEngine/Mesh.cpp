@@ -518,6 +518,11 @@ namespace ToyGE
 			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
 		}
+		{
+			int i = builder.vertexSize;
+			builder.AddElementDesc("TEXCOORD", 0, RENDER_FORMAT_R32G32_FLOAT, 0);
+			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_TEXCOORD, 0, i, builder.vertexSize - i });
+		}
 		meshElement->vertexData[0]->vertexDesc.bytesSize = builder.vertexSize;
 
 		builder.SetNumVertices((numSplits + 1) * (numSplits + 1));
@@ -528,11 +533,12 @@ namespace ToyGE
 			for (int32_t phiIndex = 0; phiIndex <= numSplits; ++phiIndex)
 			{
 				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits)* PI2;
-				float x = radius * sin(theta) * cos(phi);
+				float x = radius * sin(theta) * sin(phi);
 				float y = radius * cos(theta);
-				float z = radius * sin(theta) * -sin(phi);
+				float z = radius * sin(theta) * cos(phi);
 				builder.Add(float3(x, y, z));
 				builder.Add(normalize(float3(x, y, z)));
+				builder.Add(float2(phi / PI2, theta / PI));
 			}
 		}
 		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;

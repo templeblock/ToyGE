@@ -55,6 +55,9 @@ namespace ToyGE
 		Ptr<class LPV> _lpv;
 		Ptr<class VolumetricLight> _volumetricLight;
 		Ptr<class SSR> _ssrRenderer;
+		Ptr<class TranslucentRendering> _translucentRendering;
+		Ptr<class EnvironmentReflectionRenderer> _envReflectionRenderer;
+		Ptr<class EyeAdaption> _eyeAdaption;
 	};
 }
 

@@ -41,9 +41,9 @@ float4 RayTracing(
     
     // float3 rayStepUVZ = float3(rayStepClip.xy * float2(0.5, -0.5), rayStepClip.z);
     
-    const float depthTolerance = max(0, rayStepUVZ.z ) * 1.0;
+    const float depthTolerance = 0;//max(0, rayStepUVZ.z ) * 0.1;
     
-    float lastDepthDiff = abs(rayStepUVZ.z);
+    float lastDepthDiff = rayStepUVZ.z;
     float3 hitUVz = 0.0f;
     float hitPos = 0.0f;
     
@@ -88,7 +88,8 @@ float4 RayTracing(
             
             hitUVz = rayStartUVZ + hitPos * rayStepUVZ;
             
-            break;
+            if(hitPos != 0)
+                break;
         }
         
         lastDepthDiff = depthDiffCur.w;

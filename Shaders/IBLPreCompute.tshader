@@ -33,7 +33,7 @@ float3 ImportanceSampling(float2 sample2d, float roughness, float3 N)
     
 float4 PrefilterEnvMap(float roughness, float3 R)
 {
-    roughness = lerp(0.2, MAX_ROUGHNESS, roughness);
+    roughness = lerp(0.1, MAX_ROUGHNESS, roughness);
     
     float3 N = R;
     float3 V = R;
@@ -147,7 +147,7 @@ float4 PrefilterEnvMapPS(DrawQuadVSOut vsOut) : SV_TARGET
 
 float2 IntegrateBRDF(float roughness, float NoV)
 {
-    roughness = lerp(0.2, MAX_ROUGHNESS, roughness);
+    roughness = lerp(0.1, MAX_ROUGHNESS, roughness);
     
     float3 N = float3(0.0f, 1.0f, 0.0f);
     float3 V = 0.0f;

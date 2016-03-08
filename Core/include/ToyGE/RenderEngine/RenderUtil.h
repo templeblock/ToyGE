@@ -125,5 +125,14 @@ namespace ToyGE
 
 
 	DECLARE_SHADER(, TemporalAAPS, SHADER_PS, "TemporalAA", "TemporalAAPS", SM_4);
+
+
+	DECLARE_SHADER(, CubeMapToPanoramicPS, SHADER_PS, "AmbientMapTransform", "CubeMapToPanoramicPS", SM_4);
+
+	TOYGE_CORE_API void CubeMapToPnoramic(const Ptr<Texture> & cubeMap, const Ptr<Texture> & targetPanoramic);
+
+	DECLARE_SHADER(, CubeMapToHemiPanoramicPS, SHADER_PS, "AmbientMapTransform", "CubeMapToHemiPanoramicPS", SM_4);
+
+	TOYGE_CORE_API void CubeMapToHemiPnoramic(const Ptr<Texture> & cubeMap, const Ptr<Texture> & targetPanoramic);
 }
 #endif

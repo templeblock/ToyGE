@@ -54,6 +54,7 @@ public:
 
 		//Init Scene
 		auto scene = Global::GetScene();
+		scene->SetAmbientColor(0.0f);
 
 		//Add Light
 		//auto pointLightCom = std::make_shared<PointLightComponent>();
@@ -158,19 +159,16 @@ public:
 		_mat->SetRoughness(_matRoughness);
 		_mat->SetMetallic(_matMetallic);
 
-		if (Global::GetScene()->GetAmbientTexture() != _sceneMap[_curScene].tex)
+		if (Global::GetScene()->GetAmbientMap()->GetTexture() != _sceneMap[_curScene].tex)
 		{
-			Global::GetScene()->SetAmbientTexture(_sceneMap[_curScene].tex);
-			//Global::GetScene()->InitReflectionMaps();
+			Global::GetScene()->SetAmbientMapTexture(_sceneMap[_curScene].tex, AM_CUBEMAP);
+			Global::GetScene()->UpdateAmbientReflectionMap(_sceneMap[_curScene].tex);
 		}
 
 		for (auto & obj : _actor->GetRootTransformComponent()->Cast<RenderMeshComponent>()->GetSubRenderComponents())
 		{
 			obj->SetMaterial(_mat);
-			//obj->SetReflectionMap(_sceneMap[_curScene].reflecMap);
 		}
-
-		//ReflectionMap::InitLUT();
 	}
 };
 

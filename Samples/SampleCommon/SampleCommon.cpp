@@ -111,7 +111,8 @@ void SampleCommon::Init()
 
 	//Set Background Render
 	auto skyboxTex = Asset::FindAndInit<TextureAsset>("Textures/CubeMaps/uffizi_cross.dds");
-	scene->SetAmbientTexture(skyboxTex->GetTexture());
+	scene->SetAmbientMapTexture(skyboxTex->GetTexture(), AM_CUBEMAP);
+	scene->UpdateAmbientReflectionMap(skyboxTex->GetTexture());
 
 	//UI
 	_twBar = TwNewBar("Sample");

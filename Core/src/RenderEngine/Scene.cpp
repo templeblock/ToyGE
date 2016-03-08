@@ -18,6 +18,8 @@ namespace ToyGE
 
 	}
 
+	
+
 	int32_t Scene::AddActor(const Ptr<Actor> & actor)
 	{
 		_actorsMap[actorID] = actor;
@@ -53,14 +55,22 @@ namespace ToyGE
 		view->SetScene(shared_from_this());
 	}
 
-	void Scene::SetAmbientTexture(const Ptr<class Texture> & ambientTex)
+	void Scene::SetAmbientMapTexture(const Ptr<class Texture> & ambientMapTex, AmbientMapType type)
 	{
-		_ambientTex = ambientTex;
-		if (_ambientTex)
+		if (!_ambientMap || type != _ambientMap->GetType())
+		{
+			_ambientMap = AmbientMap::Create(type);
+		}
+		_ambientMap->SetTexture(ambientMapTex);
+	}
+
+	void Scene::UpdateAmbientReflectionMap(const Ptr<Texture> & reflectionTex)
+	{
+		if (reflectionTex)
 		{
 			if (!_ambientReflectionMap)
 				_ambientReflectionMap = std::make_shared<ReflectionMap>();
-			_ambientReflectionMap->SetEnvironmentMap(_ambientTex);
+			_ambientReflectionMap->SetEnvironmentMap(reflectionTex);
 			_ambientReflectionMap->InitPreComputedData();
 		}
 		else

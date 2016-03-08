@@ -29,7 +29,6 @@ public:
 
 		//_renderView->sceneRenderingConfig.bRenderingAtmosphere = true;
 		_renderView->sceneRenderingConfig.bSSR = false;
-
 		auto pp = std::make_shared<PostProcessing>();
 
 		_ppvl = std::make_shared<PostProcessVolumetricLight>();
@@ -48,6 +47,7 @@ public:
 		//Init Scene
 		auto scene = Global::GetScene();
 		scene->SetAmbientColor(0.02f);
+		scene->SetRenderSun(true);
 
 		//Add Light
 		auto dirLight = LightActor::Create<DirectionalLightComponent>(scene);
@@ -128,7 +128,7 @@ public:
 			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->SetSunDirection(_sunDir);
 
 			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->UpdateSunLight(_light);
-			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->UpdateAmbientMap(Global::GetScene());
+			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->UpdateAmbientAndReflectionMap(Global::GetScene());
 			Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->RecomputeSunRenderColor();
 
 			preSunRadiance = _sunRadiance;
@@ -138,6 +138,17 @@ public:
 		_ppvl->SetDensity(_ppvlDensity);
 		_ppvl->SetIntensity(_ppvlIntensity);
 		_ppvl->SetDecay(_ppvlDecay);
+
+		//auto texDesc = Global::GetScene()->GetAmbientMap()->->GetDesc();
+		//texDesc.width = 2048;
+		//texDesc.height = 2048;
+		//texDesc.bCube = false;
+		//texDesc.arraySize = 1;
+		//texDesc.mipLevels = 1;
+		//auto tmpTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		//auto tmpTex = tmpTexRef->Get()->Cast<Texture>();
+		////CubeMapToHemiPnoramic(Global::GetScene()->GetAmbientTexture(), tmpTex);
+		//Global::GetRenderEngine()->GetSceneRenderer()->GetAtmosphereRenderer()->RenderHemiPanoramicMap(tmpTex);
 	}
 };
 

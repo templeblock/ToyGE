@@ -13,15 +13,7 @@ namespace ToyGE
 		_scattering(0.5f),
 		_phaseFunctionParam(0.5f)
 	{
-		auto pointLightVolumeMesh = CommonMesh::CreateSphere(1.0f, 25);
-		_pointLightVolumeGeo = std::make_shared<RenderMeshComponent>();
-		_pointLightVolumeGeo->SetMesh(pointLightVolumeMesh);
-
-		auto spotLightVolumeMesh = CommonMesh::CreateCone(1.0f, PI_DIV2, 50);
-		_spotLightVolumeGeo = std::make_shared<RenderMeshComponent>();
-		_spotLightVolumeGeo->SetMesh(spotLightVolumeMesh);
-
-		InitDither();
+		
 	}
 
 	void VolumetricLight::Render(const Ptr<RenderView> & view)
@@ -149,6 +141,13 @@ namespace ToyGE
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & lightVolumeTex)
 	{
+		if (!_pointLightVolumeGeo)
+		{
+			auto pointLightVolumeMesh = CommonMesh::CreateSphere(1.0f, 25);
+			_pointLightVolumeGeo = std::make_shared<RenderMeshComponent>();
+			_pointLightVolumeGeo->SetMesh(pointLightVolumeMesh);
+		}
+
 		auto meshElement = _pointLightVolumeGeo->GetSubRenderComponents()[0]->GetMeshElement();
 
 		std::map<String, String> macros;
@@ -219,7 +218,14 @@ namespace ToyGE
 		const Ptr<Texture> & linearDepthTex,
 		const Ptr<Texture> & lightVolumeTex)
 	{
-		auto meshElement = _pointLightVolumeGeo->GetSubRenderComponents()[0]->GetMeshElement();
+		if (!_spotLightVolumeGeo)
+		{
+			auto spotLightVolumeMesh = CommonMesh::CreateCone(1.0f, PI_DIV2, 50);
+			_spotLightVolumeGeo = std::make_shared<RenderMeshComponent>();
+			_spotLightVolumeGeo->SetMesh(spotLightVolumeMesh);
+		}
+
+		auto meshElement = _spotLightVolumeGeo->GetSubRenderComponents()[0]->GetMeshElement();
 
 		std::map<String, String> macros;
 		meshElement->BindMacros(macros);

@@ -66,7 +66,6 @@ namespace ToyGE
 			view->sceneRenderingConfig.bGenVelocityMap = false;
 			view->sceneRenderingConfig.bLPV = false;
 			view->sceneRenderingConfig.bOIT = true;
-			//view->sceneRenderingConfig.bRenderingAtmosphere = false;
 			view->sceneRenderingConfig.bSSR = false;
 			view->sceneRenderingConfig.bTAA = false;
 			view->sceneRenderingConfig.bRenderEnvReflection = false;

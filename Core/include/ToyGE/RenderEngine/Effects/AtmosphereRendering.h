@@ -29,6 +29,8 @@ namespace ToyGE
 
 	DECLARE_SHADER(, ComputeSunRadiancePS, SHADER_PS, "AtmosphereRenderingComputeSunRadiance", "ComputeSunRadiancePS", SM_4);
 
+	DECLARE_SHADER(, RenderHemiPanoramicMapPS, SHADER_PS, "AtmosphereRendering", "RenderHemiPanoramicMapPS", SM_4);
+
 	class Texture;
 	class Camera;
 
@@ -41,7 +43,11 @@ namespace ToyGE
 
 		virtual void Render(const Ptr<RenderView> & view) override;
 
+		void RenderSun(const Ptr<RenderView> & view);
+
 		void RenderCubeMap(const Ptr<Texture> & target);
+
+		void RenderHemiPanoramicMap(const Ptr<Texture> & target);
 
 		void SetSunDirection(const float3 & sunDirection)
 		{
@@ -58,7 +64,7 @@ namespace ToyGE
 
 		void UpdateSunLight(const Ptr<class DirectionalLightComponent> & light);
 
-		void UpdateAmbientMap(const Ptr<class Scene> & scene);
+		void UpdateAmbientAndReflectionMap(const Ptr<class Scene> & scene);
 
 		float3 ComputeSunRadianceAt(const float3 & sunDir, const float3 & sunRadiance, float height);
 
@@ -148,7 +154,7 @@ namespace ToyGE
 			const Ptr<Texture> & attenuationTex,
 			const Ptr<RenderTargetView> & target);
 
-		void RenderSun(
+		void DoRenderSun(
 			const float2 & lightClipPos,
 			const Ptr<RenderView> & view,
 			const Ptr<RenderTargetView> & target,

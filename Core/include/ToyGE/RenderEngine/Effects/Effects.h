@@ -8,7 +8,7 @@
 #include "ToyGE\RenderEngine\Effects\LPV.h"
 #include "ToyGE\RenderEngine\Effects\MotionBlur.h"
 #include "ToyGE\RenderEngine\Effects\PostProcessVolumetricLight.h"
-#include "ToyGE\RenderEngine\Effects\SkyBox.h"
+#include "ToyGE\RenderEngine\Effects\AmbientMap.h"
 #include "ToyGE\RenderEngine\Effects\SSAO.h"
 #include "ToyGE\RenderEngine\Effects\SSR.h"
 #include "ToyGE\RenderEngine\Effects\TweakBarRenderer.h"

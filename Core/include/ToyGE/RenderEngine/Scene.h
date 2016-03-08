@@ -7,6 +7,7 @@
 #include "ToyGE\Math\Math.h"
 #include "ToyGE\RenderEngine\Actor.h"
 #include "ToyGE\RenderEngine\SceneCuller.h"
+#include "ToyGE\RenderEngine\Effects\AmbientMap.h"
 
 namespace ToyGE
 {
@@ -41,10 +42,20 @@ namespace ToyGE
 		CLASS_SET(AmbientColor, float3, _ambientColor);
 		CLASS_GET(AmbientColor, float3, _ambientColor);
 
-		void SetAmbientTexture(const Ptr<class Texture> & _ambientTex);
-		CLASS_GET(AmbientTexture, Ptr<class Texture>, _ambientTex);
+		void SetAmbientMapTexture(const Ptr<class Texture> & ambientMapTex, AmbientMapType type);
+		CLASS_GET(AmbientMap, Ptr<class AmbientMap>, _ambientMap);
 
+		void UpdateAmbientReflectionMap(const Ptr<Texture> & reflectionTex);
 		CLASS_GET(AmbientReflectionMap, Ptr<class ReflectionMap>, _ambientReflectionMap);
+
+		void SetRenderSun(bool bRenderSun)
+		{
+			_bRenderSun = bRenderSun;
+		}
+		bool IsRenderSun() const
+		{
+			return _bRenderSun;
+		}
 
 		void AddReflectionMapCapture(const Ptr<class ReflectionMapCapture> & capture)
 		{
@@ -77,8 +88,9 @@ namespace ToyGE
 		Ptr<class RenderBuffer> _capturesPosRadiusBuffer;
 
 		float3 _ambientColor;
-		Ptr<class Texture> _ambientTex;
+		Ptr<class AmbientMap> _ambientMap;
 		Ptr<class ReflectionMap> _ambientReflectionMap;
+		bool _bRenderSun = false;
 	};
 }
 

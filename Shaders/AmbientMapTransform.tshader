@@ -1,0 +1,30 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+TextureCube cubeMap;
+
+SamplerState inSampler;
+
+float4 CubeMapToPanoramicPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float phi = (vsOut.uv.x - 0.5) * 2.0 * PI;
+    float theta = (vsOut.uv.y) * PI;
+    float3 dir;
+    dir.x = sin(theta) * sin(phi);
+    dir.y = cos(theta);
+    dir.z = sin(theta) * cos(phi);
+    
+    return cubeMap.Sample(inSampler, dir);
+}
+
+float4 CubeMapToHemiPanoramicPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float phi = (vsOut.uv.x - 0.5) * 2.0 * PI;
+    float theta = (vsOut.uv.y) * PI * 0.5;
+    float3 dir;
+    dir.x = sin(theta) * sin(phi);
+    dir.y = cos(theta);
+    dir.z = sin(theta) * cos(phi);
+    
+    return cubeMap.Sample(inSampler, dir);
+}
