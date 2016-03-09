@@ -14,5 +14,7 @@ namespace ToyGE
 		_translucentRendering = std::make_shared<TranslucentRendering>();
 		_envReflectionRenderer = std::make_shared<EnvironmentReflectionRenderer>();
 		_eyeAdaption = std::make_shared<EyeAdaption>();
+		_ppVolumetricLight = std::make_shared<PostProcessVolumetricLight>();
+		_ssao = std::make_shared<SSAO>();
 	}
 }

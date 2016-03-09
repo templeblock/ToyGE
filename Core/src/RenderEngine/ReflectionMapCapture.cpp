@@ -70,6 +70,7 @@ namespace ToyGE
 			view->sceneRenderingConfig.bTAA = false;
 			view->sceneRenderingConfig.bRenderEnvReflection = false;
 			view->sceneRenderingConfig.bRenderAmbient = false;
+			view->sceneRenderingConfig.bRenderPPVolumetricLight = false;
 
 			view->SetViewport(vp);
 

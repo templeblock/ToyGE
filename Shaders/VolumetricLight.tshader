@@ -22,10 +22,11 @@ float dirLightDist;
 float attenuation;
 float scattering;
 float phaseFunctionParam;
+uint frameCount;
 
 float4 targetSize;
 
-#define NUM_SAMPLES 48
+#define NUM_SAMPLES 24
 
 float PhaseFunction_HG(float g, float cosTheta)
 {
@@ -74,8 +75,15 @@ void RenderPointLightVolumePS(
     // uint2 ditherPos = uint2(screenPos) % 4;
     // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
     // float ditherOffset = dither.Load(ditherIndex);
-    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
-    startPos = startPos + step * (1 + ditherOffset);
+    
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    
+    float ditherOffset = (InterleavedGradientNoise(screenPos + frameRandom * 171, 0.5) + 0.5); 
+    startPos = startPos + step * ( ditherOffset * (NUM_SAMPLES) * 0.25 );
+    
+    // float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
+    // startPos = startPos + step * (1 + ditherOffset);
     step = (endPos - startPos) / NUM_SAMPLES;
     
     // Ray Matching
@@ -250,8 +258,13 @@ void RenderSpotLightVolumePS(
     // uint2 ditherPos = uint2(screenPos) % 4;
     // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
     // float ditherOffset = dither.Load(ditherIndex);
-    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
-    startPos = startPos + step * (1 + ditherOffset);
+    
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    
+    float ditherOffset = (InterleavedGradientNoise(screenPos + frameRandom * 171, 0.5) + 0.5); 
+    startPos = startPos + step * ( ditherOffset * (NUM_SAMPLES) * 0.25 );
+    
     step = (endPos - startPos) / NUM_SAMPLES;
     
     // Ray Matching
@@ -311,8 +324,15 @@ void RenderDirectionalLightVolumePS(
     // uint2 ditherPos = uint2(screenPos) % 4;
     // int ditherIndex = (int)ditherPos.y * 4 + (int)ditherPos.x;  
     // float ditherOffset = dither.Load(ditherIndex);
-    float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
-    startPos = startPos + step * (1 + ditherOffset);
+    
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    
+    float ditherOffset = (InterleavedGradientNoise(screenPos + frameRandom * 171, 0.5) + 0.5); 
+    startPos = startPos + step * ( ditherOffset * (NUM_SAMPLES) * 0.25 );
+    
+    // float ditherOffset = (InterleavedGradientNoise(screenPos, 0.5) + 0.5); 
+    // startPos = startPos + step * (1 + ditherOffset);
     step = (endPos - startPos) / NUM_SAMPLES;
     
     //Ray Matching

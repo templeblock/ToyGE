@@ -13,6 +13,7 @@ float2 lightPosUV;
 float density;
 float intensity;
 float decay;
+uint frameCount;
 
 float4 PPVolumeSetupPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
@@ -25,14 +26,29 @@ float4 PPVolumeSetupPS(DrawQuadVSOut vsOut) : SV_TARGET
     return color;
 }
 
-#define NUM_SAMPLES 8
+#define NUM_SAMPLES 16
+
+uint MortonCode( uint x )
+{
+	// x = (x ^ (x <<  8)) & 0x00ff00ff;
+	// x = (x ^ (x <<  4)) & 0x0f0f0f0f;
+	x = (x ^ (x <<  2)) & 0x33333333;
+	x = (x ^ (x <<  1)) & 0x55555555;
+	return x;
+}
+
+uint ReverseUIntBits( uint bits )
+{
+	// bits = ( bits << 16) | ( bits >> 16);
+	// bits = ( (bits & 0x00ff00ff) << 8 ) | ( (bits & 0xff00ff00) >> 8 );
+	// bits = ( (bits & 0x0f0f0f0f) << 4 ) | ( (bits & 0xf0f0f0f0) >> 4 );
+	bits = ( (bits & 0x33333333) << 2 ) | ( (bits & 0xcccccccc) >> 2 );
+	bits = ( (bits & 0x55555555) << 1 ) | ( (bits & 0xaaaaaaaa) >> 1 );
+	return bits;
+}
   
 float4 RadialBlurPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
-  //float density = 0.8f;
-  //float weight = 0.7f;
-  //float decay = 0.9f;
-  
     float2 uvCenter = vsOut.uv;
     
     float centerToLightUVLen = length(uvCenter - lightPosUV);
@@ -41,10 +57,25 @@ float4 RadialBlurPS(DrawQuadVSOut vsOut) : SV_TARGET
     float stepLen = centerToLightUVLen / NUM_SAMPLES;
     // float stepDecay = (1.0 - decay) / NUM_SAMPLES;
     
-    float dither = InterleavedGradientNoise(vsOut.pos.xy, 0.5f);
-    dither = dither + 0.5f;
+    // uint frameRandom = ((uint)frameCount % 8) * 1551;
     
-    float2 sampleUV = uvCenter + dither * uvStep;
+    // uint morton = MortonCode( uint(vsOut.pos.x) & 4 ) | ( MortonCode( uint(vsOut.pos.y) & 4 ) * 2 );
+    // uint screenPosRandom = ReverseUIntBits( morton );
+    // uint2 screenPosRandom2 = ScrambleTEA( uint2( vsOut.pos.xy ) ^ frameRandom, 3 );
+    
+    //  uint offset = ( (screenPosRandom2.x + screenPosRandom2.y) ^ frameRandom ) & 15;
+    //     float stepOffset = offset / 15.0;
+    //     stepOffset -= 0.5;
+    
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    float dither = InterleavedGradientNoise(vsOut.pos.xy + frameRandom * 171, 0.5f);
+    //dither = dither + frameRandom - 0.5;
+    uvCenter = uvCenter + dither * uvStep;
+    //uvStep = (lightPosUV - uvCenter) * density / NUM_SAMPLES;
+    
+    float2 sampleUV = uvCenter;
+    
     float sampleWeight = 1.0f;
     // float sampleDecay = decay;
     

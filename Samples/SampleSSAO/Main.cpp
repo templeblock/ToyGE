@@ -5,7 +5,7 @@ using namespace ToyGE;
 class SampleSSAO : public SampleCommon
 {
 public:
-	Ptr<SSAO> _ssao;
+	//Ptr<SSAO> _ssao;
 	bool _enableSSAO;
 	float _aoRadius;
 	float _aoPower;
@@ -31,11 +31,11 @@ public:
 		_renderView->sceneRenderingConfig.bSSR = false;
 
 		auto pp = std::make_shared<PostProcessing>();
-		_ssao = std::make_shared<SSAO>();
-		pp->AddRender(_ssao);
+		/*_ssao = std::make_shared<SSAO>();
+		pp->AddRender(_ssao);*/
 		pp->AddRender(std::make_shared<ToneMapping>());
 		_paramRender = std::make_shared<SharedParamRender>();
-		_paramRender->SetRenderParam("AmbientOcclusion");
+		_paramRender->SetRenderParam("AO");
 		_paramRender->SetRenderParamColorWrite(COLOR_WRITE_R);
 		pp->AddRender(_paramRender);
 
@@ -108,11 +108,12 @@ public:
 	{
 		SampleCommon::Update(elapsedTime);
 
-		_ssao->SetEnable(_enableSSAO);
+		//Global->SetEnable(_enableSSAO);
+		_renderView->sceneRenderingConfig.bRenderAO = _enableSSAO;
 
-		_ssao->SetAORadius(_aoRadius);
-		_ssao->SetAOPower(_aoPower);
-		_ssao->SetAOIntensity(_aoIntensity);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetSSAORenderer()->SetAORadius(_aoRadius);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetSSAORenderer()->SetAOPower(_aoPower);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetSSAORenderer()->SetAOIntensity(_aoIntensity);
 
 		if (_aoOnly)
 		{

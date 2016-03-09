@@ -123,6 +123,13 @@ namespace ToyGE
 				sceneLinearClipDepth->GetRenderTargetView(0, 0, 1));
 		}
 
+		{
+			if (view->sceneRenderingConfig.bRenderAO)
+			{
+				_ssao->Render(view);
+			}
+		}
+
 		// Lighting
 		RenderLighting(view);
 
@@ -211,6 +218,14 @@ namespace ToyGE
 				rc->SetBlendState(nullptr);
 				rc->SetDepthStencilState(nullptr);
 
+			}
+		}
+
+		// PPVolumetric
+		{
+			if (view->sceneRenderingConfig.bRenderPPVolumetricLight)
+			{
+				_ppVolumetricLight->Render(view);
 			}
 		}
 
@@ -472,6 +487,8 @@ namespace ToyGE
 			light->BindShaderParams(lightingPS, true, view);
 			view->BindShaderParams(lightingPS);
 
+			lightingPS->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
+
 			lightingPS->SetSRV("gbuffer0", gbuffer0->GetShaderResourceView(0, 1, 0, 1));
 			lightingPS->SetSRV("gbuffer1", gbuffer1->GetShaderResourceView(0, 1, 0, 1));
 			lightingPS->SetSRV("gbuffer2", gbuffer2->GetShaderResourceView(0, 1, 0, 1));
@@ -551,14 +568,21 @@ namespace ToyGE
 		auto lighting1 = view->GetViewRenderContext()->GetSharedTexture("Lighting1");
 		auto shading = view->GetViewRenderContext()->GetSharedTexture("Shading");
 		auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");
+		auto aoTex = view->GetViewRenderContext()->GetSharedTexture("AO");
 
 		rc->ClearRenderTarget(shading->GetRenderTargetView(0, 0, 1), 0.0f);
 
-		auto shadingPS = Shader::FindOrCreate<DeferredRenderingShadingPS>();
+		std::map<String, String> macros;
+		if (aoTex)
+			macros["WITH_AO"] = "";
+
+		auto shadingPS = Shader::FindOrCreate<DeferredRenderingShadingPS>(macros);
 
 		shadingPS->SetSRV("gbuffer0", gbuffer0->GetShaderResourceView(0, 1, 0, 1));
 		shadingPS->SetSRV("lighting0", lighting0->GetShaderResourceView(0, 1, 0, 1));
 		shadingPS->SetSRV("lighting1", lighting1->GetShaderResourceView(0, 1, 0, 1));
+		if(aoTex)
+			shadingPS->SetSRV("aoTex", aoTex->GetShaderResourceView(0, 1, 0, 1));
 		shadingPS->SetSampler("pointSampler", SamplerTemplate<FILTER_MIN_MAG_MIP_POINT>::Get());
 		shadingPS->SetScalar("ambientColor", Global::GetScene()->GetAmbientColor());
 

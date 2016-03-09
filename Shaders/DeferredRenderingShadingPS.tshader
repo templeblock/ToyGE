@@ -5,6 +5,7 @@
 Texture2D gbuffer0;
 Texture2D<float3> lighting0;
 Texture2D<float3> lighting1;
+Texture2D aoTex;
 
 SamplerState pointSampler;
 
@@ -17,13 +18,20 @@ float4 DeferredRenderingShadingPS(DrawQuadVSOut vsOut) : SV_TARGET
 {
   GBuffer gbuf;
   
+  gbuf.gbuf0  = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
   float3 light0 = lighting0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
   float3 light1 = lighting1.SampleLevel(pointSampler, vsOut.uv, 0.0f);
-  gbuf.gbuf0  = gbuffer0.SampleLevel(pointSampler, vsOut.uv, 0.0f);
+  
+  #ifdef WITH_AO
+  float ao  = aoTex.SampleLevel(pointSampler, vsOut.uv, 0.0f).x;
+  #else
+  float ao = 1.0;
+  #endif
   
   Material mat = GBufferToMaterial(gbuf);
     
-  float3 color = mat.diffuseColor * (ambientColor + light0) + light1;
+  float3 color = mat.diffuseColor * (ambientColor * ao + light0) + light1;
+  //color *= ao;
   
   return float4(color, 1.0);
 }

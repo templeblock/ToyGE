@@ -13,6 +13,8 @@ Texture2D<float> sceneLinearClipDepth;
 
 SamplerState pointSampler;
 
+uint frameCount;
+
 void DeferredRenderingLightingPS(
     DrawQuadVSOut vsOut,
     out float3 lighting0 : SV_TARGET0,
@@ -39,7 +41,9 @@ void DeferredRenderingLightingPS(
     float3 irradiance = GetIrradiance(worldPos, n);
     
 #if ENABLE_SHADOW == 1
-    float shadowNoise = InterleavedGradientNoise(vsOut.pos.xy, 0.5) + 0.5;
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    float shadowNoise = InterleavedGradientNoise(vsOut.pos.xy + frameRandom * 171, 0.5) + 0.5;
     float shadow = ComputeShadow(worldPos, viewPos.z, shadowNoise);
     
     shadow *= saturate(dot(n, l) * 6 - 0.2);

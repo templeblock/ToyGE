@@ -15,6 +15,7 @@ namespace ToyGE
 		auto ssrResult = view->GetViewRenderContext()->GetSharedTexture("SSR");
 		auto gbuffer0 = view->GetViewRenderContext()->GetSharedTexture("GBuffer0");
 		auto gbuffer1 = view->GetViewRenderContext()->GetSharedTexture("GBuffer1");
+		auto aoTex = view->GetViewRenderContext()->GetSharedTexture("AO");
 
 		auto newSceneColorRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneColor->GetDesc() });
 		auto newSceneColor = newSceneColorRef->Get()->Cast<Texture>();
@@ -22,6 +23,8 @@ namespace ToyGE
 		std::map<String, String> macros;
 		macros["ADD_SSR"] = std::to_string((int)!!ssrResult);
 		macros["ADD_AMBIENTMAP"] = std::to_string((int)view->sceneRenderingConfig.bReflectAmbientMap);
+		macros["ADD_AO"] = std::to_string((int)!!aoTex);
+
 
 		auto cs = Shader::FindOrCreate<EnvironmentReflectionRenderingCS>(macros);
 		view->BindShaderParams(cs);
@@ -46,6 +49,7 @@ namespace ToyGE
 		cs->SetSRV("gbuffer0", gbuffer0->GetShaderResourceView());
 		cs->SetSRV("gbuffer1", gbuffer1->GetShaderResourceView());
 		cs->SetSRV("sceneColor", sceneColor->GetShaderResourceView());
+		cs->SetSRV("aoTex", aoTex->GetShaderResourceView());
 		cs->SetUAV("sceneColorRW", newSceneColor->GetUnorderedAccessView(0, 0, 1));
 
 		cs->SetSampler("linearSampler", SamplerTemplate<>::Get());

@@ -26,7 +26,16 @@ namespace ToyGE
 	{
 		auto posW = this->GetPos();
 
-		auto posH = transform_coord(posW, camera->GetViewProjMatrix());
+		auto posV = transform_coord(posW, camera->GetViewMatrix());
+		float4 posH = 0.0f;
+		if (posV.z() == 0.0f)
+		{
+			posH = posV;
+		}
+		else
+		{
+			posH = transform_coord(posV, camera->GetProjMatrix());
+		}
 
 		return float2(posH.x(), posH.y());
 	}
@@ -120,8 +129,9 @@ namespace ToyGE
 	SpotLightComponent::SpotLightComponent()
 		: LightComponent(LIGHT_SPOT)
 	{
-		_shadowTechnique = std::make_shared<SpotLightPCFShadow>();
+		_shadowTechnique = std::make_shared<SpotLightEVSM2Shadow>();
 		_shadowTechnique->SetShadowMapSize(512);
+		//_shadowTechnique->Cast<SpotLightPCFShadow>()->SetFilterSize(1.5f);
 	}
 
 	float SpotLightComponent::MaxAngle() const

@@ -29,6 +29,7 @@ float invViewRatio;
 float aoPower;
 float aoIntensity;
 float aoRadius; 
+uint frameCount;
 
 // float GetDepthDiffWeight(float d0, float d1)
 // {
@@ -199,7 +200,9 @@ float RenderAOPS(DrawQuadVSOut vsOut) : SV_TARGET
     //aoRadiusH.y *= invViewRatio;
     float2 aoRadiusUV = aoRadiusH * 0.5;
     
-    float rotateAngle = PI * InterleavedGradientNoise(vsOut.pos.xy, 1.0);
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    float rotateAngle = PI * InterleavedGradientNoise(vsOut.pos.xy + frameRandom * 171, 1.0);
     
     aoSum = 0.0;
     float weightSum = 0.0;
@@ -225,12 +228,14 @@ float RenderAOPS(DrawQuadVSOut vsOut) : SV_TARGET
         float ao;
         float weight;
         
-        ao = ComputeSampleAO(sampleViewPos0, centerViewPos, centerViewNormal, sampleUV0);
-        aoSum += ao;
+        float ao0 = ComputeSampleAO(sampleViewPos0, centerViewPos, centerViewNormal, sampleUV0);
+        aoSum += ao0;
         //weightSum += weight;
         
-        ao = ComputeSampleAO(sampleViewPos1, centerViewPos, centerViewNormal, sampleUV1);
-        aoSum += ao;
+        float ao1 = ComputeSampleAO(sampleViewPos1, centerViewPos, centerViewNormal, sampleUV1);
+        aoSum += ao1;
+        
+        //aoSum += max(ao0, ao1);
         //weightSum += weight;
     }
     
@@ -241,7 +246,7 @@ float RenderAOPS(DrawQuadVSOut vsOut) : SV_TARGET
     //     aoSum = saturate( aoSum / weightSum );
     // */
     
-    aoSum /= AO_NUM_SAMPLES;
+    aoSum /= AO_NUM_SAMPLES * 2;
     
     aoSum = saturate(1.0 - aoSum);
 #endif

@@ -41,6 +41,8 @@ float ComputePCFShadow(
     
 #if POISSON_NUM_SAMPLES > 1
 
+    //filterSize *= 1.0 + shadowNoise;
+    
     shadowNoise *= 2 * PI;
     float2 sinCos = float2(sin(shadowNoise), cos(shadowNoise));
     float2x2 rotation = float2x2(

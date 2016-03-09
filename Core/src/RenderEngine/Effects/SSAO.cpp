@@ -9,7 +9,7 @@ namespace ToyGE
 	SSAO::SSAO()
 		: _aoRadius(0.1f),
 		_aoPower(20.0f),
-		_aoIntensity(0.5f)
+		_aoIntensity(1.0f)
 	{
 	}
 
@@ -68,11 +68,11 @@ namespace ToyGE
 
 		CrossBilateralBlur(view, aoTexs[0]->Get()->Cast<Texture>(), sceneLinearDepthTex->Get()->Cast<Texture>());
 
-		auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
+		//auto sceneTex = view->GetViewRenderContext()->GetSharedTexture("RenderResult");
 
-		CombineAO(aoTexs[0]->Get()->Cast<Texture>(), sceneTex);
+		//CombineAO(aoTexs[0]->Get()->Cast<Texture>(), sceneTex);
 
-		view->GetViewRenderContext()->SetSharedResource("AmbientOcclusion", aoTexs[0]);
+		view->GetViewRenderContext()->SetSharedResource("AO", aoTexs[0]);
 	}
 
 	void SSAO::DownSampleNormalDepth(
@@ -141,6 +141,7 @@ namespace ToyGE
 		ps->SetScalar("aoPower", _aoPower);
 		ps->SetScalar("aoIntensity", _aoIntensity);
 		ps->SetScalar("aoRadius", aoRadius);
+		ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
 
 		ps->SetSRV("depthTex", depthTex->GetShaderResourceView());
 		ps->SetSRV("normalTex", normalTex->GetShaderResourceView());

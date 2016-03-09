@@ -19,6 +19,7 @@ Texture2D ssrResult;
 Texture2D gbuffer0;
 Texture2D gbuffer1;
 Texture2D sceneColor;
+Texture2D aoTex;
 RWTexture2D<float4> sceneColorRW;
 
 SamplerState linearSampler;
@@ -216,6 +217,12 @@ void EnvironmentReflectionRenderingCS(
             outColor.xyz += ssr.xyz;
             #endif
         }
+        
+        #if ADD_AO
+        float ao = aoTex.Load(dtID).x;
+        outColor.xyz *= ao;
+        #endif
+        
         outColor.xyz += sceneColor.Load(dtID).xyz;
         
         sceneColorRW[dtID.xy] = outColor;

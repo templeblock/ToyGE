@@ -6,7 +6,7 @@ class SampleAtmosphere : public SampleCommon
 {
 public:
 	Ptr<DirectionalLightComponent> _light;
-	Ptr<PostProcessVolumetricLight> _ppvl;
+	//Ptr<PostProcessVolumetricLight> _ppvl;
 	float3 _sunRadiance;
 	float3 _sunDir;
 	float _ppvlDensity;
@@ -29,11 +29,12 @@ public:
 
 		//_renderView->sceneRenderingConfig.bRenderingAtmosphere = true;
 		_renderView->sceneRenderingConfig.bSSR = false;
+		_renderView->sceneRenderingConfig.bRenderPPVolumetricLight = true;
 		auto pp = std::make_shared<PostProcessing>();
 
-		_ppvl = std::make_shared<PostProcessVolumetricLight>();
+		/*_ppvl = std::make_shared<PostProcessVolumetricLight>();
 		_ppvl->SetEnable(false);
-		pp->AddRender(_ppvl);
+		pp->AddRender(_ppvl);*/
 		pp->AddRender(std::make_shared<ToneMapping>());
 		//pp->AddRender(std::make_shared<FXAA>());
 		pp->AddRender(std::make_shared<TweakBarRenderer>());
@@ -55,7 +56,8 @@ public:
 		_light = dirLight->GetLight<DirectionalLightComponent>();
 
 		//Global::GetRenderEngine()->GetSceneRenderer()->SetSunLight(dirLight->GetLight<DirectionalLightComponent>());
-		_ppvl->SetLight(_light);
+		//_ppvl->SetLight(_light);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetPPVolumetricLightingRenderer()->SetLight(_light);
 
 		//Add Objs
 		{
@@ -97,7 +99,7 @@ public:
 
 		TwAddVarRW(_twBar, "SunDirection", TW_TYPE_DIR3F, &_sunDir, nullptr);
 
-		/*TwAddVarRW(_twBar, "Density", TW_TYPE_FLOAT, &_ppvlDensity, nullptr);
+		TwAddVarRW(_twBar, "Density", TW_TYPE_FLOAT, &_ppvlDensity, nullptr);
 		TwSetParam(_twBar, "Density", "group", TW_PARAM_CSTRING, 1, "PPVolumetricLight");
 		TwSetParam(_twBar, "Density", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "Density", "max", TW_PARAM_FLOAT, 1, &minMax.y());
@@ -112,7 +114,7 @@ public:
 		TwSetParam(_twBar, "Decay", "group", TW_PARAM_CSTRING, 1, "PPVolumetricLight");
 		TwSetParam(_twBar, "Decay", "min", TW_PARAM_FLOAT, 1, &minMax.x());
 		TwSetParam(_twBar, "Decay", "max", TW_PARAM_FLOAT, 1, &minMax.y());
-		TwSetParam(_twBar, "Decay", "step", TW_PARAM_FLOAT, 1, &step);*/
+		TwSetParam(_twBar, "Decay", "step", TW_PARAM_FLOAT, 1, &step);
 	}
 
 	void Update(float elapsedTime) override
@@ -135,9 +137,9 @@ public:
 			preSunDir = _sunDir;
 		}
 
-		_ppvl->SetDensity(_ppvlDensity);
-		_ppvl->SetIntensity(_ppvlIntensity);
-		_ppvl->SetDecay(_ppvlDecay);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetPPVolumetricLightingRenderer()->SetDensity(_ppvlDensity);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetPPVolumetricLightingRenderer()->SetIntensity(_ppvlIntensity);
+		Global::GetRenderEngine()->GetSceneRenderer()->GetPPVolumetricLightingRenderer()->SetDecay(_ppvlDecay);
 
 		//auto texDesc = Global::GetScene()->GetAmbientMap()->->GetDesc();
 		//texDesc.width = 2048;

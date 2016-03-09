@@ -20,6 +20,8 @@ namespace ToyGE
 		bool bRenderEnvReflection = true;
 		bool bReflectAmbientMap = true;
 		bool bRenderAmbient = true;
+		bool bRenderPPVolumetricLight = false;
+		bool bRenderAO = true;
 
 		bool bSSR = true;
 		float ssrMaxRoughness = 0.8f;
@@ -50,6 +52,16 @@ namespace ToyGE
 			return _volumetricLight;
 		}
 
+		Ptr<class PostProcessVolumetricLight> GetPPVolumetricLightingRenderer() const
+		{
+			return _ppVolumetricLight;
+		}
+
+		Ptr<class SSAO> GetSSAORenderer() const
+		{
+			return _ssao;
+		}
+
 	protected:
 		Ptr<class AtmosphereRendering> _atmosphereRendering;
 		Ptr<class LPV> _lpv;
@@ -58,6 +70,8 @@ namespace ToyGE
 		Ptr<class TranslucentRendering> _translucentRendering;
 		Ptr<class EnvironmentReflectionRenderer> _envReflectionRenderer;
 		Ptr<class EyeAdaption> _eyeAdaption;
+		Ptr<class PostProcessVolumetricLight> _ppVolumetricLight;
+		Ptr<class SSAO> _ssao;
 	};
 }
 

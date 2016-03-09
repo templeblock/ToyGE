@@ -33,7 +33,10 @@ namespace ToyGE
 
 	PooledTextureRef PostProcessVolumetricLight::Setup(const Ptr<Texture> & sceneTex, const Ptr<Texture> & linearDepthTex)
 	{
-		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, sceneTex->GetDesc() });
+		auto texDesc = sceneTex->GetDesc();
+		texDesc.width /= 2;
+		texDesc.height /= 2;
+		auto resultTexRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 		auto resultTex = resultTexRef->Get()->Cast<Texture>();
 
 		auto ps = Shader::FindOrCreate<PPVolumeSetupPS>();
@@ -61,6 +64,7 @@ namespace ToyGE
 		ps->SetScalar("density", _density);
 		ps->SetScalar("intensity", _intensity);
 		ps->SetScalar("decay", _decay);
+		ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
 
 		ps->SetSRV("sceneTex", setupTex->GetShaderResourceView());
 
@@ -82,7 +86,7 @@ namespace ToyGE
 		auto ps = Shader::FindOrCreate<BlurVolumetricLightPS>();
 
 		ps->SetScalar("lightPosUV", lightPosUV);
-		ps->SetScalar("texSize", target->Cast<TextureRenderTargetView>()->GetResource()->Cast<Texture>()->GetTexSize());
+		ps->SetScalar("texSize", volumetricLightTex->GetTexSize());
 
 		ps->SetSRV("volumetricLightTex", volumetricLightTex->GetShaderResourceView());
 		ps->SetSRV("linearDepthTex", linearDepthTex->GetShaderResourceView());

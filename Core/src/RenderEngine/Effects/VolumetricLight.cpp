@@ -174,6 +174,7 @@ namespace ToyGE
 		ps->SetScalar("scattering", _scattering);
 		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
 		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
+		ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
 
 		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
@@ -274,6 +275,7 @@ namespace ToyGE
 		ps->SetScalar("scattering", _scattering);
 		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
 		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
+		ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
 
 		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
@@ -332,6 +334,7 @@ namespace ToyGE
 		ps->SetScalar("scattering", _scattering);
 		ps->SetScalar("phaseFunctionParam", _phaseFunctionParam);
 		ps->SetScalar("targetSize", lightVolumeTex->GetTexSize());
+		ps->SetScalar("frameCount", (uint32_t)Global::GetInfo()->frameCount);
 
 		ps->SetSRV("sceneLinearClipDepth", linearDepthTex->GetShaderResourceView());
 
