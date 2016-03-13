@@ -9,6 +9,7 @@
 namespace ToyGE
 {
 	class ActorComponent;
+	class Scene;
 
 	class TOYGE_CORE_API Actor : public StaticCastable
 	{
@@ -17,7 +18,18 @@ namespace ToyGE
 
 		virtual ~Actor() = default;
 
+		virtual void Init();
+
 		virtual void Tick(float elapsedTime);
+
+		void SetScene(const Ptr<Scene> & scene)
+		{
+			_scene = scene;
+		}
+		Ptr<Scene> GetScene() const
+		{
+			return _scene.lock();
+		}
 
 		void AddComponent(const Ptr<ActorComponent> & component);
 
@@ -59,6 +71,7 @@ namespace ToyGE
 	protected:
 		Ptr<class TransformComponent> _rootTransformComponent;
 		std::vector<Ptr<ActorComponent>> _components;
+		std::weak_ptr<Scene> _scene;
 	};
 }
 

@@ -7,6 +7,7 @@
 #include "ToyGE\RenderEngine\ReflectionMapCapture.h"
 #include "ToyGE\RenderEngine\RenderBuffer.h"
 #include "ToyGE\Kernel\Assertion.h"
+#include "ToyGE\RenderEngine\Actor.h"
 
 namespace ToyGE
 {
@@ -18,11 +19,23 @@ namespace ToyGE
 
 	}
 
-	
+	Scene::~Scene()
+	{
+
+	}
+
+	void Scene::Tick(float elapsedTime)
+	{
+		for (auto & actor : _actorsMap)
+		{
+			actor.second->Tick(elapsedTime);
+		}
+	}
 
 	int32_t Scene::AddActor(const Ptr<Actor> & actor)
 	{
 		_actorsMap[actorID] = actor;
+		actor->SetScene(shared_from_this());
 		return actorID++;
 	}
 

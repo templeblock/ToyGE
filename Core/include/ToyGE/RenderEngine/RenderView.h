@@ -103,6 +103,7 @@ namespace ToyGE
 	struct TOYGE_CORE_API ViewRenderContext
 	{
 		Ptr<PrimitiveDrawList> primitiveDrawList;
+		std::vector< Ptr<class RenderComponent> > specialRenders;
 		std::vector<Ptr<LightComponent>> lights;
 		std::map<String, PooledRenderResourceReference<RenderResource>> sharedResources;
 

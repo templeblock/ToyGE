@@ -263,7 +263,7 @@ void FFTRadix8_Final(
 	  // Math
 	  FFT_forward_8(D);
     
-#ifdef FFT_INVERSE
+#if (defined FFT_INVERSE) && (defined FFT_INVERSE_SCALE)
     
     #ifdef FFT_2D
     float dataLen = dot(dataSize.xy, dir);

@@ -1,0 +1,91 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+
+Texture2D h0Tex;
+Texture2D omegaTex;
+
+float4 texSize;
+float time;
+
+void UpdateDisplacementMapPS(
+    DrawQuadVSOut vsOut,
+    out float2 ht : SV_TARGET0,
+    out float2 dtx : SV_TARGET1,
+    out float2 dtz : SV_TARGET2)
+{
+    float2 h0 = h0Tex.Load(int3(vsOut.pos.xy, 0)).xy;
+    float2 h0_i = h0Tex.Load(int3(texSize.xy - (int2)vsOut.pos.xy, 0)).xy;
+    float omega = omegaTex.Load(int3(vsOut.pos.xy, 0)).x;
+    
+    float wt = omega * time;
+    float cos_wt = cos(wt);
+    float sin_wt = sin(wt);
+    
+    ht.x = cos_wt * (h0.x + h0_i.x) + sin_wt * (-h0.y - h0_i.y);
+    ht.y = cos_wt * (h0.y - h0_i.y) + sin_wt * ( h0.x - h0_i.x);
+    
+    float2 k = vsOut.pos.xy - 0.5 - texSize.xy * 0.5;
+    float len_k = length(k);
+    if(len_k > 1e-5)
+        k /= len_k;
+    
+    dtx = float2(ht.y, -ht.x) * k;
+    dtz = float2(ht.y, -ht.x) * k;
+}
+
+Texture2D dxTex;
+Texture2D dyTex;
+Texture2D dzTex;
+
+void MergeDisplacementMapPS(
+    DrawQuadVSOut vsOut,
+    out float3 d : SV_TARGET0)
+{
+    int sign_correction = ( ( (int)vsOut.pos.x + (int)vsOut.pos.y ) & 1 ) ? -1 : 1;
+    
+    float dx = dxTex.Load(int3(vsOut.pos.xy, 0)).x;
+    float dy = dyTex.Load(int3(vsOut.pos.xy, 0)).x;
+    float dz = dzTex.Load(int3(vsOut.pos.xy, 0)).x;
+    
+    d = float3(dx, dy, dz) * sign_correction;
+}
+
+Texture2D displacementMap;
+
+SamplerState pointSampler;
+float gridLen;
+float gridSize;
+
+void GenNormalFoldingPS(
+    DrawQuadVSOut vsOut,
+    out float4 normalFolding : SV_TARGET0
+)
+{
+    float3 d_l = displacementMap.SampleLevel(pointSampler, vsOut.uv + float2(-1.0,  0.0) * texSize.zw, 0).xyz;
+    float3 d_r = displacementMap.SampleLevel(pointSampler, vsOut.uv + float2( 1.0,  0.0) * texSize.zw, 0).xyz;
+    float3 d_u = displacementMap.SampleLevel(pointSampler, vsOut.uv + float2( 0.0, -1.0) * texSize.zw, 0).xyz;
+    float3 d_d = displacementMap.SampleLevel(pointSampler, vsOut.uv + float2( 0.0,  1.0) * texSize.zw, 0).xyz;
+    
+    float dhdx = (d_r.y - d_l.y) / gridSize;
+    
+    float dhdy = (d_d.y - d_u.y) / gridSize;
+    
+    float3 s = float3(1.0f, dhdx, 0.0f);
+    float3 t = float3(0.0f, dhdy, 1.0f);
+    
+    float3 n = cross(t, s);
+    n = normalize(n);
+    
+    //float2 gradient = float2(d_r.y - d_l.y, d_d.y - d_u.y);
+    
+    // Calculate Jacobian corelation from the partial differential of height field
+	float2 Dx = (d_r.xz - d_l.xz) * gridLen;
+	float2 Dy = (d_d.xy - d_u.xy) * gridLen;
+	float J = (1.0f + Dx.x) * (1.0f + Dy.y) - Dx.y * Dy.x;
+
+	// Practical subsurface scale calculation: max[0, (1 - J) + Amplitude * (2 * Coverage - 1)].
+	float fold = max(1.0f - J, 0);
+
+	// Output
+	normalFolding = float4(n, fold);
+}

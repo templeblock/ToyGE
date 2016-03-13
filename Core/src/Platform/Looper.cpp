@@ -3,6 +3,7 @@
 #include "ToyGE\RenderEngine\RenderEngine.h"
 #include "ToyGE\RenderEngine\RenderResource.h"
 #include "ToyGE\RenderEngine\RenderResourcePool.h"
+#include "ToyGE\RenderEngine\Scene.h"
 
 namespace ToyGE
 {
@@ -34,6 +35,9 @@ namespace ToyGE
 
 		Global::GetInfo()->elapsedTime = elapsedTime;
 		++Global::GetInfo()->frameCount;
+
+		// Update scene
+		Global::GetScene()->Tick(elapsedTime);
 
 		// Update App
 		Global::GetApp()->Update(elapsedTime);

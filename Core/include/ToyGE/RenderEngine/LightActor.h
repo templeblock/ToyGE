@@ -17,6 +17,8 @@ namespace ToyGE
 			auto lightActor = std::make_shared<LightActor>();
 			lightActor->AddComponent(lightCom);
 			scene->AddActor(lightActor);
+
+			lightActor->Init();
 			lightActor->ActivateAllComponents();
 			return lightActor;
 		}

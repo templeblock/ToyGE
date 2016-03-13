@@ -19,6 +19,8 @@ namespace ToyGE
 
 		virtual ~ActorComponent() = default;
 
+		virtual void Init() {};
+
 		virtual void Tick(float elapsedTime) {};
 
 		void SetOwner(const Ptr<Actor> & owner)

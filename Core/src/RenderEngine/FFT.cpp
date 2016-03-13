@@ -16,7 +16,8 @@ namespace ToyGE
 		const Ptr<Texture> & dst,
 		int32_t dstMipLevel,
 		int32_t dstArrayOffset,
-		bool bInverse)
+		bool bInverse,
+		bool bIFFTScale)
 	{
 		auto mipSize = src->GetMipSize(srcMipLevel);
 
@@ -37,13 +38,13 @@ namespace ToyGE
 		Ptr<Texture> bfSrc;
 		int32_t bfSrcMipLevel = 0;
 		int32_t bfSrcArrayOffset = 0;
-		if (!bInverse)
+		/*if (!bInverse)
 		{
 			bfSrcRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
 			bfSrc = bfSrcRef->Get()->Cast<Texture>();
 			FFT::FFTSetup(src, srcMipLevel, srcArrayOffset, bfSrc, 0, 0);
 		}
-		else
+		else*/
 		{
 			bfSrc = src;
 			bfSrcMipLevel = srcMipLevel;
@@ -71,7 +72,11 @@ namespace ToyGE
 
 		macros["FFT_2D"] = "";
 		if (bInverse)
+		{
 			macros["FFT_INVERSE"] = "";
+			if (bIFFTScale)
+				macros["FFT_INVERSE_SCALE"] = "";
+		}
 		static int fftGroupSize = 64;
 		macros["FFT_GROUP_SIZE"] = std::to_string(fftGroupSize);
 
@@ -109,7 +114,7 @@ namespace ToyGE
 			}
 			rc->ResetShader(SHADER_CS);
 
-			if (bInverse)
+			if (bInverse && bIFFTScale)
 			{
 				float ifftScale = 1.0f / (float)texDesc.width;
 				ifftScalePS->SetScalar("ifftScale", ifftScale);
@@ -150,7 +155,7 @@ namespace ToyGE
 			}
 			rc->ResetShader(SHADER_CS);
 
-			if (bInverse)
+			if (bInverse && bIFFTScale)
 			{
 				float ifftScale = 1.0f / texDesc.height;
 				ifftScalePS->SetScalar("ifftScale", ifftScale);
@@ -180,7 +185,8 @@ namespace ToyGE
 		const Ptr<Texture> & dst,
 		int32_t dstMipLevel,
 		int32_t dstArrayOffset,
-		bool bInverse)
+		bool bInverse,
+		bool bIFFTScale)
 	{
 		auto mipSize = src->GetMipSize(srcMipLevel);
 
@@ -201,13 +207,13 @@ namespace ToyGE
 		Ptr<Texture> bfSrc;
 		int32_t bfSrcMipLevel = 0;
 		int32_t bfSrcArrayOffset = 0;
-		if (!bInverse)
-		{
-			bfSrcRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
-			bfSrc = bfSrcRef->Get()->Cast<Texture>();
-			FFT::FFTSetup(src, srcMipLevel, srcArrayOffset, bfSrc, 0, 0);
-		}
-		else
+		//if (!bInverse)
+		//{
+		//	bfSrcRef = TexturePool::Instance().FindFree({ TEXTURE_2D, texDesc });
+		//	bfSrc = bfSrcRef->Get()->Cast<Texture>();
+		//	FFT::FFTSetup(src, srcMipLevel, srcArrayOffset, bfSrc, 0, 0);
+		//}
+		//else
 		{
 			bfSrc = src;
 			bfSrcMipLevel = srcMipLevel;
@@ -235,7 +241,11 @@ namespace ToyGE
 
 		macros["FFT_2D"] = "";
 		if (bInverse)
+		{
 			macros["FFT_INVERSE"] = "";
+			if(bIFFTScale)
+				macros["FFT_INVERSE_SCALE"] = "";
+		}
 		static int fftGroupSize = 64;
 		macros["FFT_GROUP_SIZE"] = std::to_string(fftGroupSize);
 
@@ -269,6 +279,7 @@ namespace ToyGE
 					fftXCS->SetScalar("threadCount", threadCount);
 					fftXCS->SetScalar("ostride", ostride);
 					fftXCS->SetScalar("istride", istride);
+					fftXCS->SetScalar("phaseBase", phaseBase);
 
 					fftXCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
 					fftXCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));
@@ -321,6 +332,7 @@ namespace ToyGE
 					fftYCS->SetScalar("threadCount", threadCount);
 					fftYCS->SetScalar("ostride", ostride);
 					fftYCS->SetScalar("istride", istride);
+					fftYCS->SetScalar("phaseBase", phaseBase);
 
 					fftYCS->SetSRV("srcTex", bfSrc->GetShaderResourceView(bfSrcMipLevel, 1, bfSrcArrayOffset, 1));
 					fftYCS->SetUAV("dstTex", bfDst->GetUnorderedAccessView(bfDstMipLevel, bfDstArrayOffset, 1));

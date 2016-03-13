@@ -39,7 +39,8 @@ namespace ToyGE
 			const Ptr<Texture> & dst,
 			int32_t dstMipLevel,
 			int32_t dstArrayOffset,
-			bool bInverse = false);
+			bool bInverse = false,
+			bool bIFFTScale = true);
 
 		static void FFT2DRadix8(
 			const Ptr<Texture> & src,
@@ -48,7 +49,8 @@ namespace ToyGE
 			const Ptr<Texture> & dst,
 			int32_t dstMipLevel,
 			int32_t dstArrayOffset,
-			bool bInverse = false);
+			bool bInverse = false,
+			bool bIFFTScale = true);
 
 		static void FFTSetup(
 			const Ptr<Texture> & src,

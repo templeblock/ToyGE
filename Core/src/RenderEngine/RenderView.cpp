@@ -107,7 +107,10 @@ namespace ToyGE
 		for (auto & obj : objsCulled)
 		{
 			auto renderObj = std::static_pointer_cast<RenderComponent>(obj);
-			_viewRenderContext->primitiveDrawList->AddRenderComponent(renderObj);
+			if (renderObj->IsSpecialRender())
+				_viewRenderContext->specialRenders.push_back(renderObj);
+			else
+				_viewRenderContext->primitiveDrawList->AddRenderComponent(renderObj);
 		}
 
 		auto lightsCuller = Global::GetRenderEngine()->GetSceneRenderLightsCuller();
@@ -139,6 +142,7 @@ namespace ToyGE
 		}
 
 		_viewRenderContext->primitiveDrawList->drawBatches.clear();
+		_viewRenderContext->specialRenders.clear();
 		_viewRenderContext->lights.clear();
 		_viewRenderContext->sharedResources.clear();
 

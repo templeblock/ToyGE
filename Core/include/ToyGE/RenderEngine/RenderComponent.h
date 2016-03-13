@@ -59,27 +59,7 @@ namespace ToyGE
 			return _localAABB;
 		}
 
-		AABBox GetBoundsAABB() const override;
-
-		/*void SetReflectionMap(const Ptr<ReflectionMap> & reflectionMap)
-		{
-			_reflectionMap = reflectionMap;
-		}
-
-		const Ptr<ReflectionMap> & GetReflectionMap() const
-		{
-			return _reflectionMap;
-		}
-
-		void SetEnvMap(const Ptr<Texture> & envMap)
-		{
-			_envMap = envMap;
-		}
-
-		const Ptr<Texture> & GetEnvMap() const
-		{
-			return _envMap;
-		}*/
+		virtual AABBox GetBoundsAABB() const override;
 
 		void SetCastShadows(bool bCastShadows)
 		{
@@ -103,16 +83,22 @@ namespace ToyGE
 
 		virtual void Activate() override;
 
+		bool IsSpecialRender() const
+		{
+			return _bSpecialRender;
+		}
+
+		virtual void SpecialRender(const Ptr<class RenderView> & view) {}
+
 	protected:
 		std::weak_ptr<class RenderMeshComponent> _renderMeshComponent;
 		Ptr<MeshElementRenderData> _meshElement;
 		Ptr<Material> _material;
 		AABBox _localAABB;
 		AABBox _boundsAABB;
-		/*Ptr<ReflectionMap> _reflectionMap;
-		Ptr<Texture> _envMap;*/
 		bool _bCastShadows;
 		bool _bCastCaustics;
+		bool _bSpecialRender;
 
 		void OnTranformUpdated();
 

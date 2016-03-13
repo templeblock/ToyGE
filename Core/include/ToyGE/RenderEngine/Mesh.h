@@ -149,7 +149,10 @@ namespace ToyGE
 	class TOYGE_CORE_API CommonMesh
 	{
 	public:
-		static Ptr<Mesh> CreatePlane(float width, float height, int32_t uSplits, int32_t vSplits);
+		static Ptr<Mesh> CreatePlane(
+			float width, float height, int32_t uSplits, int32_t vSplits,
+			bool bUV = true,
+			bool bNormal = true);
 
 		static Ptr<Mesh> CreateSphere(float radius, int32_t numSplits);
 

@@ -30,6 +30,8 @@ namespace ToyGE
 			return _pos;
 		}
 
+		float3 GetWorldPos() const;
+
 		void SetScale(const float3 & scale)
 		{
 			_scale = scale;

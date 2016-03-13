@@ -30,6 +30,15 @@ namespace ToyGE
 		_transformChangedEvent();
 	}
 
+	float3 TransformComponent::GetWorldPos() const
+	{
+		float3 pos = 0.0f;
+		if (_parent)
+			pos = _parent->GetWorldPos();
+		pos += GetPos();
+		return pos;
+	}
+
 	void TransformComponent::SetWorldTransform(const float4x4 & transformMat)
 	{
 		_worldTransformMatrix = transformMat;

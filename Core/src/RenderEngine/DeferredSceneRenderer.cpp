@@ -157,6 +157,12 @@ namespace ToyGE
 			_translucentRendering->Render(view, renderResult->GetRenderTargetView(0, 0, 1));
 		}
 
+		// Special
+		{
+			for (auto & renderCom : view->GetViewRenderContext()->specialRenders)
+				renderCom->SpecialRender(view);
+		}
+
 		// Linearize depth
 		{
 			auto sceneClipDepth = view->GetViewRenderContext()->GetSharedTexture("SceneClipDepth");

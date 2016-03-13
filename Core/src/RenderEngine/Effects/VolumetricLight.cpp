@@ -240,7 +240,7 @@ namespace ToyGE
 		float3 lightPosf3 = *(reinterpret_cast<const float3*>(&lightPos));
 		float3 lightDirf3 = *(reinterpret_cast<const float3*>(&light->Direction()));
 		float3 geoPos = lightPosf3 + maxDist * lightDirf3;
-		_spotLightVolumeGeo->SetPos(geoPos);
+		_spotLightVolumeGeo->SetPos(lightPos);
 
 		float angle = light->MaxAngle();
 		float xzScale = tan(angle) * maxDist;

@@ -8,6 +8,12 @@ namespace ToyGE
 	{
 	}
 
+	void Actor::Init()
+	{
+		for (auto & com : _components)
+			com->Init();
+	}
+
 	void Actor::Tick(float elapsedTime)
 	{
 		for (auto & com : _components)

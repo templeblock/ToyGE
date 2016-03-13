@@ -173,6 +173,7 @@ namespace ToyGE
 		renderCom->UpdateTransform();
 		actor->AddComponent(renderCom);
 
+		actor->Init();
 		actor->ActivateAllComponents();
 
 		return actor;
@@ -394,7 +395,10 @@ namespace ToyGE
 		_weightBuffer = builder.Finish();
 	}
 	
-	Ptr<Mesh> CommonMesh::CreatePlane(float width, float height, int32_t uSplits, int32_t vSplits)
+	Ptr<Mesh> CommonMesh::CreatePlane(
+		float width, float height, int32_t uSplits, int32_t vSplits,
+		bool bUV ,
+		bool bNormal )
 	{
 		auto mesh = std::make_shared<Mesh>();
 
@@ -407,21 +411,25 @@ namespace ToyGE
 			builder.AddElementDesc("POSITION", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_POSITION, 0, i, builder.vertexSize - i });
 		}
+		if(bUV)
 		{
 			int i = builder.vertexSize;
 			builder.AddElementDesc("TEXCOORD", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_TEXCOORD, 0, i, builder.vertexSize - i });
 		}
+		if(bNormal)
 		{
 			int i = builder.vertexSize;
 			builder.AddElementDesc("NORMAL", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_NORMAL, 0, i, builder.vertexSize - i });
 		}
+		if (bNormal)
 		{
 			int i = builder.vertexSize;
 			builder.AddElementDesc("TANGENT", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
 			meshElement->vertexData[0]->vertexDesc.elementsDesc.push_back({ MeshVertexElementSignature::MVET_TANGENT, 0, i, builder.vertexSize - i });
 		}
+		if (bNormal)
 		{
 			int i = builder.vertexSize;
 			builder.AddElementDesc("BITANGENT", 0, RENDER_FORMAT_R32G32B32_FLOAT, 0);
@@ -450,28 +458,44 @@ namespace ToyGE
 			for (int32_t vSplitIndex = 0; vSplitIndex < vSplits; ++vSplitIndex)
 			{
 				builder.Add(float3(x, 0.0f, z));
-				builder.Add(float3(0.0f, 0.0f, 0.0f));
-				builder.Add(normal);
-				builder.Add(tangent);
-				builder.Add(bitangent);
+				if (bUV)
+					builder.Add(float3(0.0f, 0.0f, 0.0f));
+				if (bNormal)
+				{
+					builder.Add(normal);
+					builder.Add(tangent);
+					builder.Add(bitangent);
+				}
 
 				builder.Add(float3(x + xStep, 0.0f, z));
-				builder.Add(float3(1.0f, 0.0f, 0.0f));
-				builder.Add(normal);
-				builder.Add(tangent);
-				builder.Add(bitangent);
+				if (bUV)
+					builder.Add(float3(1.0f, 0.0f, 0.0f));
+				if (bNormal)
+				{
+					builder.Add(normal);
+					builder.Add(tangent);
+					builder.Add(bitangent);
+				}
 
 				builder.Add(float3(x + xStep, 0.0f, z + zStep));
-				builder.Add(float3(1.0f, 1.0f, 0.0f));
-				builder.Add(normal);
-				builder.Add(tangent);
-				builder.Add(bitangent);
+				if (bUV)
+					builder.Add(float3(1.0f, 1.0f, 0.0f));
+				if (bNormal)
+				{
+					builder.Add(normal);
+					builder.Add(tangent);
+					builder.Add(bitangent);
+				}
 
 				builder.Add(float3(x, 0.0f, z + zStep));
-				builder.Add(float3(0.0f, 1.0f, 0.0f));
-				builder.Add(normal);
-				builder.Add(tangent);
-				builder.Add(bitangent);
+				if (bUV)
+					builder.Add(float3(0.0f, 1.0f, 0.0f));
+				if (bNormal)
+				{
+					builder.Add(normal);
+					builder.Add(tangent);
+					builder.Add(bitangent);
+				}
 
 				meshElement->indices.push_back(vertexIndex + 0);
 				meshElement->indices.push_back(vertexIndex + 1);
@@ -590,8 +614,8 @@ namespace ToyGE
 		//builder.Start();
 		for (int32_t hIndex = 0; hIndex <= numSplits; ++hIndex)
 		{
-			float h = height - static_cast<float>(hIndex) * height / static_cast<float>(numSplits);
-			float r = (height - h) * tan(angle * 0.5f);
+			float h = 0.0f - static_cast<float>(hIndex) * height / static_cast<float>(numSplits);
+			float r = (0.0f - h) * tan(angle * 0.5f);
 			for (int32_t phiIndex = 0; phiIndex <= numSplits; ++phiIndex)
 			{
 				float phi = static_cast<float>(phiIndex) / static_cast<float>(numSplits) * PI2;
@@ -604,7 +628,7 @@ namespace ToyGE
 				builder.Add(float3(sin(phi), sin(angle * 0.5f), cos(phi)));
 			}
 		}
-		builder.Add(float3(0.0f, 0.0f, 0.0f));
+		builder.Add(float3(0.0f, -height, 0.0f));
 		builder.Add(float3(0.0f, -1.0f, 0.0f));
 
 		meshElement->vertexData[0]->bufferSize = builder.vertexSize * builder.numVertices;

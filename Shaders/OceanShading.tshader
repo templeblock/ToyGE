@@ -1,0 +1,87 @@
+#include "Common.tshader"
+#include "GBuffer.tshader"
+#include "Lighting.tshader"
+#include "BRDF.tshader"
+#include "View.tshader"
+#include "Shadow.tshader"
+
+#define MVO_LOCAL_POSITION 1
+#define MVO_VIEW_POSITION 1
+#define MVO_WORLD_POSITION 1
+#include "MeshVertexInput.tshader"
+
+float2 tileLength;
+uint frameCount;
+float gridLen;
+float3 ambientColor;
+
+Texture2D displacementMap;
+Texture2D normalFoldingMap;
+
+MeshVertexVSOutputs OceanShadingVS(
+    MeshVertexVSInputs inputs,
+    out float2 outUV : TEXCOORD
+)
+{
+    float2 uv = (inputs.position.xz / tileLength) * float2(1.0, -1.0) + float2(0.5, 0.5);
+    float3 displacement = displacementMap.SampleLevel(bilinearSampler, uv, 0).xyz;
+    
+    inputs.position += displacement;
+    outUV = uv;
+    
+    return GetMeshVSOutputs(inputs);
+}
+
+void OceanShadingPS(
+    MeshVertexVSOutputs inputs,
+    float2 uv : TEXCOORD,
+    out float3 outColor : SV_TARGET0,
+    out float4 gbuffer0 : SV_TARGET1,
+    out float4 gbuffer1 : SV_TARGET2,
+    out float4 gbuffer2 : SV_TARGET3
+)
+{
+    float4 normalFolding = normalFoldingMap.SampleLevel(bilinearSampler, uv, 0);
+    //float3 normal = normalize( float3(normalFolding.x, -gridLen, normalFolding.y) );
+    float3 normal = normalize(normalFolding.xyz);
+    
+    Material mat = (Material)0;
+    mat.baseColor = float3(0.17, 0.15, 0.2);
+    mat.metallic = 1.0f;
+    mat.normal = normal;
+    mat.roughness = 0.0;
+    mat.diffuseColor = GetDiffuseColor(mat.baseColor, mat.metallic);
+    mat.specularColor = GetSpecularColor(mat.baseColor, mat.metallic);
+    
+    float3 worldPos = inputs.worldPosition;
+    float3 viewPos = inputs.viewPosition;
+    
+    float3 n = mat.normal;
+    float3 l = GetPosToLightDir(worldPos);
+    float3 v = normalize(viewWorldPosition - worldPos);
+    
+    float3 irradiance = GetIrradiance(worldPos, n);
+    
+#if ENABLE_SHADOW == 1
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    float shadowNoise = InterleavedGradientNoise(inputs.svPosition.xy + frameRandom * 171, 0.5) + 0.5;
+    float shadow = ComputeShadow(worldPos, viewPos.z, shadowNoise);
+    
+    shadow *= saturate(dot(n, l) * 6 - 0.2);
+    
+    irradiance *= shadow;
+#endif
+    
+    float3 lighting0 = irradiance / PI;
+    
+    float3 lighting1 = irradiance * BRDF(n, l, v, mat.specularColor, mat.roughness);
+    
+    outColor = lighting1 + mat.baseColor * 0.2;
+    
+    GBuffer gbuf = MaterialToGBuffer(mat);
+    gbuffer0 = gbuf.gbuf0;
+    gbuffer1 = gbuf.gbuf1;
+    gbuffer2 = gbuf.gbuf2;
+    
+}

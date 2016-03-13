@@ -70,7 +70,24 @@ float4 SampleTexDepth(float4 sampleUV0, float4 sampleUV1, float level)
     return float4(z0, z1, z2, z3);
 }
 
-
+float3 ImportanceSamplingGGX(float2 sample2d, float roughness, float3 N)
+{
+    float a = roughness;
+    a = a * a;
+    
+    float phi = 2 * PI * sample2d.x;
+    float cosTheta = saturate( sqrt( (1 - sample2d.y) / (1 + (a*a - 1) * sample2d.y) ) );
+    float sinTheta = saturate( sqrt( 1 - cosTheta * cosTheta ) );
+    float3 H = 0;
+    H.x = sinTheta * sin(phi);
+    H.y = cosTheta;
+    H.z = sinTheta * cos(phi);
+    
+    float3 Tx = abs(N.x) < 0.999 ? float3(1.0f, 0.0f, 0.0f) : float3(0.0f, 1.0f, 0.0f);
+    float3 Tz = normalize(cross(Tx, N));
+    Tx = cross(N, Tz);
+    return H.x * Tx + H.y * N + H.z * Tz;
+}
 
 float3 RandomTraceDir(float3 view, float3 normal, float roughness, float2 screenPos, uint rayIndex, uint2 random)
 {
@@ -88,6 +105,8 @@ float3 RandomTraceDir(float3 view, float3 normal, float roughness, float2 screen
         float bias = 0.7f;
         e0 = lerp(e0, 1.0, bias);
         e1 = lerp(e1, 1.0, bias);
+        
+        //float3 h = ImportanceSamplingGGX(sample2D, roughness, normal);
         
         float3 zAxis = abs(normal.z) < 0.99 ? float3(0.0f, 0.0f, 1.0f) : float3(1.0f, 0.0f, 0.0f);
         float3 yAxis = normal;

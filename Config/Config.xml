@@ -11,6 +11,6 @@
     />
     
   <adapter key="Nvidia"/>
-  <graphics_engine debug="0"/>
+  <graphics_engine debug="1"/>
 
 </config>

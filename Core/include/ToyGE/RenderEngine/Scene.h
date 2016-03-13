@@ -19,6 +19,10 @@ namespace ToyGE
 	public:
 		Scene();
 
+		~Scene();
+
+		void Tick(float elapsedTime);
+
 		int32_t AddActor(const Ptr<Actor> & actor);
 
 		Ptr<Actor> GetActor(int32_t actorID) const;
