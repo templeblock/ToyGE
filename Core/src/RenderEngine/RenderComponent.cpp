@@ -8,7 +8,8 @@ namespace ToyGE
 {
 	RenderComponent::RenderComponent()
 		: _bCastShadows(true),
-		_bCastCaustics(true)
+		_bCastCaustics(true),
+		_bSpecialRender(false)
 	{
 		memset(&_localAABB, 0, sizeof(_localAABB));
 		memset(&_boundsAABB, 0, sizeof(_boundsAABB));

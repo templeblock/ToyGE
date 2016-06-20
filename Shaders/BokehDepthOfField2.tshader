@@ -1,0 +1,514 @@
+#include "Common.tshader"
+#include "DrawQuad.tshader"
+#include "View.tshader"
+
+#define POISSON_NUM_SAMPLES 15
+#include "PoissonSampling.tshader"
+
+struct BokehPoint
+{
+    float2 pos;
+    float  size;
+    float3 color;
+};
+    
+
+Texture2D linearDepthTex;
+Texture2D sceneTex;
+Texture2D cocTex;
+Texture2D bokehTex;
+
+Texture2D nearBlurTex;
+Texture2D farBlurTex;
+
+AppendStructuredBuffer<BokehPoint> bokehPointsBufferAppend;
+StructuredBuffer<BokehPoint> bokehPointsBuffer;
+
+SamplerState pointSampler;
+SamplerState linearSampler;
+
+float focalDistance;
+float focalAreaLength;
+float nearAreaLength;
+float farAreaLength;
+float maxCoC;
+
+float bokehSizeScale;
+float illumThreshold;
+float bokehIlluminanceScale;
+float minBokehSize;
+float maxBokehSize;
+
+float4 texSize;
+
+float ComputeCoCPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float z = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    float d = z * viewLength + viewNear;
+    
+    float coc = 0.0f;
+    
+    if(d > focalDistance)
+        coc = -saturate( (d - focalDistance - focalAreaLength * 0.5f) / max(1e-4, farAreaLength)  ) * maxCoC;
+    else
+        coc =  saturate( (focalDistance - d - focalAreaLength * 0.5f) / max(1e-4, nearAreaLength) ) * maxCoC;
+        
+    return coc;
+}
+
+void SplitLayersPS(
+    DrawQuadVSOut vsOut,
+    out float4 nearLayer : SV_TARGET0,
+    out float4 farLayer  : SV_TARGET1)
+{
+    nearLayer = 0.0f;
+    farLayer  = 0.0f;
+    
+    float coc = cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+
+    if(abs(coc) > 0.5f)
+    {
+        float4 sceneColor = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+        if(coc > 0.0f)
+        {
+            nearLayer.xyz = sceneColor.xyz;
+            nearLayer.w = 1.0;
+        }
+        else
+        {
+            farLayer.xyz  = sceneColor.xyz;
+            farLayer.w = 1.0;
+        }
+    }
+  
+}
+
+#define TILE_SIZE 16
+
+Texture2D tileMaxInTex;
+
+float2 TileMaxXPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 uvSample = vsOut.uv;
+    float2 uvStep = float2(texSize.z, 0.0f);
+    float maxCoC = (tileMaxInTex.SampleLevel(pointSampler, uvSample, 0).x);
+    float minDepth = linearDepthTex.SampleLevel(pointSampler, uvSample, 0).x;
+
+    [unroll] for(int i = 1; i < TILE_SIZE; ++i)
+    {
+        uvSample += uvStep;
+
+        float cocSample = (tileMaxInTex.SampleLevel(pointSampler, uvSample, 0).x);
+        maxCoC = max(maxCoC, cocSample);
+
+        float depthSample = linearDepthTex.SampleLevel(pointSampler, uvSample, 0).x;
+        minDepth = min(minDepth, depthSample);
+    }
+
+    return float2(maxCoC, minDepth);
+}
+
+float2 TileMaxYPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 uvSample = vsOut.uv;
+    float2 uvStep = float2(0.0f, texSize.w);
+    float2 tile = tileMaxInTex.SampleLevel(pointSampler, uvSample, 0).xy;
+    float maxCoC = tile.x;
+    float minDepth = tile.y;
+
+    [unroll] for(int i = 1; i < TILE_SIZE; ++i)
+    {
+        uvSample += uvStep;
+
+        // float cocSample = abs(tileMaxInTex.SampleLevel(pointSampler, uvSample, 0).x);
+        // maxCoC = max(maxCoC, cocSample);
+
+        // float depthSample = linearDepthTex.SampleLevel(pointSampler, uvSample, 0).x;
+        // minDepth = min(minDepth, depthSample);
+
+        float2 tileSample = tileMaxInTex.SampleLevel(pointSampler, uvSample, 0).xy;
+
+        maxCoC = max(maxCoC, tileSample.x);
+        minDepth = min(minDepth, tileSample.y);
+    }
+    
+    return float2(maxCoC, minDepth);
+}
+
+Texture2D tileMaxTex;
+
+float DepthWeight(float depth, float tileMinDepth)
+{
+    float weight = 1.0 - saturate((depth - tileMinDepth) / 0.01);
+    return weight;
+}
+
+float3 PreDividingPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 tile = tileMaxTex.SampleLevel(pointSampler, vsOut.uv, 0).xy;
+
+    float coc = cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    float depth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+
+    coc = abs(coc);
+    float t = max(0.5, coc);
+    float cocWeight = 1 / (PI * t * t);
+    float depthWeight = DepthWeight(depth, tile.y);
+    //depthWeight = min(0.9, depthWeight);
+
+    //if(abs(tile.x) <= 0.5)
+    //    depthWeight = 0;
+    //if(depth >= 0.99)
+    //    depthWeight = 0;
+
+    return float3(t, cocWeight * max(0.1, depthWeight), cocWeight * max(0.1, 1.0 - depthWeight));
+    //return float3(t, cocWeight * depthWeight, cocWeight);
+}
+
+Texture2D blurInTex;
+Texture2D dividingTex;
+
+#define DOF_NUM_SAMPLES 50
+
+static const float2 dofBlurSamples[DOF_NUM_SAMPLES] = 
+{
+float2(0.0, 0.0),    
+float2(0.6949155f, 0.5252034f),
+float2(0.8369376f, 0.1395729f),
+float2(0.3956167f, 0.5688829f),
+float2(0.3422661f, 0.3580157f),
+float2(0.5116687f, 0.7979316f),
+float2(0.4998795f, 0.2160764f),
+float2(0.8759313f, 0.3944633f),
+float2(0.6809635f, -0.03856051f),
+float2(0.8491046f, -0.4140717f),
+float2(0.3065084f, -0.004693681f),
+float2(0.9425826f, -0.1943206f),
+float2(0.4006584f, -0.3178267f),
+float2(0.5860804f, -0.5946872f),
+float2(0.6221966f, -0.3865191f),
+float2(0.07949667f, -0.1484464f),
+float2(-0.06123248f, 0.1498779f),
+float2(0.2003031f, 0.1836387f),
+float2(0.1033274f, 0.398639f),
+float2(0.154118f, 0.6042101f),
+float2(0.37592f, -0.6206714f),
+float2(0.3811342f, -0.8551971f),
+float2(0.1566215f, -0.7943812f),
+float2(-0.002291272f, -0.5599172f),
+float2(-0.3533187f, 0.4390593f),
+float2(-0.2483554f, -0.1887538f),
+float2(-0.474822f, 0.1513222f),
+float2(-0.07840693f, 0.5321035f),
+float2(-0.6309387f, 0.4094703f),
+float2(-0.5324524f, 0.7009451f),
+float2(-0.2765627f, 0.6585442f),
+float2(-0.1217203f, -0.365814f),
+float2(-0.2115377f, -0.6487787f),
+float2(-0.1033678f, -0.9324811f),
+float2(0.1945231f, -0.4191461f),
+float2(-0.4011108f, -0.4472034f),
+float2(0.2110277f, 0.9245639f),
+float2(-0.5153359f, -0.2534649f),
+float2(-0.3500341f, 0.8951461f),
+float2(-0.8559286f, -0.4762026f),
+float2(-0.894389f, -0.1121687f),
+float2(-0.5879417f, -0.6392199f),
+float2(-0.7614948f, 0.07620434f),
+float2(-0.3797887f, -0.8179687f),
+float2(-0.8990605f, 0.2906051f),
+float2(-0.7237834f, -0.3098449f),
+float2(-0.01935404f, 0.7940541f),
+float2(-0.2597689f, 0.234831f),
+float2(-0.2970954f, 0.02063354f),
+float2(-0.8207827f, 0.5092491f)
+};
+
+int frameCount;
+
+float3 DOFBlurPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float tileMax = tileMaxTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    tileMax = max(0.5, abs(tileMax));
+
+    float centerDepth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    float centerCoC = abs(cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x);
+    float4 centerColor = blurInTex.SampleLevel(pointSampler, vsOut.uv, 0);
+
+    centerCoC = max(centerCoC, 0.5);
+
+    tileMax = max(centerCoC, tileMax);
+
+    //float4 finalColor = centerColor / (PI * centerCoC * centerCoC);
+    float4 foreground = 0.0f;
+    float4 background = 0.0f;
+
+    //foreground = centerColor.xyz / (PI * centerCoC * centerCoC);
+    //background = centerColor.xyz / (PI * centerCoC * centerCoC);
+
+    uint frameRandomSeed = ( ((uint)frameCount % 8) * 1551 ) & 15;
+    float frameRandom = (float)frameRandomSeed;
+    float noiseAngle = InterleavedGradientNoise(vsOut.pos.xy + frameRandom * 171, 1) * PI;
+    float2 sincosAngle = float2(sin(noiseAngle), cos(noiseAngle));
+    float2x2 rotMat = float2x2(
+        sincosAngle.y, -sincosAngle.x,
+        sincosAngle.x, sincosAngle.y
+    );
+
+    float a = 0.0;
+
+    for(int i = 0; i < DOF_NUM_SAMPLES; ++i)
+    {
+        float2 sampleOffset = dofBlurSamples[i] * tileMax;
+        //float2 sampleOffset = GetPoissonSample(i) * tileMax;
+        sampleOffset = mul(rotMat, sampleOffset);
+        float2 sampleUV = vsOut.uv + sampleOffset * texSize.zw;
+
+        float3 sampleDividing = dividingTex.SampleLevel(pointSampler, sampleUV, 0).xyz;
+        float3 sampleColor = blurInTex.SampleLevel(pointSampler, sampleUV, 0).xyz;
+
+        float sampleCoC = sampleDividing.x;
+
+        // float sampleCoC = abs(cocTex.SampleLevel(linearSampler, sampleUV, 0).x);
+        // float sampleDepth = linearDepthTex.SampleLevel(linearSampler, sampleUV, 0).x;
+
+        // float weight = sampleDepth <= centerDepth ? 1.0 : 0.0;
+        // float depthWeight = saturate( (centerDepth - sampleDepth + 0.1f) / 0.1f );
+        // weight = depthWeight;
+        // sampleCoC = max(0.5, sampleCoC);
+        // float cocWeight = saturate( ((sampleCoC * sampleCoC - dot(sampleOffset, sampleOffset)) + 0.5f) / 0.5f );
+        // //weight *= sampleCoC * sampleCoC >= dot(sampleOffset, sampleOffset) ? 1.0 : 0.0;
+        // weight *= cocWeight;
+        // weight *= weight / (PI * sampleCoC * sampleCoC);
+
+        //float coverageWeight = saturate( ((sampleCoC * sampleCoC - dot(sampleOffset, sampleOffset)) + 0.0f) / 0.2f );
+        float coverageWeight = sampleCoC * sampleCoC >= dot(sampleOffset, sampleOffset) ? 1.0 : 0.0;
+        
+        foreground.xyz += sampleColor * coverageWeight * sampleDividing.y;
+        foreground.w += coverageWeight * sampleDividing.y;
+        background.xyz += sampleColor * coverageWeight * sampleDividing.z;
+        background.w += coverageWeight * sampleDividing.z;
+    }
+    foreground.xyz /= max(1e-6f, foreground.w);
+    background.xyz /= max(1e-6f, background.w);
+
+    //foreground *= PI * tileMax * tileMax / DOF_NUM_SAMPLES;
+    //background *= PI * tileMax * tileMax / DOF_NUM_SAMPLES;
+    float alpha = saturate( foreground.w * PI * tileMax * tileMax / DOF_NUM_SAMPLES );
+
+    return lerp(background.xyz, foreground.xyz, alpha);
+    //return foreground.xyz;
+}
+
+float4 DOFBlur2PS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float tileMax = max(0.5, tileMaxTex.SampleLevel(pointSampler, vsOut.uv, 0).x);
+
+    float centerDepth = linearDepthTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    float centerCoC = abs(cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x);
+    float4 centerColor = blurInTex.SampleLevel(pointSampler, vsOut.uv, 0);
+
+    centerCoC = max(centerCoC, 0.5);
+
+    float4 finalColor = centerColor / (PI * centerCoC * centerCoC);
+
+    float noiseAngle = InterleavedGradientNoise(vsOut.pos.xy, 1) * PI;
+    float2 sincosAngle = float2(sin(noiseAngle), cos(noiseAngle));
+    float2x2 rotMat = float2x2(
+        sincosAngle.y, -sincosAngle.x,
+        sincosAngle.x, sincosAngle.y
+    );
+
+    for(int i = 0; i < POISSON_NUM_SAMPLES; ++i)
+    {
+        float2 sampleOffset = GetPoissonSample(i) * tileMax;
+        sampleOffset = mul(rotMat, sampleOffset);
+        float2 sampleUV = vsOut.uv + sampleOffset * texSize.zw;
+        float sampleCoC = abs(cocTex.SampleLevel(linearSampler, sampleUV, 0).x);
+        float sampleDepth = linearDepthTex.SampleLevel(linearSampler, sampleUV, 0).x;
+        float4 sampleColor = blurInTex.SampleLevel(linearSampler, sampleUV, 0);
+
+        float weight = sampleDepth <= centerDepth ? 1.0 : 0.0;
+        float depthWeight = saturate( (centerDepth - sampleDepth + 0.1f) / 0.1f );
+        weight = depthWeight;
+        sampleCoC = max(0.5, sampleCoC);
+        float cocWeight = saturate( ((sampleCoC * sampleCoC - dot(sampleOffset, sampleOffset)) + 0.5f) / 0.5f );
+        //weight *= sampleCoC * sampleCoC >= dot(sampleOffset, sampleOffset) ? 1.0 : 0.0;
+        weight *= cocWeight;
+        weight *= weight / (PI * sampleCoC * sampleCoC);
+        
+        finalColor += sampleColor * weight;
+    }
+
+    finalColor *= PI * tileMax * tileMax / POISSON_NUM_SAMPLES;
+
+    return finalColor;
+}
+
+#define BOKEH_COMPUTE_NUM_SAMPLES 9
+
+float LumaWeight(float3 color)
+{
+    return rcp(1 + max(max(color.x, color.y), color.z));
+}
+
+float3 ComputeBokehPointsPS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float2 t_o = vsOut.uv;
+    
+    float3 color_o = sceneTex.SampleLevel(pointSampler, t_o, 0).rgb;
+    float ilum_o = GetIlluminance(color_o);
+    
+    static const float2 texOffsets[] = 
+    {
+        float2(-1.5f, -1.5f), float2(0.5f, -1.5f), float2(2.0f, -1.5f),
+        float2(-1.5f,  0.5f), float2(0.5f,  0.5f), float2(2.0f,  0.5f),
+        float2(-1.5f,  2.0f), float2(0.5f,  2.0f), float2(2.0f,  2.0f)
+    };
+    
+    float3 avgColor = 0.0f;
+    
+    [unroll] for(int i = 0; i < BOKEH_COMPUTE_NUM_SAMPLES; ++i)
+    {
+        float2 t_i = t_o + texOffsets[i] * texSize.zw;
+        float3 sampleColor = sceneTex.SampleLevel(linearSampler, t_i, 0).rgb;
+        avgColor += sampleColor;
+    }
+    avgColor /= BOKEH_COMPUTE_NUM_SAMPLES;
+    
+    float avgIlum = GetIlluminance(avgColor);
+    
+    float centerCoC = cocTex.SampleLevel(pointSampler, t_o, 0).x;
+    
+    float3 outColor = color_o;
+    
+    float bokehSize = abs(centerCoC) * bokehSizeScale;
+    
+    if(ilum_o - avgIlum > illumThreshold && bokehSize >= minBokehSize)
+    {
+        BokehPoint bokehPoint;
+        bokehPoint.pos = vsOut.uv * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f);
+        bokehPoint.size = min(bokehSize, maxBokehSize);
+        bokehPoint.color = color_o;// * LumaWeight(color_o);
+        bokehPointsBufferAppend.Append(bokehPoint);
+        
+        outColor = 0.0f;
+    }
+    
+    return outColor;
+}
+
+
+struct RenderBokehVSOut
+{
+    float2 pos : POSITION;
+    float size : SIZE;
+    float3 color : COLOR;
+};
+  
+void RenderBokehVS(
+    uint vertexID : SV_VertexID,
+    out RenderBokehVSOut vsOut)
+{
+    BokehPoint bokehPoint = bokehPointsBuffer[vertexID];
+    
+    vsOut.pos.xy = bokehPoint.pos;
+    vsOut.size = bokehPoint.size;
+    vsOut.color = bokehPoint.color;
+}
+
+struct RenderBokehGSOut
+{
+    float4 pos : SV_POSITION;
+    float2 uv : TEXCOORD;
+    float  size : SIZE;
+    float4 color : COLOR;
+};
+
+[maxvertexcount(4)]
+void RenderBokehGS(
+    point RenderBokehVSOut inPoints[1],
+    inout TriangleStream<RenderBokehGSOut> outStream)
+{
+    static const float2 offsets[] = 
+    {
+        float2(-1.0f,  1.0f),
+        float2( 1.0f,  1.0f),
+        float2(-1.0f, -1.0f),
+        float2( 1.0f, -1.0f)
+    };
+    
+    static const float2 texCoords[] = 
+    {
+        float2(0.0f, 0.0f),
+        float2(1.0f, 0.0f),
+        float2(0.0f, 1.0f),
+        float2(1.0f, 1.0f)
+    };
+    
+    float2 posOffsetScale = abs(inPoints[0].size) * texSize.zw * 2.0f;
+    
+    RenderBokehGSOut gsOut;
+    gsOut.pos.zw = float2(0.0f, 1.0f);
+    gsOut.color.rgb = inPoints[0].color;
+    gsOut.color.a = 1.0f / (PI * inPoints[0].size * inPoints[0].size) * bokehIlluminanceScale;
+    gsOut.size = inPoints[0].size;
+    
+    for(uint i = 0; i < 4; ++i)
+    {
+        gsOut.pos.xy = inPoints[0].pos + offsets[i] * posOffsetScale;
+        gsOut.uv = texCoords[i];
+        
+        outStream.Append(gsOut);
+    }
+    
+    outStream.RestartStrip();
+}
+
+void RenderBokehPS(
+    RenderBokehGSOut gsOut,
+    out float4 color : SV_TARGET)
+{
+    float3 bokehSample = bokehTex.Sample(linearSampler, gsOut.uv).rgb;
+    
+    color = float4(bokehSample * gsOut.color.xyz, gsOut.color.w);
+}
+
+
+float3 DOFCombinePS(DrawQuadVSOut vsOut) : SV_TARGET
+{
+    float coc = cocTex.SampleLevel(pointSampler, vsOut.uv, 0).x;
+    
+    float4 sharp = sceneTex.SampleLevel(pointSampler, vsOut.uv, 0);
+    float4 near  = nearBlurTex.SampleLevel(linearSampler, vsOut.uv, 0);
+    float4 far   = farBlurTex.SampleLevel(linearSampler, vsOut.uv, 0);
+    
+    float farMask = far.a;
+    float focalMask = 1.0f - saturate((abs(coc) - 0.5f) / maxCoC);
+    float nearMask = near.a;
+    
+    float3 color = 0.0f;
+    
+    color.rgb = far.rgb / (far.a + 0.001f);
+    
+    float Blend = far.a;
+    Blend = sqrt(Blend);
+    Blend = sqrt(Blend);
+    Blend = Blend * Blend * (3.0 - 2.0 * Blend);
+    color.rgb = lerp(sharp.rgb, color.rgb, Blend);
+        
+    float Smash = 0.25;
+    focalMask = saturate((focalMask - (1.0 - Smash)) * rcp(Smash));
+    focalMask *= focalMask;
+    focalMask = pow(focalMask, 4.0f);
+    color.rgb = lerp(color.rgb, sharp.rgb, focalMask);
+    
+    float3 FrontLayer = near.rgb / (near.a + 0.001f);
+	
+    color.rgb = lerp(color.rgb, FrontLayer, saturate(nearMask * 1));
+    
+    // float3 bokehColor = bokehLayerTex.SampleLevel(samplerPoint, vsOut.tex, 0).rgb;
+    // color.rgb += bokehColor;
+    
+    return color;
+}

@@ -77,7 +77,7 @@ void OceanShadingPS(
     
     float3 lighting1 = irradiance * BRDF(n, l, v, mat.specularColor, mat.roughness);
     
-    outColor = lighting1 + mat.baseColor * 0.2;
+    outColor = lighting1;// + mat.baseColor * 0.2;
     
     GBuffer gbuf = MaterialToGBuffer(mat);
     gbuffer0 = gbuf.gbuf0;

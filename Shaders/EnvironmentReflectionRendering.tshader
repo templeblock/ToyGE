@@ -70,7 +70,7 @@ void EnvironmentReflectionRenderingCS(
         tileMinDepth_ui = 0x7F7FFFFF;
         tileMaxDepth_ui = 0;
     }
-    if(depth < 0.9999)
+    if(depth < 1.0)
     {
         uint depth_ui = asuint(depth);
         InterlockedMin(tileMinDepth_ui, depth_ui);
@@ -151,7 +151,7 @@ void EnvironmentReflectionRenderingCS(
     [branch] if( all((float2)dtID.xy < texSize.xy)  )
     {
         float4 outColor = 0.0;
-        if(depth < 0.9999)
+        if(depth < 1.0)
         {
             GBuffer gbuf;
             gbuf.gbuf0 = gbuffer0.Load(dtID);

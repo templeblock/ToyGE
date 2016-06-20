@@ -36,6 +36,7 @@ public:
 		_renderView->SetPostProcessing(pp);
 
 		_renderView->sceneRenderingConfig.bSSR = false;
+		//_renderView->sceneRenderingConfig.bTAA = false;
 
 		//_camera = std::static_pointer_cast<PhysicalCamera>(_renderView->GetCamera());
 

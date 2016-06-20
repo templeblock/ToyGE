@@ -21,9 +21,6 @@ namespace ToyGE
 	DECLARE_SHADER(, DOFBlurPS, SHADER_PS, "BokehDepthOfField", "DOFBlurPS", SM_4);
 	DECLARE_SHADER(, DOFBlur2PS, SHADER_PS, "BokehDepthOfField", "DOFBlur2PS", SM_4);
 
-	DECLARE_SHADER(, DownSampleDepthPS, SHADER_PS, "BokehDepthOfField", "DownSampleDepthPS", SM_4);
-	DECLARE_SHADER(, DOFUpSamplingPS, SHADER_PS, "BokehDepthOfField", "DOFUpSamplingPS", SM_4);
-
 	class Texture;
 	class Camera;
 	class RenderBuffer;
@@ -80,46 +77,51 @@ namespace ToyGE
 		float _nearAreaLength;
 		float _farAreaLength;
 		float _maxCoC;
-		PooledTextureRef _preDofResultRef;
 
 		PooledTextureRef ComputeCoC(
 			const Ptr<RenderView> & view,
 			const Ptr<Texture> & linearDepthTex,
 			const Ptr<Texture> & depthTex);
 
-		PooledTextureRef DownSampleColor(const Ptr<Texture> & tex);
+		void ComputeBokehPoints(
+			const Ptr<Texture> & sceneTex,
+			const Ptr<Texture> & cocTex,
+			PooledBufferRef & outBokehPointsBuffer,
+			PooledTextureRef & outSceneTex);
 
-		PooledTextureRef DownSampleDepth(const Ptr<Texture> & tex);
+
+		void SplitLayers(
+			const Ptr<Texture> & sceneTex,
+			const Ptr<Texture> & cocTex, 
+			PooledTextureRef & outNearLayerTex,
+			PooledTextureRef & outFarLayerTex);
 
 		PooledTextureRef TileMax(
 			const Ptr<Texture> & cocTex,
 			const Ptr<Texture> & sceneDepthTex);
 
-		void PreDividing(
+		PooledTextureRef PreDividing(
 			const Ptr<Texture> & tileMaxTex,
 			const Ptr<Texture> & cocTex,
-			const Ptr<Texture> & sceneColorTex,
-			const Ptr<Texture> & sceneDepthTex,
-			PooledTextureRef & outDividingTex, 
-			PooledTextureRef & outDownSampleColorTex, 
-			PooledTextureRef & outDownSampleDepthTex);
+			const Ptr<Texture> & sceneDepthTex);
 
-
-		void DOFBlur(
+		PooledTextureRef DOFBlur(
 			const Ptr<Texture> & inTex, 
 			const Ptr<Texture> & cocTex, 
 			const Ptr<Texture> & tileMaxTex,
 			const Ptr<Texture> & dividingTex,
-			const Ptr<Texture> & sceneDepthTex,
-			PooledTextureRef & outHalfResBlurTex, 
-			PooledTextureRef & outHalfResAlphaTex);
+			const Ptr<Texture> & sceneDepthTex);
 
-		PooledTextureRef UpSampling(
-			const Ptr<Texture> & sceneColorTex, 
+		void Combine(
+			const Ptr<Texture> & sceneTex,
 			const Ptr<Texture> & cocTex,
-			const Ptr<Texture> & tileMaxTex,
-			const Ptr<Texture> & halfResBlurTex, 
-			const Ptr<Texture> & halfResAlphaTex);
+			const Ptr<Texture> & nearBlurTex,
+			const Ptr<Texture> & farBlurTex,
+			const Ptr<RenderTargetView> & target);
+
+		void RenderBokeh(
+			const Ptr<RenderBuffer> & bokehPointsBuffer,
+			const Ptr<RenderTargetView> & target);
 	};
 }
 
